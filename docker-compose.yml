@@ -10,7 +10,6 @@ services:
       - "8000"
     environment:
       - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
-      - FDM_TOKEN=${FDM_TOKEN:-}
       - MCP_MODE=hosted
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0

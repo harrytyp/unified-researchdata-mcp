@@ -1,12 +1,13 @@
-# Unified MCP Hosting — elabFTW + DataTagger
+# Unified Research Data MCP
 
-Hosts two MCP servers behind a single Caddy reverse proxy, each with per-user
-**bring-your-own-API-key** registration:
+Hosts [datatagger-mcp](https://github.com/harrytyp/datatagger-mcp) and [elabrmcp](https://github.com/MarvinLuepke/elabR/tree/main/mcp/elabrmcp) (elabFTW) behind a single Caddy reverse proxy, each with mandatory **bring-your-own-API-key** registration.
 
-| MCP Server | Backend | User Auth |
-|------------|---------|-----------|
+**Server admins never configure any API keys.** Every user must register their personal credentials via the web page. No secrets in `.env`, no shared tokens, no admin-managed keys.
+
+| MCP Server | Backend | Auth |
+|------------|---------|------|
 | **datatagger-mcp** | Python (FastMCP) | Built-in `/register` → session token |
-| **elabrmcp** (elabFTW) | R (ellmer/mcptools) | **elabmcp-proxy** → spawns per-user R subprocess |
+| **elabrmcp** (elabFTW) | R (ellmer/mcptools) | **elabmcp-proxy** → per-user R subprocess |
 
 ---
 
@@ -41,11 +42,11 @@ injected as environment variables. You can `git pull` elabR independently.
 
 ## Setup
 
-### 1. Clone this repo and its dependencies
+### 1. Clone repos
 
 ```bash
-git clone <your-repo-url> unified-mcp
-cd unified-mcp
+git clone https://github.com/harrytyp/unified-researchdata-mcp.git
+cd unified-researchdata-mcp
 
 # Clone the two MCP server repos alongside it
 git clone https://github.com/harrytyp/datatagger-mcp.git
@@ -56,13 +57,8 @@ git clone https://github.com/MarvinLuepke/elabR.git
 
 ```bash
 cp .env.example .env
-```
-
-Edit `.env`:
-```env
-# DataTagger (optional — users can also register on the web page)
-FDM_BASE_URL=https://datatagger.ub.tum.de
-FDM_TOKEN=
+# Edit only FDM_BASE_URL if your DataTagger instance is not the default
+# No API keys needed — users bring their own via the registration page
 ```
 
 ### 3. Deploy
@@ -72,9 +68,9 @@ docker compose up -d --build
 ```
 
 This builds three containers:
-- **unified-mcp-datatagger-mcp** — DataTagger MCP server (Python)
+- **unified-mcp-datatagger-mcp** — DataTagger MCP server
 - **unified-mcp-elabmcp-proxy** — elabFTW auth-proxy (R + Python)
-- **unified-mcp-caddy** — reverse proxy (routes by subdomain)
+- **unified-mcp-caddy** — reverse proxy
 
 ---
 
@@ -84,16 +80,16 @@ This builds three containers:
 
 ```
 1. User visits  https://datatagger.your-domain.com/register
-2. Pastes personal FDM_TOKEN
+2. Pastes their personal FDM_TOKEN
 3. Receives scoped URL:  https://datatagger.your-domain.com/mcp/?token=<uuid>
-4. Registers URL in MCP client (Claude Desktop, etc.)
+4. Registers URL in MCP client (Claude Desktop, KISSKI, etc.)
 ```
 
 ### elabFTW / elabrmcp
 
 ```
 1. User visits  https://elab.your-domain.com/register
-2. Pastes personal ELABFTW_BASE_URL + ELABFTW_API_KEY
+2. Pastes their personal ELABFTW_BASE_URL + ELABFTW_API_KEY
 3. Receives scoped URL:  https://elab.your-domain.com/mcp?token=<uuid>
 4. Registers URL in MCP client
 5. Proxy spawns a dedicated R subprocess with those credentials
@@ -111,15 +107,16 @@ datatagger.your-domain.com { ... }
 elab.your-domain.com       { ... }
 ```
 
-For local testing without DNS, change the ports in `Caddyfile` to serve on
-`localhost` and access them at `http://localhost:8080` / `http://localhost:8081`.
+For local testing without DNS, omit Caddy and access directly:
+- `http://localhost:8000/register` — DataTagger
+- `http://localhost:8081/register` — elabFTW
 
 ---
 
 ## elabmcp-proxy (auth-proxy for elabrmcp)
 
 The key component that makes per-user registration work without modifying
-elabR. Located in `elabmcp-proxy/`:
+elabR:
 
 ```
 elabmcp-proxy/
@@ -128,9 +125,9 @@ elabmcp-proxy/
 ├── pyproject.toml
 └── src/elabmcp_proxy/
     ├── __init__.py
-    ├── __main__.py         # Entry point:  python3 -m elabmcp_proxy
-    ├── app.py              # FastAPI app:  /register, GET/POST /mcp
-    └── session.py          # RProcessHandle: spawns/kills R subprocesses
+    ├── __main__.py         # Entry point
+    ├── app.py              # FastAPI: /register, GET/POST /mcp
+    └── session.py          # Per-user R subprocess lifecycle
 ```
 
 ### How it works
@@ -149,8 +146,8 @@ elabmcp-proxy/
 
 | Directory | Source | Purpose |
 |-----------|--------|---------|
-| `elabR/` | [GitHub](https://github.com/MarvinLuepke/elabR) | elabFTW R API client + elabrmcp MCP server |
-| `datatagger-mcp/` | [GitHub](https://github.com/harrytyp/datatagger-mcp) | DataTagger MCP server |
-| `elabmcp-proxy/` | **this repo** | Multi-user auth-proxy wrapping elabrmcp |
-| `docker-compose.yml` | **this repo** | Orchestration |
-| `Caddyfile` | **this repo** | Reverse proxy routing |
+| [`elabR/`](https://github.com/MarvinLuepke/elabR) | external | elabFTW R API client + elabrmcp MCP server |
+| [`datatagger-mcp/`](https://github.com/harrytyp/datatagger-mcp) | external | DataTagger MCP server |
+| [`elabmcp-proxy/`](https://github.com/harrytyp/unified-researchdata-mcp/tree/master/elabmcp-proxy) | this repo | Multi-user auth-proxy wrapping elabrmcp |
+| `docker-compose.yml` | this repo | Orchestration |
+| `Caddyfile` | this repo | Reverse proxy routing |
