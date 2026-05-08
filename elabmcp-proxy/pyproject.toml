@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elabmcp-proxy"
+version = "0.1.0"
+description = "Multi-user auth-proxy for elabrmcp — per-user R subprocess spawning"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+elabmcp-proxy = "elabmcp_proxy.__main__:main"

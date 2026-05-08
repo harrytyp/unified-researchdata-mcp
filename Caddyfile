@@ -1,0 +1,31 @@
+# ── DataTagger MCP ─────────────────────────────────────────────────────────────
+datatagger.your-domain.com {
+    reverse_proxy datatagger-mcp:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        flush_interval -1
+    }
+    header {
+        Cache-Control "no-cache"
+        Connection "keep-alive"
+        X-Accel-Buffering "no"
+    }
+}
+
+# ── elabFTW MCP (auth-proxy frontend) ─────────────────────────────────────────
+elab.your-domain.com {
+    reverse_proxy elabmcp-proxy:8081 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        flush_interval -1
+    }
+    header {
+        Cache-Control "no-cache"
+        Connection "keep-alive"
+        X-Accel-Buffering "no"
+    }
+}
