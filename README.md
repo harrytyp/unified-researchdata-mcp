@@ -147,9 +147,22 @@ elabmcp-proxy/
 4. **Isolation** — each user gets a separate R process, no shared state
 5. **Cleanup** — processes are killed after 30 minutes of inactivity by a background task
 
+### Running tests
+
+```bash
+cd elabmcp-proxy
+pip install -e ".[dev]"
+pytest tests/ -v
+
+# Docker integration tests (requires running containers):
+DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
+```
+
 ---
 
 ## Security Audit
+
+> 📋 Full changelog: [CHANGELOG.md](./CHANGELOG.md)
 
 ### Current posture
 
@@ -159,46 +172,36 @@ elabmcp-proxy/
 | Per-user isolation | ✅ | Each user gets an OS-level R subprocess |
 | Session expiry | ✅ | 30-minute inactivity timeout |
 | In-transit encryption | ✅ | Terminated by Caddy (TLS) |
+| Rate limiting | ✅ | [slowapi](https://github.com/AsylumSecurity/fastapi-limiter), 10 POST/min per IP |
+| Subprocess resource caps | ✅ | `RLIMIT_AS` (256 MB), `RLIMIT_CPU` (300 s), `RLIMIT_NPROC` (64), global max 20 sessions |
+| Audit logging | ✅ | Structured log at `ELABMCP_AUDIT_LOG` |
+| Graceful shutdown | ✅ | `SIGTERM` → 3 s wait → `SIGKILL` |
+| Docker resource limits | ✅ | Per-container `mem_limit` + `stop_grace_period` |
 | Token-based auth | ✅ | UUID4 tokens, one per session |
 | No persistent secrets | ⚠️ Partial | Tokens stored in-memory only (lost on restart) |
+| Test coverage | ✅ | 40 pytest + 15 Docker integration tests |
 
-### Areas for improvement
-
-#### 🔴 High priority
-
-1. **Rate limiting on `/register`** — the registration endpoint has no rate limiting, making it vulnerable to credential-stuffing or DoS via excessive subprocess creation. A production deployment should add [slowapi](https://github.com/AsylumSecurity/fastapi-limiter) or a reverse-proxy rate limit.
-
-2. **Subprocess resource caps** — each R process consumes 100-200 MB RAM and takes 5-15 seconds to start. A malicious user could register many tokens and trigger SSE connections to exhaust server memory. Mitigations:
-   - Enforce a maximum number of concurrent sessions per IP
-   - Set a hard global limit on running subprocesses
-   - Add [Docker --memory limits](https://docs.docker.com/config/containers/resource_constraints/) on the container
-
-3. **Parameterized subprocess isolation** — currently, all R subprocesses share the same Linux user inside the container. For stronger isolation, consider spawning each R process in a separate Docker container or using [nsjail](https://github.com/google/nsjail).
+### Remaining areas
 
 #### 🟡 Medium priority
 
-4. **Audit logging** — there is no audit trail for registrations, tool invocations, or session expirations. Production deployments should log:
-   - Registration events (anonymized: truncated token prefix)
-   - Session creation and expiry
-   - Error events (R subprocess crashes, auth failures)
-
-5. **Token transmission in URL** — session tokens are passed as URL query parameters (`/mcp?token=X`). This exposes tokens in:
+1. **Token transmission in URL** — session tokens are passed as URL query parameters (`/mcp?token=X`). This exposes tokens in:
    - Server access logs
    - Browser history (if user visits the URL manually)
    - `Referer` headers
    - Consider moving the token to a header (`Authorization: Bearer X`) or a cookie
 
-6. **HTTPS-only enforcement** — Caddy handles TLS, but the proxy containers also accept plain HTTP on their internal ports. A middleware should reject non- HTTPS requests (or rely on Caddy stripping them).
+2. **HTTPS-only enforcement** — Caddy handles TLS, but the proxy containers also accept plain HTTP on their internal ports. A middleware should reject non- HTTPS requests (or rely on Caddy stripping them).
 
 #### 🟢 Low priority
 
-7. **Session persistence** — restarting the elabmcp-proxy container drops all active sessions. For high-availability deployments, consider storing session tokens in [Redis](https://redis.io/) with automatic expiry (TTL).
+3. **Subprocess isolation** — all R subprocesses share the same Linux user inside the container. For stronger isolation, consider spawning each R process in a separate Docker container or using [nsjail](https://github.com/google/nsjail).
 
-8. **Subprocess restart on crash** — if an R subprocess crashes, the SSE connection to the user drops and the session becomes unusable. The proxy could detect the crash and automatically re-spawn the subprocess for reconnect attempts.
+4. **Session persistence** — restarting the elabmcp-proxy container drops all active sessions. For high-availability deployments, consider storing session tokens in [Redis](https://redis.io/) with automatic expiry (TTL).
 
-9. **Memory-only credential lifetime** — credentials are stored in plain-text Python dicts. For advanced deployments, consider encrypting them at rest with a server-side key.
+5. **Subprocess restart on crash** — if an R subprocess crashes, the SSE connection to the user drops and the session becomes unusable. The proxy could detect the crash and automatically re-spawn the subprocess for reconnect attempts.
 
-10. **Graceful shutdown** — when the container stops, active R subprocesses are killed immediately (`process.kill()`). A 5-second grace period with `process.terminate()` followed by `process.wait(timeout=5)` would be cleaner.
+6. **Memory-only credential lifetime** — credentials are stored in plain-text Python dicts. For advanced deployments, consider encrypting them at rest with a server-side key.
 
 ---
 
