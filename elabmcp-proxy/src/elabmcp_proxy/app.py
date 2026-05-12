@@ -1,20 +1,60 @@
 """FastAPI app: registration UI + per-session SSE↔stdio MCP bridge."""
 
 import asyncio
+import json
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.responses import HTMLResponse, StreamingResponse
 
-from .session import RProcessHandle, SESSION_TIMEOUT
+from .session import (
+    RProcessHandle,
+    SESSION_TIMEOUT,
+    acquire_session_slot,
+    get_running_count,
+    release_session_slot,
+)
 
 logger = logging.getLogger("elabmcp-proxy.app")
 
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 token_store: dict[str, RProcessHandle] = {}
 
+# ── Audit logging ─────────────────────────────────────────────────────────────
+_audit_log_path = os.environ.get("ELABMCP_AUDIT_LOG", "/var/log/elabmcp-proxy/audit.log")
+_audit_log_dir = os.path.dirname(_audit_log_path)
+if _audit_log_dir and not os.path.exists(_audit_log_dir):
+    try:
+        os.makedirs(_audit_log_dir, exist_ok=True)
+    except OSError:
+        pass
+
+_audit_logger = logging.getLogger("elabmcp-proxy.audit")
+_audit_handler = logging.FileHandler(_audit_log_path, delay=True)
+_audit_handler.setFormatter(logging.Formatter(
+    "%(asctime)s\t%(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"
+))
+_audit_logger.addHandler(_audit_handler)
+_audit_logger.setLevel(logging.INFO)
+_audit_logger.propagate = False
+
+
+def _audit(event: str, **kwargs):
+    parts = [event]
+    for k, v in sorted(kwargs.items()):
+        parts.append(f"{k}={v}")
+    _audit_logger.info("\t".join(parts))
+
+
+# ── HTML templates ───────────────────────────────────────────────────────────
 
 def _create_register_form(error: str = "") -> str:
     err_html = f'<p style="color:red">{error}</p>' if error else ""
@@ -59,19 +99,43 @@ Session expires after 30 minutes of inactivity.
 </div></body></html>"""
 
 
+# ── Routes ───────────────────────────────────────────────────────────────────
+
 async def register_page(request: Request):
     if request.method == "POST":
         form = await request.form()
         api_key = str(form.get("api_key", "")).strip()
         base_url = str(form.get("base_url", "")).strip()
+        remote_ip = request.client.host if request.client else "unknown"
+
         if not api_key or not base_url:
             return HTMLResponse(_create_register_form("API Key and Base URL are required."), status_code=400)
+
+        # Check global session capacity before creating handle
+        slot_ok = await acquire_session_slot()
+        if not slot_ok:
+            logger.warning(
+                "Registration denied: at capacity (%d/%d) from %s",
+                get_running_count(),
+                int(os.environ.get("ELABMCP_MAX_SESSIONS", "20")),
+                remote_ip,
+            )
+            return HTMLResponse(
+                _create_register_form(
+                    "Server is at maximum capacity. Please try again later."
+                ),
+                status_code=503,
+            )
+        # Release the slot we just took — it will be re-acquired when SSE connects
+        await release_session_slot()
+
         token = str(uuid.uuid4())
         token_store[token] = RProcessHandle(token, base_url, api_key)
         forwarded_proto = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("host", "localhost:8081")
         personal_url = f"{forwarded_proto}://{host}/mcp?token={token}"
-        logger.info("Registered new session token=%s", token[:8])
+        logger.info("Registered new session token=%s from %s", token[:8], remote_ip)
+        _audit("REGISTER", token_prefix=token[:8], remote_ip=remote_ip)
         return HTMLResponse(_registration_success_page(personal_url))
     return HTMLResponse(_create_register_form())
 
@@ -80,11 +144,17 @@ async def sse_stream(request: Request):
     token = request.query_params.get("token", "")
     handle = token_store.get(token)
     if handle is None:
+        _audit("SSE_INVALID_TOKEN", token_prefix=token[:8] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
     handle.touch()
-    await handle.ensure_running()
+    try:
+        await handle.ensure_running()
+    except RuntimeError as e:
+        logger.warning("SSE spawn denied: %s", e)
+        return HTMLResponse(str(e), status_code=503)
 
-    # Build the messages endpoint URL (same path, POST)
+    _audit("SSE_START", token_prefix=token[:8])
+
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
     messages_url = f"{scheme}://{host}/mcp?token={token}"
@@ -93,9 +163,7 @@ async def sse_stream(request: Request):
 
     async def event_generator():
         try:
-            # 1. Send endpoint event so the client knows where to POST
             yield f"event: endpoint\ndata: {messages_url}\n\n"
-            # 2. Forward R subprocess stdout lines as SSE message events
             while True:
                 line = await q.get()
                 text = line.decode(errors="replace").rstrip()
@@ -118,26 +186,39 @@ async def sse_stream(request: Request):
 
 
 async def mcp_messages(request: Request):
-    """POST endpoint — forwards client JSON-RPC message to the R subprocess."""
     token = request.query_params.get("token", "")
     handle = token_store.get(token)
     if handle is None:
+        _audit("POST_INVALID_TOKEN", token_prefix=token[:8] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
     if not handle.is_alive:
+        _audit("POST_EXPIRED_SESSION", token_prefix=token[:8])
         return HTMLResponse("Session expired, please re-register.", status_code=410)
     body = await request.body()
     await handle.write_stdin(body + b"\n")
     return HTMLResponse("ok", status_code=200)
 
 
+async def status_endpoint(request: Request):
+    running = get_running_count()
+    registered = len(token_store)
+    return HTMLResponse(
+        json.dumps({"running_subprocesses": running, "registered_sessions": registered}),
+        media_type="application/json",
+    )
+
+
+# ── Background tasks ─────────────────────────────────────────────────────────
+
 async def cleanup_expired_sessions():
     while True:
         try:
             now = time.time()
-            expired = [t for t, h in token_store.items() if h.expired]
-            for t in expired:
+            expired = [(t, h) for t, h in token_store.items() if h.expired]
+            for t, h in expired:
                 logger.info("Cleaning up expired session token=%s", t[:8])
-                await token_store[t].shutdown()
+                _audit("SESSION_EXPIRED", token_prefix=t[:8])
+                await h.shutdown()
                 del token_store[t]
         except Exception:
             logger.exception("Session cleanup error")
@@ -150,14 +231,20 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
     for token, handle in list(token_store.items()):
+        _audit("SERVER_SHUTDOWN", token_prefix=token[:8])
         await handle.shutdown()
     token_store.clear()
 
 
+# ── App factory ──────────────────────────────────────────────────────────────
+
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     @app.api_route("/register", methods=["GET", "POST"])
+    @limiter.limit(os.environ.get("ELABMCP_RATE_LIMIT", "10/minute"))
     async def register_route(request: Request):
         return await register_page(request)
 
@@ -168,5 +255,9 @@ def create_app() -> FastAPI:
     @app.post("/mcp")
     async def mcp_post(request: Request):
         return await mcp_messages(request)
+
+    @app.get("/status")
+    async def status_route(request: Request):
+        return await status_endpoint(request)
 
     return app

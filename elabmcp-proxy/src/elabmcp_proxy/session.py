@@ -3,12 +3,81 @@
 import asyncio
 import logging
 import os
+import signal
 import time
+
+try:
+    import resource
+    HAS_RESOURCE = True
+except ImportError:
+    HAS_RESOURCE = False
+    resource = None  # type: ignore[assignment]
+
+try:
+    import resource
+    HAS_RESOURCE = True
+except ImportError:
+    HAS_RESOURCE = False
+    resource = None  # type: ignore[assignment]
 from typing import Optional
 
 logger = logging.getLogger("elabmcp-proxy.session")
 
 SESSION_TIMEOUT = 1800  # 30 minutes
+
+# ── Resource limits applied to each R subprocess ──────────────────────────────
+MAX_CONCURRENT_SESSIONS = int(os.environ.get("ELABMCP_MAX_SESSIONS", "20"))
+MAX_MEM_MB = int(os.environ.get("ELABMCP_MAX_MEM_MB", "256"))
+MAX_CPU_SECONDS = int(os.environ.get("ELABMCP_MAX_CPU_SECONDS", "300"))
+
+# ── Global counter (not a cap per se, enforced on spawn) ──────────────────────
+_total_running = 0
+_total_running_lock = asyncio.Lock()
+
+
+async def acquire_session_slot() -> bool:
+    async with _total_running_lock:
+        global _total_running
+        if _total_running >= MAX_CONCURRENT_SESSIONS:
+            return False
+        _total_running += 1
+        return True
+
+
+async def release_session_slot():
+    async with _total_running_lock:
+        global _total_running
+        _total_running = max(0, _total_running - 1)
+
+
+def get_running_count() -> int:
+    return _total_running
+
+
+def _setrlimit(prlimit):
+    """Apply resource limits. Called in the child pre-exec."""
+    if not HAS_RESOURCE:
+        return
+    try:
+        prlimit(resource.RLIMIT_AS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
+    except Exception:
+        pass
+    try:
+        prlimit(resource.RLIMIT_CPU, (MAX_CPU_SECONDS, MAX_CPU_SECONDS + 10))
+    except Exception:
+        pass
+    try:
+        prlimit(resource.RLIMIT_NPROC, (64, 64))
+    except Exception:
+        pass
+    try:
+        prlimit(resource.RLIMIT_CPU, (MAX_CPU_SECONDS, MAX_CPU_SECONDS + 10))
+    except Exception:
+        pass
+    try:
+        prlimit(resource.RLIMIT_NPROC, (64, 64))
+    except Exception:
+        pass
 
 
 class RProcessHandle:
@@ -32,18 +101,32 @@ class RProcessHandle:
         async with self._lock:
             if self.process is not None and self.process.returncode is None:
                 return
+            slot_ok = await acquire_session_slot()
+            if not slot_ok:
+                raise RuntimeError(
+                    f"Server at capacity ({MAX_CONCURRENT_SESSIONS} sessions). "
+                    "Please try again later."
+                )
             env = os.environ.copy()
             env["ELABFTW_BASE_URL"] = self.base_url
             env["ELABFTW_API_KEY"] = self.api_key
-            logger.info("Spawning R subprocess for token=%s", self.token[:8])
-            self.process = await asyncio.create_subprocess_exec(
-                "Rscript",
-                "-e", "elabrmcp::elabr_mcp_server(type='stdio')",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
+            logger.info(
+                "Spawning R subprocess for token=%s (running=%d/%d)",
+                self.token[:8], _total_running, MAX_CONCURRENT_SESSIONS,
             )
+            try:
+                self.process = await asyncio.create_subprocess_exec(
+                    "Rscript",
+                    "-e", "elabrmcp::elabr_mcp_server(type='stdio')",
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                    preexec_fn=_setrlimit,
+                )
+            except Exception:
+                await release_session_slot()
+                raise
             self._stdout_reader = asyncio.create_task(self._pipe_stdout())
             self._stderr_reader = asyncio.create_task(self._pipe_stderr())
 
@@ -63,7 +146,6 @@ class RProcessHandle:
         self._subscribers = [s for s in self._subscribers if s is not q]
 
     async def _pipe_stdout(self):
-        """Read R stdout lines and fan-out to SSE subscribers."""
         try:
             async for line in self.process.stdout:
                 self.touch()
@@ -91,13 +173,24 @@ class RProcessHandle:
 
     async def shutdown(self):
         if self.process is not None and self.process.returncode is None:
-            self.process.kill()
+            logger.info("Terminating R subprocess token=%s", self.token[:8])
+            try:
+                self.process.send_signal(signal.SIGTERM)
+                await asyncio.wait_for(self.process.wait(), timeout=3.0)
+            except (asyncio.TimeoutError, ProcessLookupError):
+                try:
+                    self.process.kill()
+                    await self.process.wait()
+                except ProcessLookupError:
+                    pass
+        elif self.process is not None:
             await self.process.wait()
         if self._stdout_reader is not None:
             self._stdout_reader.cancel()
         if self._stderr_reader is not None:
             self._stderr_reader.cancel()
         self.process = None
+        await release_session_slot()
 
     @property
     def is_alive(self) -> bool:
