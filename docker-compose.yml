@@ -14,6 +14,8 @@ services:
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
+    mem_limit: 512m
+    stop_grace_period: 10s
 
   # ── elabFTW MCP (auth-proxy wrapping elabrmcp with per-user subprocesses) ──
   elabmcp-proxy:
@@ -26,10 +28,22 @@ services:
     environment:
       - ELABMCP_PROXY_HOST=0.0.0.0
       - ELABMCP_PROXY_PORT=8081
+      # Rate limit: registration attempts per IP
+      - ELABMCP_RATE_LIMIT=10/minute
+      # Max concurrent R subprocesses
+      - ELABMCP_MAX_SESSIONS=20
+      # Max memory per R subprocess (MB)
+      - ELABMCP_MAX_MEM_MB=256
+      # Max CPU seconds per R subprocess
+      - ELABMCP_MAX_CPU_SECONDS=300
+      # Audit log path
+      - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
       # Optional: passthrough the elabrmcp config path for subprocesses
       - MCP_CONFIG_PATH=
       # Uncomment to allow writes:
       # - MCP_CONFIG_PATH=mcp/elabrmcp/inst/config/config.hybrid.yml
+    mem_limit: 2g
+    stop_grace_period: 30s
 
   # ── Caddy reverse proxy ────────────────────────────────────────────────────
   caddy:
@@ -45,6 +59,7 @@ services:
     depends_on:
       - datatagger-mcp
       - elabmcp-proxy
+    mem_limit: 128m
 
 volumes:
   caddy_data:

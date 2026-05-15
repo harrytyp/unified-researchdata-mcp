@@ -51,8 +51,9 @@ RUN pip3 install --break-system-packages -r /elabmcp-proxy/requirements.txt \
  && pip3 install --break-system-packages -e /elabmcp-proxy
 
 # ── OpenShift arbitrary UID compatibility ────────────────────────────────────
-RUN chgrp -R 0 /app /usr/local/lib/R/site-library /elabmcp-proxy \
- && chmod -R g+rwX /app /usr/local/lib/R/site-library /elabmcp-proxy
+RUN mkdir -p /var/log/elabmcp-proxy \
+ && chgrp -R 0 /app /usr/local/lib/R/site-library /elabmcp-proxy /var/log/elabmcp-proxy \
+ && chmod -R g+rwX /app /usr/local/lib/R/site-library /elabmcp-proxy /var/log/elabmcp-proxy
 
 EXPOSE 8081
 
