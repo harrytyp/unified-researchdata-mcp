@@ -103,18 +103,48 @@ docker compose up -d --build
 6. 🧹 After 30 minutes idle, process is killed and memory reclaimed
 ```
 
+> **Note:** With path-based routing (single domain), replace the URLs accordingly:
+> - Registration: `https://yourdomain.duckdns.org/datatagger/register` and `https://yourdomain.duckdns.org/elab/register`
+> - MCP endpoints: `https://yourdomain.duckdns.org/datatagger/mcp` and `https://yourdomain.duckdns.org/elab/mcp`
+
 ---
 
 ## Caddy Configuration
 
-Edit [`Caddyfile`](./Caddyfile) and replace `your-domain.com` with your actual domain:
+Edit [`Caddyfile`](./Caddyfile) to match your domain setup.
+
+### Option 1: Two subdomains (recommended for production)
+
+Replace `your-domain.com` with your actual domain:
 
 ```text
 datatagger.your-domain.com { ... }
 elab.your-domain.com       { ... }
 ```
 
-For local testing without DNS, access the containers directly:
+### Option 2: Single domain with path-based routing (e.g., DuckDNS)
+
+If you only have one domain (like a DuckDNS subdomain), use `handle_path` to strip the prefix:
+
+```caddy
+yourdomain.duckdns.org {
+    handle_path /datatagger/* {
+        reverse_proxy datatagger-mcp:8000
+    }
+
+    handle_path /elab/* {
+        reverse_proxy elabmcp-proxy:8081
+    }
+}
+```
+
+Then access:
+- DataTagger registration: `https://yourdomain.duckdns.org/datatagger/register`
+- elabFTW registration:   `https://yourdomain.duckdns.org/elab/register`
+
+### Local testing without DNS
+
+Access the containers directly:
 
 | Service | URL |
 |---|---|
