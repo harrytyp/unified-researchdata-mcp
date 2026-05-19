@@ -1,43 +1,33 @@
-researchmcp.duckdns.org {
+﻿researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt
-        reverse_proxy datatagger-mcp:8000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            flush_interval -1
-        }
+        reverse_proxy datatagger-mcp:8000 { flush_interval -1 }
     }
 
     handle_path /el* {
         uri strip_prefix /el
-        reverse_proxy elabmcp-proxy:8081 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            flush_interval -1
-        }
+        reverse_proxy elabmcp-proxy:8081 { flush_interval -1 }
     }
 
     root * /srv/http
     file_server browse
 
-    header /dt/* /el/* {
+    @api {
+        path_regexp /dt/.*|/el/.*
+    }
+    @options method OPTIONS
+
+    header @api {
         Access-Control-Allow-Origin "*"
-        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Methods "GET, POST, HEAD, OPTIONS"
         Access-Control-Allow-Headers "Content-Type, Authorization"
         Access-Control-Expose-Headers "Content-Type"
-    }
-
-    handle_options /dt/* /el/* {
-        respond "" 204
-    }
-
-    header {
         Cache-Control "no-cache"
         Connection "keep-alive"
         X-Accel-Buffering "no"
+    }
+
+    handle @options {
+        respond "" 204
     }
 }
