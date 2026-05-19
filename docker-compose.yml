@@ -1,7 +1,8 @@
 services:
   # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
-    image: harrytyp/datatagger-mcp:latest
+    build:
+      context: ./datatagger-mcp
     restart: unless-stopped
     expose:
       - "8000"

@@ -1,0 +1,11 @@
+# ── Production overrides ────────────────────────────────────────────────────────
+# Use this file when deploying to production (e.g. on your server).
+# Run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# In production, datatagger-mcp is pulled from the Docker registry
+# (which has the URL_PREFIX fix baked in) and elabmcp-proxy is built
+# locally from the monorepo's elabR/ and elabmcp-proxy/ source trees.
+
+services:
+  datatagger-mcp:
+    image: harrytyp/datatagger-mcp:latest
