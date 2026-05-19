@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.responses import HTMLResponse, StreamingResponse
+from starlette.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
 from .session import (
     RProcessHandle,
@@ -134,10 +134,12 @@ async def register_page(request: Request):
         forwarded_proto = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("host", "localhost:8081")
         url_prefix = os.environ.get("URL_PREFIX", "")
-        if url_prefix:
-            personal_url = f"{forwarded_proto}://{host}{url_prefix}/mcp?token={token}"
-        else:
-            personal_url = f"{forwarded_proto}://{host}/mcp?token={token}"
+        if not url_prefix or not url_prefix.strip():
+            url_prefix = "/el"
+        elif not url_prefix.startswith("/"):
+            url_prefix = "/" + url_prefix
+        url_prefix = url_prefix.rstrip("/")
+        personal_url = f"{forwarded_proto}://{host}{url_prefix}/mcp?token={token}"
         logger.info("Registered new session token=%s from %s", token[:8], remote_ip)
         _audit("REGISTER", token_prefix=token[:8], remote_ip=remote_ip)
         return HTMLResponse(_registration_success_page(personal_url))
@@ -162,10 +164,12 @@ async def sse_stream(request: Request):
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
     url_prefix = os.environ.get("URL_PREFIX", "")
-    if url_prefix:
-        messages_url = f"{scheme}://{host}{url_prefix}/mcp?token={token}"
-    else:
-        messages_url = f"{scheme}://{host}/mcp?token={token}"
+    if not url_prefix or not url_prefix.strip():
+        url_prefix = "/el"
+    elif not url_prefix.startswith("/"):
+        url_prefix = "/" + url_prefix
+    url_prefix = url_prefix.rstrip("/")
+    messages_url = f"{scheme}://{host}{url_prefix}/mcp?token={token}"
 
     q = await handle.subscribe()
 

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import signal
 import time
 
@@ -73,6 +74,17 @@ def _setrlimit(prlimit=None):
         pass
 
 
+def _find_rscript() -> str:
+    """Find Rscript executable cross-platform (Linux case-sensitive, Windows)."""
+    path = shutil.which("Rscript")
+    if path:
+        return path
+    fallback = "/usr/local/bin/Rscript"
+    if os.path.isfile(fallback):
+        return fallback
+    return fallback
+
+
 class RProcessHandle:
     """One R subprocess (elabrmcp stdio mode) per registered user."""
 
@@ -108,14 +120,14 @@ class RProcessHandle:
                 self.token[:8], _total_running, MAX_CONCURRENT_SESSIONS,
             )
             try:
+                rscript = _find_rscript()
                 self.process = await asyncio.create_subprocess_exec(
-                    "Rscript",
+                    rscript,
                     "-e", "elabrmcp::elabr_mcp_server(type='stdio')",
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
-                    preexec_fn=_setrlimit,
                 )
             except Exception:
                 await release_session_slot()
@@ -156,7 +168,7 @@ class RProcessHandle:
     async def _pipe_stderr(self):
         try:
             async for line in self.process.stderr:
-                logger.debug(
+                logger.warning(
                     "[R stderr %s] %s",
                     self.token[:8],
                     line.decode(errors="replace").rstrip(),
