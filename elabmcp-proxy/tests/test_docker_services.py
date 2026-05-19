@@ -125,14 +125,14 @@ class TestEndpointReachability:
         assert resp.status_code in (200, 404, 502)
 
     def test_elabmcp_proxy_register_get(self, caddy_base_url):
-        """GET /register should return HTML form."""
-        resp = self._get(caddy_base_url, "/register")
+        """GET /el/register should return HTML form."""
+        resp = self._get(caddy_base_url, "/el/register")
         assert resp.status_code == 200
         assert "elabFTW MCP Registration" in resp.text
 
     def test_elabmcp_proxy_status(self, caddy_base_url):
-        """GET /status should return JSON with running/registered counts."""
-        resp = self._get(caddy_base_url, "/status")
+        """GET /el/status should return JSON with running/registered counts."""
+        resp = self._get(caddy_base_url, "/el/status")
         assert resp.status_code == 200
         assert "application/json" in resp.headers.get("content-type", "")
         data = resp.json()
@@ -140,28 +140,27 @@ class TestEndpointReachability:
         assert "registered_sessions" in data
 
     def test_elabmcp_proxy_mcp_invalid_token(self, caddy_base_url):
-        """GET /mcp with bad token returns 401."""
-        resp = self._get(caddy_base_url, "/mcp?token=badtoken")
+        """GET /el/mcp with bad token returns 401."""
+        resp = self._get(caddy_base_url, "/el/mcp?token=badtoken")
         assert resp.status_code == 401
 
     def test_elabmcp_proxy_post_register_capacity(self, caddy_base_url):
-        """POST /register with valid data returns success page."""
+        """POST /el/register with valid data returns success page."""
         import httpx
         resp = httpx.post(
-            f"{caddy_base_url}/register",
+            f"{caddy_base_url}/el/register",
             data={"api_key": "test-key-docker", "base_url": "https://eln.example.org"},
             timeout=10.0,
         )
         assert resp.status_code in (200, 503)
         if resp.status_code == 200:
-            assert "/mcp?token=" in resp.text
+            assert "/el/mcp?token=" in resp.text
 
     def test_datatagger_mcp_register_get(self, caddy_base_url):
-        """Verify datatagger-mcp serves its register page (if routed)."""
+        """Verify datatagger-mcp serves its register page at /dt/register."""
         import httpx
         try:
-            resp = httpx.get(f"{caddy_base_url}/register", timeout=10.0)
-            # Both proxy apps serve /register, so we just check it's reachable
+            resp = httpx.get(f"{caddy_base_url}/dt/register", timeout=10.0)
             assert resp.status_code in (200, 401, 404)
         except httpx.ConnectError:
             pytest.skip("Cannot reach Caddy proxy")

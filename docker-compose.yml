@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
@@ -10,6 +8,7 @@ services:
       - "8000"
     environment:
       - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
+      - URL_PREFIX=/dt
       - MCP_MODE=hosted
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0
@@ -28,6 +27,7 @@ services:
     environment:
       - ELABMCP_PROXY_HOST=0.0.0.0
       - ELABMCP_PROXY_PORT=8081
+      - URL_PREFIX=/el
       # Rate limit: registration attempts per IP
       - ELABMCP_RATE_LIMIT=10/minute
       # Max concurrent R subprocesses
@@ -54,6 +54,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv/http:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -133,7 +133,11 @@ async def register_page(request: Request):
         token_store[token] = RProcessHandle(token, base_url, api_key)
         forwarded_proto = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("host", "localhost:8081")
-        personal_url = f"{forwarded_proto}://{host}/mcp?token={token}"
+        url_prefix = os.environ.get("URL_PREFIX", "")
+        if url_prefix:
+            personal_url = f"{forwarded_proto}://{host}{url_prefix}/mcp?token={token}"
+        else:
+            personal_url = f"{forwarded_proto}://{host}/mcp?token={token}"
         logger.info("Registered new session token=%s from %s", token[:8], remote_ip)
         _audit("REGISTER", token_prefix=token[:8], remote_ip=remote_ip)
         return HTMLResponse(_registration_success_page(personal_url))

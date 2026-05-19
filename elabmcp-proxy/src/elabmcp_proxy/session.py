@@ -13,12 +13,6 @@ except ImportError:
     HAS_RESOURCE = False
     resource = None  # type: ignore[assignment]
 
-try:
-    import resource
-    HAS_RESOURCE = True
-except ImportError:
-    HAS_RESOURCE = False
-    resource = None  # type: ignore[assignment]
 from typing import Optional
 
 logger = logging.getLogger("elabmcp-proxy.session")
@@ -54,20 +48,19 @@ def get_running_count() -> int:
     return _total_running
 
 
-def _setrlimit(prlimit):
-    """Apply resource limits. Called in the child pre-exec."""
+def _setrlimit(prlimit=None):
+    """Apply resource limits. Called in the child pre-exec.
+
+    When ``os.prlimit`` is unavailable the preexec callback is invoked with
+    no arguments; ``prlimit`` defaults to ``resource.setrlimit`` so the limits
+    still apply in that case.
+    """
     if not HAS_RESOURCE:
         return
+    if prlimit is None:
+        prlimit = resource.setrlimit  # type: ignore[assignment]
     try:
         prlimit(resource.RLIMIT_AS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
-    except Exception:
-        pass
-    try:
-        prlimit(resource.RLIMIT_CPU, (MAX_CPU_SECONDS, MAX_CPU_SECONDS + 10))
-    except Exception:
-        pass
-    try:
-        prlimit(resource.RLIMIT_NPROC, (64, 64))
     except Exception:
         pass
     try:
