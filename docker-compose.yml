@@ -1,8 +1,11 @@
 services:
   # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
-    build:
-      context: ./datatagger-mcp
+    # Use the Docker Hub image for production deployments. The image at
+    # harrytyp/datatagger-mcp:latest contains the URL_PREFIX fix for hosted mode.
+    # For local development against the working tree, change `image` → `build`
+    # and point context at ./datatagger-mcp instead.
+    image: harrytyp/datatagger-mcp:latest
     restart: unless-stopped
     expose:
       - "8000"
