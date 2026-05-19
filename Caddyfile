@@ -1,8 +1,8 @@
-# If the DNS challenge fails, switch to the line below and comment out the
+﻿# If the DNS challenge fails, switch to the line below and comment out the
 # redir line to serve HTTP-only (DuckDNS can't respond to HTTP-01 sometimes):
 #   researchmcp.duckdns.org {
 researchmcp.duckdns.org {
-    # ── DataTagger MCP ──────────────────────────────────────────────────
+    # ÔöÇÔöÇ DataTagger MCP ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     handle_path /dt* {
         uri strip_prefix /dt
         reverse_proxy datatagger-mcp:8000 {
@@ -14,7 +14,7 @@ researchmcp.duckdns.org {
         }
     }
 
-    # ── elabFTW MCP ─────────────────────────────────────────────────────
+    # ÔöÇÔöÇ elabFTW MCP ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     handle_path /el* {
         uri strip_prefix /el
         reverse_proxy elabmcp-proxy:8081 {
@@ -26,11 +26,23 @@ researchmcp.duckdns.org {
         }
     }
 
-    # ── Landing page (catch-all) ────────────────────────────────────────
+    # ÔöÇÔöÇ Landing page (catch-all) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
     root * /srv/http
     file_server browse
 
-    # ── Security headers ────────────────────────────────────────────────
+    # ÔöÇÔöÇ Security headers ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+    # CORS for browser-based MCP clients (mcpjam etc.)
+    header /el/* /dt/* {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization"
+        Access-Control-Expose-Headers "Content-Type"
+    }
+
+    handle_options /el/* /dt/* {
+        respond "" 204
+    }
+
     header {
         Cache-Control "no-cache"
         Connection "keep-alive"
