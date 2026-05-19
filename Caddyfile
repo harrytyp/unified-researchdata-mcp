@@ -1,36 +1,39 @@
+# If the DNS challenge fails, switch to the line below and comment out the
+# redir line to serve HTTP-only (DuckDNS can't respond to HTTP-01 sometimes):
+#   researchmcp.duckdns.org {
 researchmcp.duckdns.org {
-    # DataTagger MCP
+    # ── DataTagger MCP ──────────────────────────────────────────────────
     handle_path /dt* {
         uri strip_prefix /dt
         reverse_proxy datatagger-mcp:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
             flush_interval -1
         }
     }
 
-    # elabFTW MCP
+    # ── elabFTW MCP ─────────────────────────────────────────────────────
     handle_path /el* {
         uri strip_prefix /el
         reverse_proxy elabmcp-proxy:8081 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
             flush_interval -1
         }
     }
 
-    # Landing page (catch-all)
+    # ── Landing page (catch-all) ────────────────────────────────────────
     root * /srv/http
     file_server browse
 
-    # CORS (required for browser-based MCP clients like mcpjam)
-    header /dt/* /el/* {
-        Access-Control-Allow-Origin "*"
-        Access-Control-Allow-Methods "GET, POST, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization"
-        Access-Control-Expose-Headers "Content-Type"
+    # ── Security headers ────────────────────────────────────────────────
+    header {
         Cache-Control "no-cache"
         Connection "keep-alive"
         X-Accel-Buffering "no"
-    }
-
-    handle_options /dt/* /el/* {
-        respond "" 204
     }
 }
