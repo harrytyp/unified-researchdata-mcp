@@ -1,4 +1,4 @@
-"""FastAPI app: registration UI + per-session SSE↔stdio MCP bridge."""
+﻿"""FastAPI app: registration UI + per-session SSEÔåöstdio MCP bridge."""
 
 import asyncio
 import json
@@ -24,11 +24,11 @@ from .session import (
 
 logger = logging.getLogger("elabmcp-proxy.app")
 
-# ── Rate limiting ─────────────────────────────────────────────────────────────
+# ÔöÇÔöÇ Rate limiting ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 token_store: dict[str, RProcessHandle] = {}
 
-# ── Audit logging ─────────────────────────────────────────────────────────────
+# ÔöÇÔöÇ Audit logging ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 _audit_log_path = os.environ.get("ELABMCP_AUDIT_LOG", "/var/log/elabmcp-proxy/audit.log")
 _audit_log_dir = os.path.dirname(_audit_log_path)
 if _audit_log_dir and not os.path.exists(_audit_log_dir):
@@ -54,7 +54,7 @@ def _audit(event: str, **kwargs):
     _audit_logger.info("\t".join(parts))
 
 
-# ── HTML templates ───────────────────────────────────────────────────────────
+# ÔöÇÔöÇ HTML templates ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 def _create_register_form(error: str = "") -> str:
     err_html = f'<p style="color:red">{error}</p>' if error else ""
@@ -99,7 +99,7 @@ Session expires after 30 minutes of inactivity.
 </div></body></html>"""
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+# ÔöÇÔöÇ Routes ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 async def register_page(request: Request):
     if request.method == "POST":
@@ -126,7 +126,7 @@ async def register_page(request: Request):
                 ),
                 status_code=503,
             )
-        # Release the slot we just took — it will be re-acquired when SSE connects
+        # Release the slot we just took ÔÇö it will be re-acquired when SSE connects
         await release_session_slot()
 
         token = str(uuid.uuid4())
@@ -161,7 +161,11 @@ async def sse_stream(request: Request):
 
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
-    messages_url = f"{scheme}://{host}/mcp?token={token}"
+    url_prefix = os.environ.get("URL_PREFIX", "")
+    if url_prefix:
+        messages_url = f"{scheme}://{host}{url_prefix}/mcp?token={token}"
+    else:
+        messages_url = f"{scheme}://{host}/mcp?token={token}"
 
     q = await handle.subscribe()
 
@@ -212,7 +216,7 @@ async def status_endpoint(request: Request):
     )
 
 
-# ── Background tasks ─────────────────────────────────────────────────────────
+# ÔöÇÔöÇ Background tasks ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 async def cleanup_expired_sessions():
     while True:
@@ -240,7 +244,7 @@ async def lifespan(app: FastAPI):
     token_store.clear()
 
 
-# ── App factory ──────────────────────────────────────────────────────────────
+# ÔöÇÔöÇ App factory ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
