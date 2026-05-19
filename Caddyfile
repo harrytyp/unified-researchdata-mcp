@@ -1,34 +1,36 @@
 researchmcp.duckdns.org {
-    # -- DataTagger MCP --------------------------------------------------
+    # DataTagger MCP
     handle_path /dt* {
         uri strip_prefix /dt
-        reverse_proxy datatagger-mcp:8000
+        reverse_proxy datatagger-mcp:8000 {
+            flush_interval -1
+        }
     }
 
-    # -- elabFTW MCP -----------------------------------------------------
+    # elabFTW MCP
     handle_path /el* {
         uri strip_prefix /el
-        reverse_proxy elabmcp-proxy:8081
+        reverse_proxy elabmcp-proxy:8081 {
+            flush_interval -1
+        }
     }
 
-    # -- Landing page (catch-all) ----------------------------------------
+    # Landing page (catch-all)
     root * /srv/http
     file_server browse
 
-    # -- CORS (required for browser-based MCP clients like mcpjam) -------
-    @api {
-        path_regexp api /dt/.*|/el/.*
-    }
-    header @api {
+    # CORS (required for browser-based MCP clients like mcpjam)
+    header /dt/* /el/* {
         Access-Control-Allow-Origin "*"
-        Access-Control-Allow-Methods "GET, POST, HEAD, OPTIONS"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
         Access-Control-Allow-Headers "Content-Type, Authorization"
         Access-Control-Expose-Headers "Content-Type"
         Cache-Control "no-cache"
         Connection "keep-alive"
         X-Accel-Buffering "no"
     }
-    handle @api OPTIONS {
+
+    handle_options /dt/* /el/* {
         respond "" 204
     }
 }
