@@ -5,7 +5,8 @@ services:
     # harrytyp/datatagger-mcp:latest contains the URL_PREFIX fix for hosted mode.
     # For local development against the working tree, change `image` → `build`
     # and point context at ./datatagger-mcp instead.
-    image: harrytyp/datatagger-mcp:latest
+    build:
+      context: ./datatagger-mcp
     restart: unless-stopped
     expose:
       - "8000"
@@ -68,3 +69,6 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+
+
