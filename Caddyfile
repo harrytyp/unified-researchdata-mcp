@@ -13,10 +13,7 @@
     file_server browse
 
     @api path /dt/* /el/*
-    @options {
-        method OPTIONS
-        path /dt/* /el/*
-    }
+    @options method OPTIONS
 
     header @api {
         Access-Control-Allow-Origin "*"
