@@ -12,10 +12,11 @@
     root * /srv/http
     file_server browse
 
-    @api {
-        path_regexp /dt/.*|/el/.*
+    @api path /dt/* /el/*
+    @options {
+        method OPTIONS
+        path /dt/* /el/*
     }
-    @options method OPTIONS
 
     header @api {
         Access-Control-Allow-Origin "*"
