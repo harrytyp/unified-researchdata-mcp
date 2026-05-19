@@ -1,4 +1,7 @@
-:80 {
+# If the DNS challenge fails, switch to the line below and comment out the
+# redir line to serve HTTP-only (DuckDNS can't respond to HTTP-01 sometimes):
+#   researchmcp.duckdns.org {
+researchmcp.duckdns.org {
     # ── DataTagger MCP ──────────────────────────────────────────────────
     handle_path /dt* {
         uri strip_prefix /dt
