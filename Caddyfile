@@ -1,4 +1,4 @@
-﻿researchmcp.duckdns.org {
+researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt
         reverse_proxy datatagger-mcp:8000 {
