@@ -203,8 +203,20 @@ async def mcp_messages(request: Request):
         _audit("POST_EXPIRED_SESSION", token_prefix=token[:8])
         return HTMLResponse("Session expired, please re-register.", status_code=410)
     body = await request.body()
-    await handle.write_stdin(body + b"\n")
-    return HTMLResponse("ok", status_code=200)
+    q = await handle.subscribe()
+    try:
+        await handle.write_stdin(body + b"\n")
+        try:
+            line = await asyncio.wait_for(q.get(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.warning("MCP response timeout for token=%s", token[:8])
+            return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
+        text = line.decode(errors="replace").rstrip()
+        if text:
+            return PlainTextResponse(text)
+        return HTMLResponse("empty response from R subprocess", status_code=502)
+    finally:
+        handle.unsubscribe(q)
 
 
 async def status_endpoint(request: Request):
