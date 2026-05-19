@@ -1,12 +1,16 @@
 ﻿researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt
-        reverse_proxy datatagger-mcp:8000 { flush_interval -1 }
+        reverse_proxy datatagger-mcp:8000 {
+            flush_interval -1
+        }
     }
 
     handle_path /el* {
         uri strip_prefix /el
-        reverse_proxy elabmcp-proxy:8081 { flush_interval -1 }
+        reverse_proxy elabmcp-proxy:8081 {
+            flush_interval -1
+        }
     }
 
     root * /srv/http
