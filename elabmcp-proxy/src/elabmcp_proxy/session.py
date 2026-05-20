@@ -261,14 +261,14 @@ class RProcessHandle:
         async with self._lock:
             url = f"http://localhost:{self._r_http_port}/mcp"
             try:
-                import aiohttp
-                connector = aiohttp.TCPConnector(
+                import aiohttp as _aiohttp
+                connector = _aiohttp.TCPConnector(
                     limit=1,
                     enable_cleanup_closed=True,
                 )
-                async with aiohttp.ClientSession(
+                async with _aiohttp.ClientSession(
                     connector=connector,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
+                    timeout=_aiohttp.ClientTimeout(total=timeout),
                 ) as session:
                     async with session.post(
                         url, data=data, headers={"Content-Type": "application/json"}
@@ -281,7 +281,7 @@ class RProcessHandle:
                         return body
             except asyncio.TimeoutError:
                 raise RuntimeError(f"R subprocess request timed out after {timeout}s")
-            except aiohttp.ClientConnectionError as e:
+            except _aiohttp.ClientConnectionError as e:
                 raise RuntimeError(f"Failed to connect to R subprocess: {e}")
 
     @property
