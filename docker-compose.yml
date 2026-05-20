@@ -32,6 +32,10 @@ services:
       - ELABMCP_PROXY_HOST=0.0.0.0
       - ELABMCP_PROXY_PORT=8081
       - URL_PREFIX=/el
+      # Transport mode for R subprocess: "stdio" (default, local) or "http" (hosted)
+      # http transport avoids the nanonext stdio pipe bug where the R process exits
+      # immediately because wait(cv) returns false on an empty pipe.
+      - ELABMCP_R_TRANSPORT=http
       # Rate limit: registration attempts per IP
       - ELABMCP_RATE_LIMIT=10/minute
       # Max concurrent R subprocesses
