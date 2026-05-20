@@ -120,6 +120,7 @@ class RProcessHandle:
         self._stdout_reader: Optional[asyncio.Task] = None
         self._stderr_reader: Optional[asyncio.Task] = None
         self._subscribers: list[asyncio.Queue] = []
+        self._r_http_port: Optional[int] = None
 
     def touch(self):
         self.last_active = time.time()
@@ -137,15 +138,34 @@ class RProcessHandle:
             env = os.environ.copy()
             env["ELABFTW_BASE_URL"] = self.base_url
             env["ELABFTW_API_KEY"] = self.api_key
-            logger.info(
-                "Spawning R subprocess for token=%s (running=%d/%d)",
-                self.token[:8], _total_running, MAX_CONCURRENT_SESSIONS,
-            )
+
+            if R_TRANSPORT == "http":
+                # Spawn R MCP server as HTTP endpoint on a dynamic port
+                port = _pick_http_port()
+                self._r_http_port = port
+                env["MCPTOOLS_PORT"] = str(port)
+                cmd_args = [
+                    _find_rscript(), "-e",
+                    f"elabrmcp::elabr_mcp_server(type='http', port={port})",
+                ]
+                logger.info(
+                    "Spawning R HTTP subprocess for token=%s on port %d (running=%d/%d)",
+                    self.token[:8], port, _total_running, MAX_CONCURRENT_SESSIONS,
+                )
+            else:
+                # Spawn R MCP server in stdio mode (for local/agent use)
+                cmd_args = [
+                    _find_rscript(), "-e",
+                    "elabrmcp::elabr_mcp_server(type='stdio')",
+                ]
+                logger.info(
+                    "Spawning R stdio subprocess for token=%s (running=%d/%d)",
+                    self.token[:8], _total_running, MAX_CONCURRENT_SESSIONS,
+                )
+
             try:
-                rscript = _find_rscript()
                 self.process = await asyncio.create_subprocess_exec(
-                    rscript,
-                    "-e", "elabrmcp::elabr_mcp_server(type='stdio')",
+                    *cmd_args,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -154,8 +174,10 @@ class RProcessHandle:
             except Exception:
                 await release_session_slot()
                 raise
-            self._stdout_reader = asyncio.create_task(self._pipe_stdout())
-            self._stderr_reader = asyncio.create_task(self._pipe_stderr())
+
+            if R_TRANSPORT == "stdio":
+                self._stdout_reader = asyncio.create_task(self._pipe_stdout())
+                self._stderr_reader = asyncio.create_task(self._pipe_stderr())
 
     async def write_stdin(self, data: bytes):
         if self.process is None or self.process.stdin is None:
