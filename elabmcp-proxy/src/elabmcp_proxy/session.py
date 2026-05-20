@@ -177,7 +177,8 @@ class RProcessHandle:
 
             if R_TRANSPORT == "stdio":
                 self._stdout_reader = asyncio.create_task(self._pipe_stdout())
-                self._stderr_reader = asyncio.create_task(self._pipe_stderr())
+            # Always pipe stderr so we can see R errors even in HTTP mode
+            self._stderr_reader = asyncio.create_task(self._pipe_stderr())
 
     async def write_stdin(self, data: bytes):
         if self.process is None or self.process.stdin is None:
