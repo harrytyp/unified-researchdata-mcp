@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import random
 import shutil
 import signal
 import time
@@ -25,9 +26,30 @@ MAX_CONCURRENT_SESSIONS = int(os.environ.get("ELABMCP_MAX_SESSIONS", "20"))
 MAX_MEM_MB = int(os.environ.get("ELABMCP_MAX_MEM_MB", "256"))
 MAX_CPU_SECONDS = int(os.environ.get("ELABMCP_MAX_CPU_SECONDS", "300"))
 
+# ── Transport mode for R subprocess ──────────────────────────────────────────
+# Options: "stdio" (default, for local/agent use) or "http" (for hosted/proxied)
+# When "http", each R subprocess runs as an HTTP server on a dynamically assigned port.
+R_TRANSPORT = os.environ.get("ELABMCP_R_TRANSPORT", "stdio").lower()
+HTTP_MIN_PORT = 18080
+HTTP_MAX_PORT = 18280
+
 # ── Global counter (not a cap per se, enforced on spawn) ──────────────────────
 _total_running = 0
 _total_running_lock = asyncio.Lock()
+
+# ── HTTP port allocator (for http transport mode) ─────────────────────────────
+_http_ports_used: set[int] = set()
+_http_port_lock = asyncio.Lock()
+
+
+def _pick_http_port() -> int:
+    """Pick a random available port in the allowed range."""
+    for _ in range(100):  # max retries
+        port = random.randint(HTTP_MIN_PORT, HTTP_MAX_PORT)
+        if port not in _http_ports_used:
+            _http_ports_used.add(port)
+            return port
+    raise RuntimeError(f"No available HTTP port in range {HTTP_MIN_PORT}-{HTTP_MAX_PORT}")
 
 
 async def acquire_session_slot() -> bool:
@@ -177,6 +199,11 @@ class RProcessHandle:
             pass
 
     async def shutdown(self):
+        # Release the HTTP port if using http transport
+        if R_TRANSPORT == "http" and self._r_http_port is not None:
+            async with _http_port_lock:
+                _http_ports_used.discard(self._r_http_port)
+
         if self.process is not None and self.process.returncode is None:
             logger.info("Terminating R subprocess token=%s", self.token[:8])
             try:
@@ -196,6 +223,43 @@ class RProcessHandle:
             self._stderr_reader.cancel()
         self.process = None
         await release_session_slot()
+
+    async def proxy_request(self, data: bytes, timeout: float = 30.0) -> bytes:
+        """Proxy an MCP request to the R subprocess via HTTP.
+
+        Used when R_TRANSPORT='http'. Sends the request to the R subprocess's
+        HTTP server and returns the raw response bytes.
+        """
+        if R_TRANSPORT != "http" or self._r_http_port is None:
+            raise RuntimeError(
+                "proxy_request is only available when R_TRANSPORT=http"
+            )
+
+        async with self._lock:
+            url = f"http://localhost:{self._r_http_port}/mcp"
+            try:
+                import aiohttp
+                connector = aiohttp.TCPConnector(
+                    limit=1,
+                    enable_cleanup_closed=True,
+                )
+                async with aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as session:
+                    async with session.post(
+                        url, data=data, headers={"Content-Type": "application/json"}
+                    ) as resp:
+                        body = await resp.read()
+                        if resp.status != 200:
+                            raise RuntimeError(
+                                f"R subprocess returned status {resp.status}: {body.decode(errors='replace')}"
+                            )
+                        return body
+            except asyncio.TimeoutError:
+                raise RuntimeError(f"R subprocess request timed out after {timeout}s")
+            except aiohttp.ClientConnectionError as e:
+                raise RuntimeError(f"Failed to connect to R subprocess: {e}")
 
     @property
     def is_alive(self) -> bool:
