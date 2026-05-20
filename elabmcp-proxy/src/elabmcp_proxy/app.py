@@ -1,4 +1,4 @@
-﻿"""FastAPI app: registration UI + per-session SSEÔåöstdio MCP bridge."""
+"""FastAPI app: registration UI + per-session SSEÔåöstdio MCP bridge."""
 
 import asyncio
 import json
@@ -16,6 +16,7 @@ from starlette.responses import HTMLResponse, PlainTextResponse, StreamingRespon
 
 from .session import (
     RProcessHandle,
+    R_TRANSPORT,
     SESSION_TIMEOUT,
     acquire_session_slot,
     get_running_count,
@@ -207,20 +208,32 @@ async def mcp_messages(request: Request):
         _audit("POST_EXPIRED_SESSION", token_prefix=token[:8])
         return HTMLResponse("Session expired, please re-register.", status_code=410)
     body = await request.body()
-    q = await handle.subscribe()
-    try:
-        await handle.write_stdin(body + b"\n")
+
+    if R_TRANSPORT == "http":
+        # HTTP transport: proxy request to the R subprocess's HTTP server
         try:
-            line = await asyncio.wait_for(q.get(), timeout=30.0)
-        except asyncio.TimeoutError:
-            logger.warning("MCP response timeout for token=%s", token[:8])
-            return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
-        text = line.decode(errors="replace").rstrip()
-        if text:
-            return PlainTextResponse(text)
-        return HTMLResponse("empty response from R subprocess", status_code=502)
-    finally:
-        handle.unsubscribe(q)
+            response = await handle.proxy_request(body, timeout=30.0)
+            return PlainTextResponse(response.decode(errors="replace"))
+        except RuntimeError as e:
+            logger.warning("HTTP proxy error for token=%s: %s", token[:8], e)
+            _audit("PROXY_ERROR", token_prefix=token[:8], error=str(e)[:200])
+            return HTMLResponse(f"R subprocess error: {e}", status_code=502)
+    else:
+        # stdio transport: write to stdin, read from stdout queue
+        q = await handle.subscribe()
+        try:
+            await handle.write_stdin(body + b"\n")
+            try:
+                line = await asyncio.wait_for(q.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.warning("MCP response timeout for token=%s", token[:8])
+                return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
+            text = line.decode(errors="replace").rstrip()
+            if text:
+                return PlainTextResponse(text)
+            return HTMLResponse("empty response from R subprocess", status_code=502)
+        finally:
+            handle.unsubscribe(q)
 
 
 async def status_endpoint(request: Request):
