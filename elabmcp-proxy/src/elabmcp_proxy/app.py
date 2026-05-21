@@ -216,7 +216,13 @@ async def mcp_messages(request: Request):
             return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
         text = line.decode(errors="replace").rstrip()
         if text:
-            return PlainTextResponse(text)
+            # Return in StreamableHTTP SSE format so Hermes MCP client can parse it
+            from starlette.responses import Response
+            return Response(
+                content=f"event: message\ndata: {text}\n\n",
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
         return HTMLResponse("empty response from R subprocess", status_code=502)
     finally:
         handle.unsubscribe(q)
