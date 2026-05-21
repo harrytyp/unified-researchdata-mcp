@@ -231,7 +231,7 @@ async def mcp_messages(request: Request):
         try:
             await handle.write_stdin(body + b"\n")
             try:
-                line = await asyncio.wait_for(q.get(), timeout=30.0)
+                line = await asyncio.wait_for(q.get(), timeout=120.0)
             except asyncio.TimeoutError:
                 logger.warning("MCP response timeout for token=%s", token[:8])
                 return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)

@@ -35,7 +35,7 @@ services:
       # Transport mode for R subprocess: "stdio" (default, local) or "http" (hosted)
       # http transport avoids the nanonext stdio pipe bug where the R process exits
       # immediately because wait(cv) returns false on an empty pipe.
-      - ELABMCP_R_TRANSPORT=http
+      - ELABMCP_R_TRANSPORT=stdio
       # Rate limit: registration attempts per IP
       - ELABMCP_RATE_LIMIT=10/minute
       # Max concurrent R subprocesses
