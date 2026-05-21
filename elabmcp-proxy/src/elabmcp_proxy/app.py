@@ -208,6 +208,17 @@ async def mcp_messages(request: Request):
         await handle.ensure_running()
     body = await request.body()
 
+    # GET requests (SSE handshake) return endpoint event without touching R
+    if request.method == "GET":
+        from urllib.parse import urlencode
+        qs = urlencode({"token": token})
+        endpoint_url = f"https://{request.url.hostname}/el/mcp?{qs}"
+        return Response(
+            content=f"event: endpoint\ndata: {endpoint_url}\n\n",
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     if R_TRANSPORT == "http":
         # HTTP transport: proxy request to the R subprocess's HTTP server
         try:
