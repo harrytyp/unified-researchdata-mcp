@@ -245,6 +245,88 @@
             transition: color 0.15s;
         }
         .footer a:hover { color: var(--text); }
+        .guide {
+            max-width: 700px;
+            margin: 0 auto 48px;
+            padding: 0 24px;
+        }
+        .guide h2 {
+            text-align: center;
+            font-size: 1.5em;
+            margin-bottom: 28px;
+            color: var(--text);
+        }
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .step {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 20px;
+        }
+        .step-num {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-dt), var(--accent-el));
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1em;
+        }
+        .step-content h3 {
+            font-size: 1em;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .step-content p {
+            font-size: 0.9em;
+            color: var(--text-dim);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .step-content code {
+            background: var(--surface-2);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            word-break: break-all;
+        }
+        .guide-detail {
+            margin-top: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 20px;
+        }
+        .guide-detail summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--accent-dt);
+            font-size: 0.9em;
+        }
+        .guide-detail pre {
+            margin-top: 12px;
+            background: var(--surface-2);
+            padding: 14px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.82em;
+        }
+        .guide-detail code {
+            background: none;
+            padding: 0;
+        }
         .footer .separator { margin: 0 0.6rem; color: var(--border); }
 
         /* ── Responsive ── */
@@ -278,6 +360,47 @@
         <h1>Research Data<br><span class="gradient">MCP Servers</span></h1>
         <p>Bring-your-own-key MCP endpoints for DataTagger (FDM) and elabFTW. Register your API credentials and connect your AI editor in one step.</p>
         <p class="hero-sub">No accounts, no cloud, no middleware — just proxy routes under a single domain.</p>
+    </section>
+
+    <!-- How to Use Guide -->
+    <section class="guide">
+        <h2>How to Use</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>Register</h3>
+                    <p>Click any card below, paste your API key / FDM token, and get a session URL back.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>Copy the URL</h3>
+                    <p>The page gives you a URL like <code>https://researchmcp.duckdns.org/el/mcp?token=...</code></p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <h3>Paste in your agent</h3>
+                    <p>Add it to your MCP client config (Hermes, Claude Desktop, etc.) and connect.</p>
+                </div>
+            </div>
+        </div>
+        <details class="guide-detail">
+            <summary>Hermes Agent config example</summary>
+            <pre><code>mcp_servers:
+  elabmcp:
+    url: "https://researchmcp.duckdns.org/el/mcp?token=[paste-here]"
+    timeout: 120
+    connect_timeout: 30
+  datatagger:
+    url: "https://researchmcp.duckdns.org/dt/mcp?token=[paste-here]"
+    timeout: 120
+    connect_timeout: 30</code></pre>
+            <p style="margin-top:8px;color:var(--text-dim);font-size:0.9em">Then type <code>/reload-mcp</code> in Hermes CLI &mdash; tools appear as <code>mcp_elabmcp_*</code> and <code>mcp_datatagger_*</code>.</p>
+        </details>
     </section>
 
     <!-- Service Cards -->
