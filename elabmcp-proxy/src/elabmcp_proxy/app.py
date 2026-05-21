@@ -204,8 +204,7 @@ async def mcp_messages(request: Request):
         _audit("POST_INVALID_TOKEN", token_prefix=token[:8] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
     if not handle.is_alive:
-        _audit("POST_EXPIRED_SESSION", token_prefix=token[:8])
-        return HTMLResponse("Session expired, please re-register.", status_code=410)
+        await handle.ensure_running()
     body = await request.body()
     q = await handle.subscribe()
     try:
