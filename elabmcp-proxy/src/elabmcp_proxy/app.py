@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.responses import HTMLResponse, PlainTextResponse, StreamingResponse
+from starlette.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
 
 from .session import (
     RProcessHandle,
@@ -212,7 +212,15 @@ async def mcp_messages(request: Request):
         # HTTP transport: proxy request to the R subprocess's HTTP server
         try:
             response = await handle.proxy_request(body, timeout=30.0)
-            return PlainTextResponse(response.decode(errors="replace"))
+            text = response.decode(errors="replace").rstrip()
+            if text:
+                from starlette.responses import Response
+                return Response(
+                    content=f"event: message\ndata: {text}\n\n",
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+                )
+            return HTMLResponse("empty response from R subprocess", status_code=502)
         except RuntimeError as e:
             logger.warning("HTTP proxy error for token=%s: %s", token[:8], e)
             _audit("PROXY_ERROR", token_prefix=token[:8], error=str(e)[:200])
@@ -229,11 +237,15 @@ async def mcp_messages(request: Request):
                 return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
             text = line.decode(errors="replace").rstrip()
             if text:
-                return PlainTextResponse(text)
+                from starlette.responses import Response
+                return Response(
+                    content=f"event: message\ndata: {text}\n\n",
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+                )
             return HTMLResponse("empty response from R subprocess", status_code=502)
         finally:
             handle.unsubscribe(q)
-
 
 async def status_endpoint(request: Request):
     running = get_running_count()
