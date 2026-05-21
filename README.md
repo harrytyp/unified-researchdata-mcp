@@ -171,13 +171,31 @@ elabmcp-proxy/
 
 ### How it works
 
-1. **Registration** — user enters credentials → stored in memory with [UUID4](https://docs.python.org/3/library/uuid.html) token
-2. **SSE connect** — first `GET /mcp?token=X` spawns `Rscript -e "elabrmcp::elabr_mcp_server(type='stdio')"` with `ELABFTW_BASE_URL` and `ELABFTW_API_KEY` set via environment variables
-3. **Bridge** — proxy translates [MCP SSE](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/) events ↔ stdio [JSON-RPC](https://www.jsonrpc.org/) lines using [asyncio subprocess](https://docs.python.org/3/library/asyncio-subprocess.html)
-4. **Isolation** — each user gets a separate R process, no shared state
-5. **Cleanup** — processes are killed after 30 minutes of inactivity by a background task
+1. **Registration** -- user enters credentials into web form -> stored in memory with UUID4 token
+2. **R subprocess spawn** -- first `POST /mcp?token=X` spawns `Rscript -e "elabrmcp::elabr_mcp_server(type='stdio')"` with credentials as env vars
+3. **Bridge** -- proxy translates MCP SSE events <-> stdio JSON-RPC lines via asyncio subprocess
+4. **Isolation** -- each user gets a separate R process, no shared state
+5. **Cleanup** -- processes killed after 30 minutes of inactivity
 
-### Running tests
+### Transport: stdio (not HTTP)
+
+The R subprocess uses `type='stdio'` transport. This avoids a critical bug in R's HTTP backend (`type='http'`) which alternates between returning HTTP **200** and **202** for consecutive requests. This alternating behavior breaks any MCP client using Streamable HTTP (like Hermes Agent).
+
+| Transport | Status | Issue |
+|---|---|---|
+| `type='http'` | Broken | R alternates 200/202 per request. proxy_request retries all get 202, client gets 502 |
+| `type='stdio'` | Working | R reads JSON-RPC from stdin, writes to stdout. No HTTP layer = no 200/202 |
+
+The stdio read timeout is 120s (configurable via `ELABMCP_STDIO_TIMEOUT`) to handle cold-start R package loading.
+
+**Do NOT add a warmup/health-check request during ensure_running()** -- sending any request to R during startup creates a session collision. Even an empty POST body can leave R in a bad state.
+
+### Known issues
+
+- **Container restart wipes sessions:** token_store is in-memory. After any docker compose restart/build/reboot, all tokens are invalid (401). Re-register after restart.
+- **Response timeout:** If R takes >120s to respond via stdout, the proxy returns 504. Increase ELABMCP_STDIO_TIMEOUT if needed.
+
+### Running tests### Running tests
 
 ```bash
 cd elabmcp-proxy
