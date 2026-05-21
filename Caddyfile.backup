@@ -1,4 +1,4 @@
-researchmcp.duckdns.org {
+﻿researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt
         reverse_proxy datatagger-mcp:8000 {
@@ -9,12 +9,6 @@ researchmcp.duckdns.org {
     handle_path /el* {
         uri strip_prefix /el
         reverse_proxy elabmcp-proxy:8081 {
-            flush_interval -1
-        }
-    }
-
-    handle /nomad-oasis/* {
-        reverse_proxy proxy:80 {
             flush_interval -1
         }
     }

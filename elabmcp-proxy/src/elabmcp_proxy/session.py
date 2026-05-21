@@ -249,8 +249,10 @@ class RProcessHandle:
     async def proxy_request(self, data: bytes, timeout: float = 30.0) -> bytes:
         """Proxy an MCP request to the R subprocess via HTTP.
 
-        Used when R_TRANSPORT='http'. Sends the request to the R subprocess's
-        HTTP server and returns the raw response bytes.
+        Sends the request to the R subprocess's HTTP server and returns the
+        raw response bytes.  Retries up to 5 times with exponential backoff
+        to handle the race condition where the R HTTP server hasn't started
+        listening yet (1-2s window after SSE endpoint is opened).
         """
         if R_TRANSPORT != "http" or self._r_http_port is None:
             raise RuntimeError(
@@ -259,29 +261,43 @@ class RProcessHandle:
 
         async with self._lock:
             url = f"http://localhost:{self._r_http_port}/mcp"
-            try:
-                import aiohttp
-                connector = aiohttp.TCPConnector(
-                    limit=1,
-                    enable_cleanup_closed=True,
-                )
-                async with aiohttp.ClientSession(
-                    connector=connector,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as session:
-                    async with session.post(
-                        url, data=data, headers={"Content-Type": "application/json"}
-                    ) as resp:
-                        body = await resp.read()
-                        if resp.status != 200:
-                            raise RuntimeError(
-                                f"R subprocess returned status {resp.status}: {body.decode(errors='replace')}"
-                            )
-                        return body
-            except asyncio.TimeoutError:
-                raise RuntimeError(f"R subprocess request timed out after {timeout}s")
-            except aiohttp.ClientConnectionError as e:
-                raise RuntimeError(f"Failed to connect to R subprocess: {e}")
+            last_exc = None
+            for attempt in range(5):
+                try:
+                    import aiohttp
+                    connector = aiohttp.TCPConnector(
+                        limit=1,
+                        enable_cleanup_closed=True,
+                    )
+                    async with aiohttp.ClientSession(
+                        connector=connector,
+                        timeout=aiohttp.ClientTimeout(total=timeout),
+                    ) as session:
+                        async with session.post(
+                            url, data=data, headers={"Content-Type": "application/json"}
+                        ) as resp:
+                            body = await resp.read()
+                            if resp.status != 200:
+                                raise RuntimeError(
+                                    f"R subprocess returned status {resp.status}: {body.decode(errors='replace')}"
+                                )
+                            return body
+                except aiohttp.ClientConnectionError as e:
+                    last_exc = e
+                    if attempt < 4:
+                        wait = 0.5 * (2 ** attempt)
+                        logger.info(
+                            "R subprocess not ready yet (attempt %d/5), retrying in %.1fs",
+                            attempt + 1, wait,
+                        )
+                        await asyncio.sleep(wait)
+                    continue
+                except asyncio.TimeoutError:
+                    raise RuntimeError(f"R subprocess request timed out after {timeout}s")
+
+            raise RuntimeError(
+                f"Failed to connect to R subprocess after 5 attempts: {last_exc}"
+            )
 
     @property
     def is_alive(self) -> bool:
