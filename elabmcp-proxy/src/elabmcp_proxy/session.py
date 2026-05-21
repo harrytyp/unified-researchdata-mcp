@@ -282,13 +282,13 @@ class RProcessHandle:
                                     f"R subprocess returned status {resp.status}: {body.decode(errors='replace')}"
                                 )
                             return body
-                except aiohttp.ClientConnectionError as e:
+                except (aiohttp.ClientConnectionError, RuntimeError) as e:
                     last_exc = e
                     if attempt < 4:
                         wait = 0.5 * (2 ** attempt)
                         logger.info(
-                            "R subprocess not ready yet (attempt %d/5), retrying in %.1fs",
-                            attempt + 1, wait,
+                            "R subprocess not ready yet (attempt %d/5, error: %s), retrying in %.1fs",
+                            attempt + 1, e, wait,
                         )
                         await asyncio.sleep(wait)
                     continue
