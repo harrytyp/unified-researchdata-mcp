@@ -1,22 +1,21 @@
-"""FastAPI app: registration UI + per-session SSEÔåöstdio MCP bridge."""
+"""FastAPI app: registration UI + per-session SSE↔stdio MCP bridge."""
 
 import asyncio
 import json
 import logging
 import os
 import time
-import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
+from starlette.responses import HTMLResponse, StreamingResponse
 
+from .jwt_token import encode_token, decode_token
 from .session import (
     RProcessHandle,
-    R_TRANSPORT,
     SESSION_TIMEOUT,
     acquire_session_slot,
     get_running_count,
@@ -25,11 +24,16 @@ from .session import (
 
 logger = logging.getLogger("elabmcp-proxy.app")
 
-# ÔöÇÔöÇ Rate limiting ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# ── Rate limiting ──
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
-token_store: dict[str, RProcessHandle] = {}
 
-# ÔöÇÔöÇ Audit logging ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# In-memory cache of active R subprocesses, keyed by JWT token.
+# Lost on container restart but clients keep the same JWT —
+# next request just creates a fresh R subprocess automatically.
+# Sessions reaped after 30 min idle to free memory.
+session_cache: dict[str, RProcessHandle] = {}
+
+# ── Audit logging ──
 _audit_log_path = os.environ.get("ELABMCP_AUDIT_LOG", "/var/log/elabmcp-proxy/audit.log")
 _audit_log_dir = os.path.dirname(_audit_log_path)
 if _audit_log_dir and not os.path.exists(_audit_log_dir):
@@ -55,7 +59,7 @@ def _audit(event: str, **kwargs):
     _audit_logger.info("\t".join(parts))
 
 
-# ÔöÇÔöÇ HTML templates ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# ── HTML templates ──
 
 def _create_register_form(error: str = "") -> str:
     err_html = f'<p style="color:red">{error}</p>' if error else ""
@@ -69,7 +73,7 @@ button {{ background: #3498db; color: white; border: none; padding: 12px 24px; b
 </style></head><body>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)">
 <h2 style="color:#2c3e50;">elabFTW MCP Registration</h2>
-<p style="color:#666;">Enter your elabFTW credentials to generate a personal MCP session URL.</p>
+<p style="color:#666;">Enter your elabFTW credentials to generate a permanent MCP session URL.</p>
 {err_html}
 <form method="post">
 <label>elabFTW Base URL:</label>
@@ -89,18 +93,43 @@ body {{ font-family: sans-serif; padding: 20px; max-width: 600px; margin: 40px a
 </style></head><body>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)">
 <h2 style="color:#2c3e50;">Registration Successful</h2>
-<p>Use the following URL in your MCP client (Claude Desktop, KISSKI, etc.):</p>
+<p>Use the following URL in your MCP client (Claude Desktop, KISSKI, any MCP agent):</p>
 <div style="background:#f8f9fa;padding:15px;border-radius:4px;word-break:break-all;font-family:monospace;border:1px solid #eee;margin:10px 0;">
 {personal_url}
 </div>
 <p style="color:#666;font-size:0.9em;margin-top:20px;">
-Session expires after 30 minutes of inactivity.
+Token expires in 30 days — re-visit this page to generate a new one.<br>
+The R subprocess (memory-heavy) closes after 30 minutes idle, but is re-created automatically on next request.
 </p>
 <a href="/register" style="color:#3498db;">&larr; Register another key</a>
 </div></body></html>"""
 
 
-# ÔöÇÔöÇ Routes ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# ── Token → handle resolver ──
+
+def _resolve_handle(token: str) -> RProcessHandle | None:
+    """Decode JWT and return an active RProcessHandle (create if needed)."""
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    base_url = payload["u"]
+    api_key = payload["k"]
+    handle = session_cache.get(token)
+    if handle is not None:
+        if handle.base_url == base_url and handle.api_key == api_key:
+            return handle
+        # Credentials mismatch — clean up stale handle
+        try:
+            asyncio.ensure_future(handle.shutdown())
+        except Exception:
+            pass
+        del session_cache[token]
+    handle = RProcessHandle(token, base_url, api_key)
+    session_cache[token] = handle
+    return handle
+
+
+# ── Routes ──
 
 async def register_page(request: Request):
     if request.method == "POST":
@@ -112,26 +141,15 @@ async def register_page(request: Request):
         if not api_key or not base_url:
             return HTMLResponse(_create_register_form("API Key and Base URL are required."), status_code=400)
 
-        # Check global session capacity before creating handle
-        slot_ok = await acquire_session_slot()
-        if not slot_ok:
-            logger.warning(
-                "Registration denied: at capacity (%d/%d) from %s",
-                get_running_count(),
-                int(os.environ.get("ELABMCP_MAX_SESSIONS", "20")),
-                remote_ip,
-            )
+        try:
+            token = encode_token(base_url, api_key)
+        except RuntimeError as e:
+            logger.error("Token creation failed: %s", e)
             return HTMLResponse(
-                _create_register_form(
-                    "Server is at maximum capacity. Please try again later."
-                ),
-                status_code=503,
+                _create_register_form("Server misconfiguration: MCP_JWT_SECRET not set."),
+                status_code=500,
             )
-        # Release the slot we just took ÔÇö it will be re-acquired when SSE connects
-        await release_session_slot()
 
-        token = str(uuid.uuid4())
-        token_store[token] = RProcessHandle(token, base_url, api_key)
         forwarded_proto = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("host", "localhost:8081")
         url_prefix = os.environ.get("URL_PREFIX", "")
@@ -141,17 +159,17 @@ async def register_page(request: Request):
             url_prefix = "/" + url_prefix
         url_prefix = url_prefix.rstrip("/")
         personal_url = f"{forwarded_proto}://{host}{url_prefix}/mcp?token={token}"
-        logger.info("Registered new session token=%s from %s", token[:8], remote_ip)
-        _audit("REGISTER", token_prefix=token[:8], remote_ip=remote_ip)
+        logger.info("Registered new JWT token from %s", remote_ip)
+        _audit("REGISTER", remote_ip=remote_ip)
         return HTMLResponse(_registration_success_page(personal_url))
     return HTMLResponse(_create_register_form())
 
 
 async def sse_stream(request: Request):
     token = request.query_params.get("token", "")
-    handle = token_store.get(token)
+    handle = _resolve_handle(token)
     if handle is None:
-        _audit("SSE_INVALID_TOKEN", token_prefix=token[:8] if token else "none")
+        _audit("SSE_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
     handle.touch()
     try:
@@ -160,7 +178,7 @@ async def sse_stream(request: Request):
         logger.warning("SSE spawn denied: %s", e)
         return HTMLResponse(str(e), status_code=503)
 
-    _audit("SSE_START", token_prefix=token[:8])
+    _audit("SSE_START", token_prefix=token[:16])
 
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
@@ -200,84 +218,55 @@ async def sse_stream(request: Request):
 
 async def mcp_messages(request: Request):
     token = request.query_params.get("token", "")
-    handle = token_store.get(token)
+    handle = _resolve_handle(token)
     if handle is None:
-        _audit("POST_INVALID_TOKEN", token_prefix=token[:8] if token else "none")
+        _audit("POST_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
     if not handle.is_alive:
         await handle.ensure_running()
     body = await request.body()
-
-    # GET requests (SSE handshake) return endpoint event without touching R
-    if request.method == "GET":
-        # Return empty 204. The MCP client's handle_get_stream reads SSE events
-        # from this response. If we return an endpoint event, the client
-        # reconnects immediately after the stream ends, creating an infinite
-        # connection loop that exhausts httpx connection pool. Returning no
-        # events causes the SSE reader to exit cleanly and stop reconnecting.
-        from starlette.responses import Response
-        return Response(status_code=204)
-
-    if R_TRANSPORT == "http":
-        # HTTP transport: proxy request to the R subprocess's HTTP server
+    q = await handle.subscribe()
+    try:
+        await handle.write_stdin(body + b"\n")
         try:
-            response = await handle.proxy_request(body, timeout=30.0)
-            text = response.decode(errors="replace").rstrip()
-            if text:
-                from starlette.responses import Response
-                return Response(
-                    content=f"event: message\ndata: {text}\n\n",
-                    media_type="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-                )
-            return HTMLResponse("empty response from R subprocess", status_code=502)
-        except RuntimeError as e:
-            logger.warning("HTTP proxy error for token=%s: %s", token[:8], e)
-            _audit("PROXY_ERROR", token_prefix=token[:8], error=str(e)[:200])
-            return HTMLResponse(f"R subprocess error: {e}", status_code=502)
-    else:
-        # stdio transport: write to stdin, read from stdout queue
-        q = await handle.subscribe()
-        try:
-            await handle.write_stdin(body + b"\n")
-            try:
-                line = await asyncio.wait_for(q.get(), timeout=120.0)
-            except asyncio.TimeoutError:
-                logger.warning("MCP response timeout for token=%s", token[:8])
-                return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
-            text = line.decode(errors="replace").rstrip()
-            if text:
-                from starlette.responses import Response
-                return Response(
-                    content=f"event: message\ndata: {text}\n\n",
-                    media_type="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-                )
-            return HTMLResponse("empty response from R subprocess", status_code=502)
-        finally:
-            handle.unsubscribe(q)
+            line = await asyncio.wait_for(q.get(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.warning("MCP response timeout for token=%s", token[:16])
+            return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
+        text = line.decode(errors="replace").rstrip()
+        if text:
+            from starlette.responses import Response
+            return Response(
+                content=f"event: message\ndata: {text}\n\n",
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+        return HTMLResponse("empty response from R subprocess", status_code=502)
+    finally:
+        handle.unsubscribe(q)
+
 
 async def status_endpoint(request: Request):
     running = get_running_count()
-    registered = len(token_store)
+    cached = len(session_cache)
     return HTMLResponse(
-        json.dumps({"running_subprocesses": running, "registered_sessions": registered}),
+        json.dumps({"running_subprocesses": running, "cached_sessions": cached}),
         media_type="application/json",
     )
 
 
-# ÔöÇÔöÇ Background tasks ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# ── Background tasks ──
 
 async def cleanup_expired_sessions():
     while True:
         try:
             now = time.time()
-            expired = [(t, h) for t, h in token_store.items() if h.expired]
+            expired = [(t, h) for t, h in session_cache.items() if h.expired]
             for t, h in expired:
-                logger.info("Cleaning up expired session token=%s", t[:8])
-                _audit("SESSION_EXPIRED", token_prefix=t[:8])
+                logger.info("Cleaning up expired session token=%s", t[:16])
+                _audit("SESSION_EXPIRED", token_prefix=t[:16])
                 await h.shutdown()
-                del token_store[t]
+                del session_cache[t]
         except Exception:
             logger.exception("Session cleanup error")
         await asyncio.sleep(300)
@@ -288,13 +277,13 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(cleanup_expired_sessions())
     yield
     task.cancel()
-    for token, handle in list(token_store.items()):
-        _audit("SERVER_SHUTDOWN", token_prefix=token[:8])
+    for token, handle in list(session_cache.items()):
+        _audit("SERVER_SHUTDOWN", token_prefix=token[:16])
         await handle.shutdown()
-    token_store.clear()
+    session_cache.clear()
 
 
-# ÔöÇÔöÇ App factory ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# ── App factory ──
 
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
