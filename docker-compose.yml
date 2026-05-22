@@ -39,9 +39,9 @@ services:
       # Rate limit: registration attempts per IP
       - ELABMCP_RATE_LIMIT=10/minute
       # Max concurrent R subprocesses
-      - ELABMCP_MAX_SESSIONS=20
+      - ELABMCP_MAX_SESSIONS=3
       # Max memory per R subprocess (MB)
-      - ELABMCP_MAX_MEM_MB=256
+      - ELABMCP_MAX_MEM_MB=128
       # Max CPU seconds per R subprocess
       - ELABMCP_MAX_CPU_SECONDS=300
       # Audit log path
