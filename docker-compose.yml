@@ -1,10 +1,6 @@
 services:
   # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
-    # Use the Docker Hub image for production deployments. The image at
-    # harrytyp/datatagger-mcp:latest contains the URL_PREFIX fix for hosted mode.
-    # For local development against the working tree, change `image` → `build`
-    # and point context at ./datatagger-mcp instead.
     build:
       context: ./datatagger-mcp
     restart: unless-stopped
@@ -22,7 +18,7 @@ services:
     mem_limit: 512m
     stop_grace_period: 10s
 
-  # ── elabFTW MCP (auth-proxy wrapping elabrmcp with per-user subprocesses) ──
+  # ── elabFTW MCP (shared R worker, one process for all users) ──
   elabmcp-proxy:
     build:
       context: .
@@ -36,24 +32,9 @@ services:
       - URL_PREFIX=/el
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
-      # Transport mode for R subprocess: "stdio" (default, local) or "http" (hosted)
-      # http transport avoids the nanonext stdio pipe bug where the R process exits
-      # immediately because wait(cv) returns false on an empty pipe.
-      - ELABMCP_R_TRANSPORT=stdio
-      # Rate limit: registration attempts per IP
       - ELABMCP_RATE_LIMIT=10/minute
-      # Max concurrent R subprocesses
-      - ELABMCP_MAX_SESSIONS=3
-      # Max memory per R subprocess (MB)
-      - ELABMCP_MAX_MEM_MB=128
-      # Max CPU seconds per R subprocess
-      - ELABMCP_MAX_CPU_SECONDS=300
-      # Audit log path
+      - ELABMCP_R_PORT=18080
       - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
-      # Optional: passthrough the elabrmcp config path for subprocesses
-      - MCP_CONFIG_PATH=
-      # Uncomment to allow writes:
-      # - MCP_CONFIG_PATH=mcp/elabrmcp/inst/config/config.hybrid.yml
     mem_limit: 2g
     stop_grace_period: 30s
 
@@ -77,6 +58,3 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-
-
-

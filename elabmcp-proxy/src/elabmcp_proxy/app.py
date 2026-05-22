@@ -1,4 +1,4 @@
-"""FastAPI app: registration UI + per-session SSE↔stdio MCP bridge."""
+"""FastAPI app: registration UI + shared R worker proxy."""
 
 import asyncio
 import json
@@ -11,27 +11,18 @@ from fastapi import FastAPI, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.responses import HTMLResponse, StreamingResponse
+from starlette.responses import HTMLResponse, Response
 
 from .jwt_token import encode_token, decode_token
-from .session import (
-    RProcessHandle,
-    SESSION_TIMEOUT,
-    acquire_session_slot,
-    get_running_count,
-    release_session_slot,
-)
+from .r_worker import SharedRWorker
 
 logger = logging.getLogger("elabmcp-proxy.app")
 
 # ── Rate limiting ──
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
-# In-memory cache of active R subprocesses, keyed by JWT token.
-# Lost on container restart but clients keep the same JWT —
-# next request just creates a fresh R subprocess automatically.
-# Sessions reaped after 30 min idle to free memory.
-session_cache: dict[str, RProcessHandle] = {}
+# ── Shared R worker (one process, all users) ──
+r_worker = SharedRWorker()
 
 # ── Audit logging ──
 _audit_log_path = os.environ.get("ELABMCP_AUDIT_LOG", "/var/log/elabmcp-proxy/audit.log")
@@ -57,6 +48,16 @@ def _audit(event: str, **kwargs):
     for k, v in sorted(kwargs.items()):
         parts.append(f"{k}={v}")
     _audit_logger.info("\t".join(parts))
+
+
+# ── Auth helper ──
+
+def _get_creds_from_jwt(token: str) -> tuple[str, str] | None:
+    """Decode JWT and return (api_key, base_url) or None."""
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    return payload["k"], payload["u"]
 
 
 # ── HTML templates ──
@@ -99,34 +100,10 @@ body {{ font-family: sans-serif; padding: 20px; max-width: 600px; margin: 40px a
 </div>
 <p style="color:#666;font-size:0.9em;margin-top:20px;">
 Token expires in 30 days — re-visit this page to generate a new one.<br>
-The R subprocess (memory-heavy) closes after 30 minutes idle, but is re-created automatically on next request.
+Single shared R worker — no per-user processes, supports unlimited users.
 </p>
 <a href="/register" style="color:#3498db;">&larr; Register another key</a>
 </div></body></html>"""
-
-
-# ── Token → handle resolver ──
-
-def _resolve_handle(token: str) -> RProcessHandle | None:
-    """Decode JWT and return an active RProcessHandle (create if needed)."""
-    payload = decode_token(token)
-    if payload is None:
-        return None
-    base_url = payload["u"]
-    api_key = payload["k"]
-    handle = session_cache.get(token)
-    if handle is not None:
-        if handle.base_url == base_url and handle.api_key == api_key:
-            return handle
-        # Credentials mismatch — clean up stale handle
-        try:
-            asyncio.ensure_future(handle.shutdown())
-        except Exception:
-            pass
-        del session_cache[token]
-    handle = RProcessHandle(token, base_url, api_key)
-    session_cache[token] = handle
-    return handle
 
 
 # ── Routes ──
@@ -165,122 +142,76 @@ async def register_page(request: Request):
     return HTMLResponse(_create_register_form())
 
 
-async def sse_stream(request: Request):
+async def handle_mcp(request: Request):
+    """Handle both GET and POST to /mcp.
+
+    GET  → ensure R worker is running, return 204 (no SSE streaming).
+    POST → decode JWT, proxy to shared R worker with auth headers.
+    """
+    if request.method == "GET":
+        # Ensure the shared R worker is running
+        if not r_worker.is_alive:
+            try:
+                await r_worker.start()
+            except RuntimeError as e:
+                return HTMLResponse(str(e), status_code=503)
+        return Response(status_code=204)
+
+    # POST: decode JWT and proxy to R
     token = request.query_params.get("token", "")
-    handle = _resolve_handle(token)
-    if handle is None:
-        _audit("SSE_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
-        return HTMLResponse("Invalid or expired token.", status_code=401)
-    handle.touch()
-    try:
-        await handle.ensure_running()
-    except RuntimeError as e:
-        logger.warning("SSE spawn denied: %s", e)
-        return HTMLResponse(str(e), status_code=503)
-
-    _audit("SSE_START", token_prefix=token[:16])
-
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("host", request.url.netloc)
-    url_prefix = os.environ.get("URL_PREFIX", "")
-    if not url_prefix or not url_prefix.strip():
-        url_prefix = "/el"
-    elif not url_prefix.startswith("/"):
-        url_prefix = "/" + url_prefix
-    url_prefix = url_prefix.rstrip("/")
-    messages_url = f"{scheme}://{host}{url_prefix}/mcp?token={token}"
-
-    q = await handle.subscribe()
-
-    async def event_generator():
-        try:
-            yield f"event: endpoint\ndata: {messages_url}\n\n"
-            while True:
-                line = await q.get()
-                text = line.decode(errors="replace").rstrip()
-                if text:
-                    yield f"event: message\ndata: {text}\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            handle.unsubscribe(q)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-async def mcp_messages(request: Request):
-    token = request.query_params.get("token", "")
-    handle = _resolve_handle(token)
-    if handle is None:
+    creds = _get_creds_from_jwt(token)
+    if creds is None:
         _audit("POST_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
-    if not handle.is_alive:
-        await handle.ensure_running()
-    body = await request.body()
-    q = await handle.subscribe()
-    try:
-        await handle.write_stdin(body + b"\n")
+
+    api_key, base_url = creds
+
+    if not r_worker.is_alive:
         try:
-            line = await asyncio.wait_for(q.get(), timeout=30.0)
-        except asyncio.TimeoutError:
-            logger.warning("MCP response timeout for token=%s", token[:16])
-            return HTMLResponse("Timed out waiting for R subprocess response.", status_code=504)
-        text = line.decode(errors="replace").rstrip()
-        if text:
-            from starlette.responses import Response
-            return Response(
-                content=f"event: message\ndata: {text}\n\n",
-                media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-            )
-        return HTMLResponse("empty response from R subprocess", status_code=502)
-    finally:
-        handle.unsubscribe(q)
+            await r_worker.start()
+        except RuntimeError as e:
+            return HTMLResponse(str(e), status_code=503)
+
+    body = await request.body()
+    status, resp_text = await r_worker.proxy_request(api_key, base_url, body)
+
+    if status == 202:
+        # Notification accepted — no response body
+        return Response(status_code=202)
+
+    if status == 200 and resp_text:
+        return Response(
+            content=resp_text,
+            media_type="application/json",
+        )
+
+    if status == 200 and not resp_text:
+        return HTMLResponse("Empty response from R worker", status_code=502)
+
+    return HTMLResponse(resp_text or f"R worker error (HTTP {status})", status_code=status)
 
 
 async def status_endpoint(request: Request):
-    running = get_running_count()
-    cached = len(session_cache)
     return HTMLResponse(
-        json.dumps({"running_subprocesses": running, "cached_sessions": cached}),
+        json.dumps({
+            "r_worker_alive": r_worker.is_alive,
+            "r_worker_ready": r_worker.is_ready,
+        }),
         media_type="application/json",
     )
 
 
-# ── Background tasks ──
-
-async def cleanup_expired_sessions():
-    while True:
-        try:
-            now = time.time()
-            expired = [(t, h) for t, h in session_cache.items() if h.expired]
-            for t, h in expired:
-                logger.info("Cleaning up expired session token=%s", t[:16])
-                _audit("SESSION_EXPIRED", token_prefix=t[:16])
-                await h.shutdown()
-                del session_cache[t]
-        except Exception:
-            logger.exception("Session cleanup error")
-        await asyncio.sleep(300)
-
+# ── Lifespan ──
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(cleanup_expired_sessions())
+    # Start the shared R worker at boot
+    try:
+        await r_worker.start()
+    except RuntimeError as e:
+        logger.error("Failed to start shared R worker: %s", e)
     yield
-    task.cancel()
-    for token, handle in list(session_cache.items()):
-        _audit("SERVER_SHUTDOWN", token_prefix=token[:16])
-        await handle.shutdown()
-    session_cache.clear()
+    await r_worker.shutdown()
 
 
 # ── App factory ──
@@ -295,13 +226,9 @@ def create_app() -> FastAPI:
     async def register_route(request: Request):
         return await register_page(request)
 
-    @app.get("/mcp")
-    async def mcp_sse(request: Request):
-        return await sse_stream(request)
-
-    @app.post("/mcp")
-    async def mcp_post(request: Request):
-        return await mcp_messages(request)
+    @app.api_route("/mcp", methods=["GET", "POST"])
+    async def mcp_route(request: Request):
+        return await handle_mcp(request)
 
     @app.get("/status")
     async def status_route(request: Request):
