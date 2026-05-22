@@ -359,7 +359,7 @@
         <div class="hero-badge"><span class="dot"></span> Self-hosted · No admin secrets</div>
         <h1>Research Data<br><span class="gradient">MCP Servers</span></h1>
         <p>Bring-your-own-key MCP endpoints for DataTagger (FDM) and elabFTW. Register your API credentials and connect your AI editor in one step.</p>
-        <p class="hero-sub">No accounts, no cloud, no middleware — just proxy routes under a single domain.</p>
+        <p class="hero-sub">Self-contained JWT tokens — no server-side storage, survive restarts, valid 30 days.</p>
     </section>
 
     <!-- How to Use Guide -->
@@ -384,7 +384,7 @@
                 <div class="step-num">3</div>
                 <div class="step-content">
                     <h3>Paste in your agent</h3>
-                    <p>Add it to your MCP client config (Hermes, Claude Desktop, etc.) and connect.</p>
+                    <p>Add it to your MCP client (Hermes, Claude Desktop, Cursor, etc.). <strong>Valid 30 days</strong> — survives server restarts.</p>
                 </div>
             </div>
         </div>
@@ -399,7 +399,7 @@
     url: "https://researchmcp.duckdns.org/dt/mcp?token=[paste-here]"
     timeout: 120
     connect_timeout: 30</code></pre>
-            <p style="margin-top:8px;color:var(--text-dim);font-size:0.9em">Then type <code>/reload-mcp</code> in Hermes CLI &mdash; tools appear as <code>mcp_elabmcp_*</code> and <code>mcp_datatagger_*</code>.</p>
+            <p style="margin-top:8px;color:var(--text-dim);font-size:0.9em">Then type <code>/reload-mcp</code> in Hermes CLI &mdash; tools appear as <code>mcp_elabmcp_*</code> and <code>mcp_datatagger_*</code>. No token management needed.</p>
         </details>
     </section>
 
