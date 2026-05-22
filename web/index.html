@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm scientific data reports. Bring your own API keys.">
+    <meta name="description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm scientific data reports.">
     <title>Unified Research Data MCP</title>
     <link rel="canonical" href="https://researchmcp.duckdns.org/">
     <meta property="og:title" content="Unified Research Data MCP">
-    <meta property="og:description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm. Bring your own API keys.">
+    <meta property="og:description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm.">
     <meta property="og:url" content="https://researchmcp.duckdns.org/">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Unified Research Data MCP">
-    <meta name="twitter:description" content="Self-hosted research data tools — MCP servers, web GUIs. No admin secrets, bring your own keys.">
+    <meta name="twitter:description" content="Self-hosted MCP servers and web GUIs for research data management.">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%230b0f1a' stroke='%233b82f6' stroke-width='1.5'/%3E%3Crect x='6' y='6' width='20' height='20' rx='3' fill='none' stroke='%233b82f6' stroke-width='1' opacity='0.7'/%3E%3Crect x='10' y='10' width='12' height='12' rx='2' fill='%233b82f6' opacity='0.2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%233b82f6'/%3E%3C/svg%3E">
     <script type="application/ld+json">
     {
@@ -401,6 +401,110 @@
             font-size: 0.75rem;
         }
 
+        /* ── Collapsed MCP Guide ── */
+        .guide-collapsed {
+            max-width: 740px;
+            margin: 1.5rem auto 0.5rem;
+            padding: 0 1.5rem;
+        }
+        .guide-collapsed summary {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            padding: 0.65rem 1rem;
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--color-muted);
+            transition: border-color 0.2s, color 0.2s;
+            user-select: none;
+        }
+        .guide-collapsed summary:hover {
+            border-color: var(--color-accent-dt);
+            color: var(--color-ink);
+        }
+        .guide-collapsed[open] summary {
+            border-radius: 10px 10px 0 0;
+            border-color: var(--color-accent-dt);
+            color: var(--color-ink);
+        }
+        .guide-collapsed .guide-arrow {
+            transition: transform 0.2s;
+            font-size: 0.75rem;
+        }
+        .guide-collapsed[open] .guide-arrow {
+            transform: rotate(90deg);
+        }
+        .guide-collapsed .guide-content {
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            padding: 0 1rem 1rem;
+        }
+        .guide-collapsed .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            margin-bottom: 0.75rem;
+        }
+        .guide-collapsed .step {
+            display: flex;
+            gap: 0.85rem;
+            align-items: flex-start;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--color-rule);
+        }
+        .guide-collapsed .step:last-child { border-bottom: none; }
+        .guide-collapsed .step-num {
+            flex-shrink: 0;
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            background: var(--color-accent-dt-muted);
+            color: var(--color-accent-dt);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+        .guide-collapsed .step-content h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 2px;
+        }
+        .guide-collapsed .step-content p {
+            font-size: 0.8rem;
+            color: var(--color-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .guide-collapsed .guide-detail {
+            margin-top: 0.5rem;
+        }
+        .guide-collapsed .guide-detail summary {
+            background: var(--color-paper-3);
+            border-radius: 6px;
+            padding: 0.4rem 0.75rem;
+            font-size: 0.78rem;
+        }
+        .guide-collapsed .guide-detail pre {
+            background: var(--color-paper-3);
+            padding: 0.75rem;
+            border-radius: 0 0 6px 6px;
+            overflow-x: auto;
+            font-size: 0.75rem;
+            margin: 0;
+            border-top: 1px solid var(--color-rule);
+        }
+        @media (max-width: 48rem) {
+            .guide-collapsed { padding: 0 1rem; }
+        }
+
         /* ── Footer ── */
         .footer {
             margin-top: auto;
@@ -458,8 +562,6 @@
         <div class="nav-brand"><span>◈</span> Unified Research Data MCP</div>
         <div class="nav-links">
             <a class="nav-link" href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
-            <a class="nav-link" href="https://elab-app.researchmcp.duckdns.org" target="_blank" rel="noopener">elab App</a>
-            <a class="nav-link" href="https://proespm.researchmcp.duckdns.org" target="_blank" rel="noopener">Proespm</a>
         </div>
     </nav>
 
@@ -489,11 +591,11 @@
             </div>
             <div class="privacy-card">
                 <strong style="color: var(--color-ink);">☁️ Server-side storage</strong>
-                <p>MCP registration tokens are self-contained JWTs — no credentials stored on the server. NOMAD and elab-app handle their own authentication independently.</p>
+                <p>MCP registration tokens are self-contained JWTs - no credentials stored on the server. NOMAD and elab-app handle their own authentication independently.</p>
             </div>
             <div class="privacy-card">
                 <strong style="color: var(--color-ink);">🌐 External requests</strong>
-                <p>The MCP endpoints connect to your configured elabFTW or DataTagger instance using your API key — no data is sent elsewhere. GitHub icon loads from github.com.</p>
+                <p>The MCP endpoints connect to your configured elabFTW or DataTagger instance using your API key - no data is sent elsewhere. GitHub icon loads from github.com.</p>
             </div>
             <div class="privacy-card">
                 <strong style="color: var(--color-ink);">⚖️ GDPR</strong>
@@ -521,18 +623,17 @@
 
     <!-- Hero -->
     <section class="hero">
-        <div class="hero-badge"><span class="dot"></span> Self-hosted · No admin secrets</div>
+        <div class="hero-badge"><span class="dot"></span> Self-hosted</div>
         <h1>Research Data <span class="accent">Platform</span></h1>
-        <p>MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD, elabFTW, and Proespm — all under one roof.</p>
-        <p class="hero-sub">Bring your own API keys. No shared secrets, no cloud middleware, just self-hosted research data tools.</p>
+        <p>MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD, elabFTW, and Proespm - all under one roof.</p>
+        <p class="hero-sub">Self-hosted research data tools - no cloud middleware, no shared secrets.</p>
     </section>
 
     <!-- ── MCP Servers ── -->
     <div class="section-header">
         <h2>MCP Servers</h2>
-        <span class="tag">Bring your own key</span>
     </div>
-    <p class="section-desc">Register your personal API credentials and get a JWT token to connect any MCP-compatible AI editor (Claude Desktop, Cursor, Hermes, etc.).</p>
+    <p class="section-desc">Register your API credentials and get a JWT token for any MCP client.</p>
 
     <div class="cards">
 
@@ -551,15 +652,11 @@
                     <span class="path-tag dt">/dt</span>
                 </div>
             </div>
-            <p class="card-desc">Tag and manage research datasets on the <strong>DataTagger</strong> (FDM) platform. Query metadata, tags, and search datasets through your MCP client. Powered by Python / FastMCP.</p>
+            <p class="card-desc">Tag and manage research datasets on the <strong>DataTagger</strong> (FDM) platform. Query metadata, tags, and search datasets through your MCP client. <a href="https://github.com/harrytyp/datatagger-mcp" target="_blank" rel="noopener" style="color: var(--color-accent-dt);">datatagger-mcp</a> on GitHub.</p>
             <div class="card-actions">
                 <span class="btn btn-primary dt">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
                     Register
-                </span>
-                <span class="btn btn-secondary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 8L8 8 8 11.5 9.5 10 11.5 8z"/><path d="M8.5 2L8 2.5 8 5 7.5 5 8 4.5 8.5 5z"/><path d="M11 2a1 1 0 0 1 1 1v2h-2V3a1 1 0 0 1 1-1zM6 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H6z"/></svg>
-                    MCP Endpoint
                 </span>
             </div>
         </a>
@@ -581,27 +678,62 @@
                     <span class="path-tag elab">/el</span>
                 </div>
             </div>
-            <p class="card-desc">Connect to your <strong>elabFTW</strong> electronic lab notebook via MCP. Manage experiments, database items, and metadata from any AI editor. Each user gets an isolated R subprocess, powered by elabrmcp + ellmer.</p>
+            <p class="card-desc">Connect to your <strong>elabFTW</strong> electronic lab notebook via MCP. Manage experiments, database items, and metadata from any AI editor. Powered by <a href="https://github.com/MarvinLuepke/elabR" target="_blank" rel="noopener" style="color: var(--color-accent-el);">elabR / elabrmcp</a> on GitHub.</p>
             <div class="card-actions">
                 <span class="btn btn-primary elab">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
                     Register
-                </span>
-                <span class="btn btn-secondary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 8L8 8 8 11.5 9.5 10 11.5 8z"/><path d="M8.5 2L8 2.5 8 5 7.5 5 8 4.5 8.5 5z"/><path d="M11 2a1 1 0 0 1 1 1v2h-2V3a1 1 0 0 1 1-1zM6 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H6z"/></svg>
-                    MCP Endpoint
                 </span>
             </div>
         </a>
 
     </div>
 
+    <!-- Collapsed MCP Guide -->
+    <details class="guide-collapsed">
+        <summary><span class="guide-summary-text">How to use the MCP servers</span> <span class="guide-arrow">▸</span></summary>
+        <div class="guide-content">
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h3>Register</h3>
+                        <p>Click an MCP card above, paste your API key or FDM token, and get back a self-contained JWT URL. No credentials stored on the server.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h3>Copy the JWT URL</h3>
+                        <p>The token embeds your credentials, signed with the server secret. Valid for 30 days - survives restarts.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h3>Paste in your agent</h3>
+                        <p>Add it to any MCP client (Claude Desktop, Cursor, Hermes, etc.). That's it - you're connected.</p>
+                    </div>
+                </div>
+            </div>
+            <details class="guide-detail">
+                <summary>Example config</summary>
+                <pre><code>mcp_servers:
+  elabmcp:
+    url: "https://researchmcp.duckdns.org/el/mcp?token=***"
+    timeout: 120
+  datatagger:
+    url: "https://researchmcp.duckdns.org/dt/mcp/?token=***"
+    timeout: 120</code></pre>
+            </details>
+        </div>
+    </details>
+
     <!-- ── Web GUIs ── -->
     <div class="section-header">
         <h2>Web GUIs &amp; Tools</h2>
-        <span class="tag">Browser-based</span>
     </div>
-    <p class="section-desc">Full-featured web applications for browsing, managing, and processing research data — no API keys needed, just open in your browser.</p>
+    <p class="section-desc">Browser-based research data tools. The elab App needs your elabFTW credentials; NOMAD and Proespm are ready to use.</p>
 
     <div class="cards">
 
@@ -618,13 +750,13 @@
                     <span class="path-tag nomad">/nomad-oasis</span>
                 </div>
             </div>
-            <p class="card-desc">Materials science data management platform. Browse, search, and publish research data with a modern web GUI. Open-access repository for FAIR research data management.</p>
+            <p class="card-desc">Materials science data management platform. Browse, search, and publish research data. <a href="https://github.com/FAIRmat-NFDI/nomad" target="_blank" rel="noopener" style="color: var(--color-accent-nomad);">NOMAD</a> on GitHub.</p>
             <div class="card-actions">
                 <span class="btn btn-primary nomad">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
                     Open GUI
                 </span>
-                <span class="btn btn-secondary">Browse Data</span>
+
             </div>
         </a>
 
@@ -641,13 +773,13 @@
                     <span class="path-tag app">elab-app</span>
                 </div>
             </div>
-            <p class="card-desc">Streamlit companion app for <strong>elabFTW</strong>. Create experiment transcripts, manage templates, browse entries, and streamline your lab notebook workflows from a dedicated web interface.</p>
+            <p class="card-desc">Streamlit companion app for <strong>elabFTW</strong>. Create experiment transcripts, manage templates, browse entries, and streamline your lab notebook workflows. <a href="https://github.com/ffelsen/elab_app" target="_blank" rel="noopener" style="color: var(--color-accent-app);">elab_app</a> on GitHub.</p>
             <div class="card-actions">
                 <span class="btn btn-primary app">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
                     Open App
                 </span>
-                <span class="btn btn-secondary">elab-app.researchmcp.duckdns.org</span>
+
             </div>
         </a>
 
@@ -663,75 +795,24 @@
                 </div>
                 <div class="card-header-text">
                     <h2>Proespm</h2>
-                    <span class="path-tag proespm">proespm.researchmcp.duckdns.org</span>
+                    <span class="path-tag proespm">proespm</span>
                 </div>
             </div>
-            <p class="card-desc">Upload scientific data files (SPM, XPS, AES, TPD, RGA, EC) and generate interactive <strong>HTML reports</strong>. A web frontend for the <strong>proespm-py3</strong> data processing pipeline by matkrin.</p>
+            <p class="card-desc">Upload scientific data files (SPM, XPS, AES, TPD, RGA, EC) and generate interactive <strong>HTML reports</strong>. A web frontend for <a href="https://github.com/matkrin/proespm-py3" target="_blank" rel="noopener" style="color: var(--color-accent-proespm);">proespm-py3</a> by matkrin.</p>
             <div class="card-actions">
                 <span class="btn btn-primary proespm">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
                     Open App
                 </span>
-                <span class="btn btn-secondary">proespm.researchmcp.duckdns.org</span>
+
             </div>
         </a>
 
     </div>
 
-    <!-- How to Use (MCP only) -->
-    <section class="guide">
-        <h2>How to Use</h2>
-        <p class="guide-sub">Getting started with the MCP servers</p>
-        <div class="steps">
-            <div class="step">
-                <div class="step-num">1</div>
-                <div class="step-content">
-                    <h3>Register</h3>
-                    <p>Click an MCP card above, paste your API key or FDM token, and get back a self-contained JWT URL. No credentials stored on the server.</p>
-                </div>
-            </div>
-            <div class="step">
-                <div class="step-num">2</div>
-                <div class="step-content">
-                    <h3>Copy the JWT URL</h3>
-                    <p>The token embeds your credentials, signed with the server secret. Valid for 30 days — survives restarts.</p>
-                </div>
-            </div>
-            <div class="step">
-                <div class="step-num">3</div>
-                <div class="step-content">
-                    <h3>Paste in your agent</h3>
-                    <p>Add it to any MCP client (Claude Desktop, Cursor, Hermes, etc.). That's it — you're connected.</p>
-                </div>
-            </div>
-        </div>
-        <details class="guide-detail">
-            <summary>Example config</summary>
-            <pre><code>mcp_servers:
-  elabmcp:
-    url: "https://researchmcp.duckdns.org/el/mcp?token=eyJ..."
-    timeout: 120
-  datatagger:
-    url: "https://researchmcp.duckdns.org/dt/mcp/?token=eyJ..."
-    timeout: 120</code></pre>
-        </details>
-    </section>
-
     <!-- Footer -->
     <footer class="footer">
-        <a href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
-        <span class="separator">·</span>
-        <a href="/nomad-oasis/">NOMAD OASIS</a>
-        <span class="separator">·</span>
-        <a href="https://elab-app.researchmcp.duckdns.org">elab App</a>
-        <span class="separator">·</span>
-        <a href="https://proespm.researchmcp.duckdns.org">Proespm</a>
-        <span class="separator">·</span>
-        <a href="/dt/register">Register DataTagger</a>
-        <span class="separator">·</span>
-        <a href="/el/register">Register elabFTW</a>
-        <span class="separator">·</span>
-        <span>No admin-managed secrets · Bring your own keys</span>
+        Self-hosted research data tools
     </footer>
 
 </body>
