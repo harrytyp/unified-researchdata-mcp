@@ -3,35 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Unified Research Data MCP – Self-hosted MCP servers, web GUIs, and tools for DataTagger, elabFTW, and NOMAD. Bring your own API keys.">
+    <meta name="description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm scientific data reports. Bring your own API keys.">
     <title>Unified Research Data MCP</title>
+    <link rel="canonical" href="https://researchmcp.duckdns.org/">
+    <meta property="og:title" content="Unified Research Data MCP">
+    <meta property="og:description" content="Self-hosted MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD OASIS, elabFTW companion, and Proespm. Bring your own API keys.">
+    <meta property="og:url" content="https://researchmcp.duckdns.org/">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Unified Research Data MCP">
+    <meta name="twitter:description" content="Self-hosted research data tools — MCP servers, web GUIs. No admin secrets, bring your own keys.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%230b0f1a' stroke='%233b82f6' stroke-width='1.5'/%3E%3Crect x='6' y='6' width='20' height='20' rx='3' fill='none' stroke='%233b82f6' stroke-width='1' opacity='0.7'/%3E%3Crect x='10' y='10' width='12' height='12' rx='2' fill='%233b82f6' opacity='0.2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%233b82f6'/%3E%3C/svg%3E">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Unified Research Data MCP",
+      "url": "https://researchmcp.duckdns.org/",
+      "description": "Self-hosted MCP servers and web tools for research data management.",
+      "author": {
+        "@type": "Person",
+        "name": "Kolja Knodel"
+      }
+    }
+    </script>
+
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html { overflow-x: hidden; }
 
         :root {
-            --bg: #0b0f1a;
-            --surface: #131827;
-            --surface-2: #1a2236;
-            --border: #1f2b40;
-            --text: #e8edf5;
-            --text-dim: #8898b4;
-            --accent-dt: #3b82f6;
-            --accent-dt-muted: #1e3a6e;
-            --accent-el: #a78bfa;
-            --accent-el-muted: #2d1f55;
-            --accent-nomad: #22c55e;
-            --accent-nomad-muted: #14532d;
-            --accent-app: #f59e0b;
-            --accent-app-muted: #5c3d0e;
-            --accent-proespm: #ec4899;
-            --accent-proespm-muted: #4c1d3a;
+            --color-paper: #0b0f1a;
+            --color-paper-2: #131827;
+            --color-paper-3: #1a2236;
+            --color-rule: #1f2b40;
+            --color-ink: #e8edf5;
+            --color-muted: #8898b4;
+            --color-neutral: #5c6f8c;
+            --color-accent-dt: #3b82f6;
+            --color-accent-dt-muted: #1e3a6e;
+            --color-accent-el: #a78bfa;
+            --color-accent-el-muted: #2d1f55;
+            --color-accent-nomad: #22c55e;
+            --color-accent-nomad-muted: #14532d;
+            --color-accent-app: #f59e0b;
+            --color-accent-app-muted: #5c3d0e;
+            --color-accent-proespm: #ec4899;
+            --color-accent-proespm-muted: #4c1d3a;
             --radius: 14px;
+            --shadow-card: 0 12px 40px rgba(0,0,0,0.35);
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--color-paper);
+            color: var(--color-ink);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -44,7 +70,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 1rem 2rem;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--color-rule);
             backdrop-filter: blur(8px);
             position: sticky;
             top: 0;
@@ -54,41 +80,60 @@
         .nav-brand {
             font-weight: 700;
             font-size: 1rem;
-            color: var(--text);
+            color: var(--color-ink);
             letter-spacing: -0.02em;
         }
-        .nav-brand span { color: var(--accent-dt); }
+        .nav-brand span { color: var(--color-accent-dt); }
         .nav-links { display: flex; align-items: center; gap: 1.5rem; }
         .nav-link {
             font-size: 0.875rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             text-decoration: none;
             transition: color 0.15s;
         }
-        .nav-link:hover { color: var(--text); }
+        .nav-link:hover { color: var(--color-ink); }
+
+        /* ── Privacy Bar ── */
+        .legal-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            padding: 0.45rem 1.5rem;
+            font-size: 0.65rem;
+            color: var(--color-neutral);
+            border-bottom: 1px solid var(--color-rule);
+            background: var(--color-paper-2);
+        }
+        .legal-bar a {
+            color: var(--color-muted);
+            text-decoration: none;
+        }
+        .legal-bar a:hover { color: var(--color-ink); }
+        .legal-bar .sep { margin: 0 0.15rem; }
 
         /* ── Hero ── */
         .hero {
             text-align: center;
-            padding: 4.5rem 1.5rem 1rem;
+            padding: 4rem 1.5rem 0.75rem;
         }
         .hero-badge {
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 999px;
+            background: var(--color-paper-3);
+            border: 1px solid var(--color-rule);
+            border-radius: 8px;
             padding: 0.3rem 0.9rem;
             font-size: 0.78rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             margin-bottom: 1.5rem;
         }
         .hero-badge .dot {
             width: 7px; height: 7px;
             border-radius: 50%;
-            background: #22c55e;
-            box-shadow: 0 0 6px #22c55e99;
+            background: var(--color-accent-nomad);
         }
         .hero h1 {
             font-size: clamp(2rem, 5vw, 3.2rem);
@@ -96,22 +141,20 @@
             line-height: 1.15;
             letter-spacing: -0.03em;
             margin-bottom: 1rem;
+            color: var(--color-ink);
         }
-        .hero h1 .gradient {
-            background: linear-gradient(135deg, var(--accent-dt) 0%, var(--accent-el) 50%, var(--accent-nomad) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .hero h1 .accent {
+            color: var(--color-accent-dt);
         }
         .hero p {
             font-size: 1.1rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             max-width: 680px;
             margin: 0 auto 0.5rem;
         }
         .hero-sub {
             font-size: 0.9rem;
-            color: #5c6f8c;
+            color: var(--color-neutral);
             max-width: 600px;
             margin: 0 auto 2rem;
         }
@@ -128,7 +171,7 @@
         .section-header h2 {
             font-size: 1.15rem;
             font-weight: 700;
-            color: var(--text);
+            color: var(--color-ink);
             letter-spacing: -0.01em;
         }
         .section-header .tag {
@@ -137,30 +180,30 @@
             letter-spacing: 0.05em;
             padding: 0.15rem 0.55rem;
             border-radius: 999px;
-            background: var(--surface-2);
-            color: var(--text-dim);
-            border: 1px solid var(--border);
+            background: var(--color-paper-3);
+            color: var(--color-muted);
+            border: 1px solid var(--color-rule);
         }
         .section-desc {
             max-width: 1100px;
             margin: 0.25rem auto 0;
             padding: 0 1.5rem;
             font-size: 0.85rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
         }
 
         /* ── Cards ── */
         .cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 1.25rem;
             max-width: 1100px;
             margin: 1rem auto 0;
             padding: 0 1.5rem;
         }
         .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
             border-radius: var(--radius);
             padding: 1.75rem;
             text-decoration: none;
@@ -179,16 +222,16 @@
             height: 3px;
             border-radius: var(--radius) var(--radius) 0 0;
         }
-        .card.dt::before { background: linear-gradient(90deg, var(--accent-dt), #1d4ed8); }
-        .card.elab::before { background: linear-gradient(90deg, var(--accent-el), #7c3aed); }
-        .card.nomad::before { background: linear-gradient(90deg, var(--accent-nomad), #16a34a); }
-        .card.app::before { background: linear-gradient(90deg, var(--accent-app), #d97706); }
-        .card.proespm::before { background: linear-gradient(90deg, var(--accent-proespm), #be185d); }
+        .card.dt::before { background: linear-gradient(90deg, var(--color-accent-dt), #1d4ed8); }
+        .card.elab::before { background: linear-gradient(90deg, var(--color-accent-el), #7c3aed); }
+        .card.nomad::before { background: linear-gradient(90deg, var(--color-accent-nomad), #16a34a); }
+        .card.app::before { background: linear-gradient(90deg, var(--color-accent-app), #d97706); }
+        .card.proespm::before { background: linear-gradient(90deg, var(--color-accent-proespm), #be185d); }
 
         .card:hover {
             border-color: #2e4060;
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+            box-shadow: var(--shadow-card);
         }
         .card-header {
             display: flex;
@@ -203,16 +246,16 @@
             justify-content: center;
             flex-shrink: 0;
         }
-        .card-icon.dt { background: var(--accent-dt-muted); color: var(--accent-dt); }
-        .card-icon.elab { background: var(--accent-el-muted); color: var(--accent-el); }
-        .card-icon.nomad { background: var(--accent-nomad-muted); color: var(--accent-nomad); }
-        .card-icon.app { background: var(--accent-app-muted); color: var(--accent-app); }
-        .card-icon.proespm { background: var(--accent-proespm-muted); color: var(--accent-proespm); }
+        .card-icon.dt { background: var(--color-accent-dt-muted); color: var(--color-accent-dt); }
+        .card-icon.elab { background: var(--color-accent-el-muted); color: var(--color-accent-el); }
+        .card-icon.nomad { background: var(--color-accent-nomad-muted); color: var(--color-accent-nomad); }
+        .card-icon.app { background: var(--color-accent-app-muted); color: var(--color-accent-app); }
+        .card-icon.proespm { background: var(--color-accent-proespm-muted); color: var(--color-accent-proespm); }
 
         .card-header-text h2 {
             font-size: 1.15rem;
             font-weight: 700;
-            color: var(--text);
+            color: var(--color-ink);
         }
         .card-header-text .path-tag {
             font-size: 0.72rem;
@@ -223,24 +266,24 @@
             margin-top: 0.2rem;
             display: inline-block;
         }
-        .path-tag.dt { background: var(--accent-dt-muted); color: var(--accent-dt); }
-        .path-tag.elab { background: var(--accent-el-muted); color: var(--accent-el); }
-        .path-tag.nomad { background: var(--accent-nomad-muted); color: var(--accent-nomad); }
-        .path-tag.app { background: var(--accent-app-muted); color: var(--accent-app); }
-        .path-tag.proespm { background: var(--accent-proespm-muted); color: var(--accent-proespm); }
+        .path-tag.dt { background: var(--color-accent-dt-muted); color: var(--color-accent-dt); }
+        .path-tag.elab { background: var(--color-accent-el-muted); color: var(--color-accent-el); }
+        .path-tag.nomad { background: var(--color-accent-nomad-muted); color: var(--color-accent-nomad); }
+        .path-tag.app { background: var(--color-accent-app-muted); color: var(--color-accent-app); }
+        .path-tag.proespm { background: var(--color-accent-proespm-muted); color: var(--color-accent-proespm); }
 
         .card-desc {
             font-size: 0.9rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             line-height: 1.65;
         }
-        .card-desc strong { color: var(--text); }
+        .card-desc strong { color: var(--color-ink); }
         .card-actions {
             display: flex;
             gap: 0.65rem;
             margin-top: auto;
             padding-top: 0.75rem;
-            border-top: 1px solid var(--border);
+            border-top: 1px solid var(--color-rule);
         }
         .btn {
             display: inline-flex;
@@ -256,18 +299,18 @@
             border: none;
         }
         .btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn-primary.dt { background: var(--accent-dt); color: #fff; }
-        .btn-primary.elab { background: var(--accent-el); color: #fff; }
-        .btn-primary.nomad { background: var(--accent-nomad); color: #fff; }
-        .btn-primary.app { background: var(--accent-app); color: #fff; }
-        .btn-primary.proespm { background: var(--accent-proespm); color: #fff; }
+        .btn-primary.dt { background: var(--color-accent-dt); color: #fff; }
+        .btn-primary.elab { background: var(--color-accent-el); color: #fff; }
+        .btn-primary.nomad { background: var(--color-accent-nomad); color: #fff; }
+        .btn-primary.app { background: var(--color-accent-app); color: #fff; }
+        .btn-primary.proespm { background: var(--color-accent-proespm); color: #fff; }
 
         .btn-secondary {
-            background: var(--surface-2);
-            color: var(--text-dim);
-            border: 1px solid var(--border);
+            background: var(--color-paper-3);
+            color: var(--color-muted);
+            border: 1px solid var(--color-rule);
         }
-        .btn-secondary:hover { color: var(--text); border-color: #334155; }
+        .btn-secondary:hover { color: var(--color-ink); border-color: var(--color-muted); }
 
         .btn svg { width: 14px; height: 14px; }
 
@@ -281,13 +324,13 @@
             text-align: center;
             font-size: 1.2rem;
             margin-bottom: 0.25rem;
-            color: var(--text);
+            color: var(--color-ink);
             font-weight: 700;
         }
         .guide .guide-sub {
             text-align: center;
             font-size: 0.85rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             margin-bottom: 1.25rem;
         }
         .steps {
@@ -299,8 +342,8 @@
             display: flex;
             gap: 0.85rem;
             align-items: flex-start;
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
             border-radius: 10px;
             padding: 0.85rem 1rem;
         }
@@ -309,8 +352,8 @@
             width: 28px;
             height: 28px;
             border-radius: 50%;
-            background: var(--accent-dt-muted);
-            color: var(--accent-dt);
+            background: var(--color-accent-dt-muted);
+            color: var(--color-accent-dt);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -320,17 +363,17 @@
         .step-content h3 {
             font-size: 0.9rem;
             font-weight: 600;
-            color: var(--text);
+            color: var(--color-ink);
             margin-bottom: 2px;
         }
         .step-content p {
             font-size: 0.82rem;
-            color: var(--text-dim);
+            color: var(--color-muted);
             margin: 0;
             line-height: 1.5;
         }
         .step-content code {
-            background: var(--surface-2);
+            background: var(--color-paper-3);
             padding: 1px 5px;
             border-radius: 4px;
             font-size: 0.78rem;
@@ -338,20 +381,20 @@
         }
         .guide-detail {
             margin-top: 0.75rem;
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
             border-radius: 10px;
             padding: 0.75rem 1rem;
         }
         .guide-detail summary {
             cursor: pointer;
             font-weight: 600;
-            color: var(--accent-dt);
+            color: var(--color-accent-dt);
             font-size: 0.82rem;
         }
         .guide-detail pre {
             margin-top: 0.75rem;
-            background: var(--surface-2);
+            background: var(--color-paper-3);
             padding: 0.75rem;
             border-radius: 8px;
             overflow-x: auto;
@@ -363,26 +406,48 @@
             margin-top: auto;
             padding: 1.8rem 2rem;
             text-align: center;
-            border-top: 1px solid var(--border);
+            border-top: 1px solid var(--color-rule);
             font-size: 0.78rem;
-            color: #3d4e68;
+            color: var(--color-neutral);
         }
         .footer a {
-            color: var(--text-dim);
+            color: var(--color-muted);
             text-decoration: none;
             transition: color 0.15s;
         }
-        .footer a:hover { color: var(--text); }
-        .footer .separator { margin: 0 0.6rem; color: var(--border); }
+        .footer a:hover { color: var(--color-ink); }
+        .footer .separator { margin: 0 0.6rem; color: var(--color-rule); }
 
         /* ── Responsive ── */
-        @media (max-width: 600px) {
-            .nav { padding: 0.85rem 1rem; }
+        @media (max-width: 64rem) {
             .hero { padding: 3rem 1rem 0.5rem; }
-            .section-header { padding: 0 1rem; }
-            .cards { grid-template-columns: 1fr; padding: 0 1rem; }
+            .cards { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+            .card { padding: 1.25rem; }
+            .hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); }
+            .hero p { font-size: 1rem; }
+        }
+
+        @media (max-width: 48rem) {
+            .nav { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
+            .nav-links { gap: 0.75rem; flex-wrap: wrap; }
+            .hero { padding: 2.5rem 1rem 0.25rem; }
+            .hero-sub { margin-bottom: 1.5rem; }
+            .section-header { padding: 0 1rem; flex-wrap: wrap; }
+            .section-desc { padding: 0 1rem; }
+            .cards { grid-template-columns: 1fr; padding: 0 1rem; gap: 0.85rem; }
             .card { padding: 1.25rem; }
             .guide { padding: 0 1rem; }
+            .legal-bar { font-size: 0.6rem; padding: 0.35rem 0.75rem; }
+            .footer { padding: 1rem; }
+        }
+
+        @media (max-width: 360px) {
+            .nav { flex-direction: column; align-items: flex-start; }
+            .hero { padding: 1.5rem 0.75rem 0.25rem; }
+            .nav-link { font-size: 0.8rem; }
+            .card-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+            .card-actions { flex-direction: column; }
+            .btn { justify-content: center; }
         }
     </style>
 </head>
@@ -398,10 +463,66 @@
         </div>
     </nav>
 
+    <!-- Privacy / Legal Bar -->
+    <div class="legal-bar">
+        <span>MIT License</span>
+        <span class="sep">·</span>
+        <a href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
+        <span class="sep">·</span>
+        <a href="#" onclick="document.getElementById('privacyModal').showModal(); return false;">Privacy</a>
+        <span class="sep">·</span>
+        <span>No tracking · No cookies · Bring your own keys</span>
+        <span class="sep">·</span>
+        <span>Data via elabFTW · DataTagger · NOMAD</span>
+    </div>
+
+    <!-- Privacy Modal -->
+    <dialog id="privacyModal" style="background: var(--color-paper-2); color: var(--color-ink); border: 1px solid var(--color-rule); border-radius: var(--radius); padding: 2rem; max-width: 560px; width: 90%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+            <h2 style="font-size: 1.1rem; font-weight: 700;">Privacy</h2>
+            <button onclick="document.getElementById('privacyModal').close();" style="background: none; border: none; color: var(--color-muted); cursor: pointer; font-size: 1.2rem;">✕</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem; color: var(--color-muted); line-height: 1.6;">
+            <div class="privacy-card">
+                <strong style="color: var(--color-ink);">🛡️ Data collection</strong>
+                <p>This site collects nothing. Zero cookies, zero tracking, zero analytics. All processing happens in your browser or on the self-hosted server.</p>
+            </div>
+            <div class="privacy-card">
+                <strong style="color: var(--color-ink);">☁️ Server-side storage</strong>
+                <p>MCP registration tokens are self-contained JWTs — no credentials stored on the server. NOMAD and elab-app handle their own authentication independently.</p>
+            </div>
+            <div class="privacy-card">
+                <strong style="color: var(--color-ink);">🌐 External requests</strong>
+                <p>The MCP endpoints connect to your configured elabFTW or DataTagger instance using your API key — no data is sent elsewhere. GitHub icon loads from github.com.</p>
+            </div>
+            <div class="privacy-card">
+                <strong style="color: var(--color-ink);">⚖️ GDPR</strong>
+                <p>Designed around GDPR Articles 5(1)(c) (data minimisation), 25 (privacy by design), and 32 (security). You control all data via your own API tokens.</p>
+            </div>
+            <div class="privacy-card">
+                <strong style="color: var(--color-ink);">⚠️ What we can't control</strong>
+                <p>Your hosting platform's access logs, your ISP's visibility, browser extensions, and third-party API providers are outside our scope.</p>
+            </div>
+        </div>
+        <button onclick="document.getElementById('privacyModal').close();" style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: var(--color-accent-dt); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Close</button>
+    </dialog>
+
+    <style>
+        .privacy-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+            transition: border-color 0.2s;
+        }
+        .privacy-card:hover { border-color: var(--color-accent-dt); }
+        .privacy-card p { margin-top: 0.2rem; font-size: 0.8rem; }
+    </style>
+
     <!-- Hero -->
     <section class="hero">
         <div class="hero-badge"><span class="dot"></span> Self-hosted · No admin secrets</div>
-        <h1>Research Data <span class="gradient">Platform</span></h1>
+        <h1>Research Data <span class="accent">Platform</span></h1>
         <p>MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD, elabFTW, and Proespm — all under one roof.</p>
         <p class="hero-sub">Bring your own API keys. No shared secrets, no cloud middleware, just self-hosted research data tools.</p>
     </section>
@@ -508,9 +629,9 @@
         </a>
 
         <!-- elab-app -->
-        <a class="card proespm" href="https://elab-app.researchmcp.duckdns.org">
+        <a class="card app" href="https://elab-app.researchmcp.duckdns.org">
             <div class="card-header">
-                <div class="card-icon proespm">
+                <div class="card-icon app">
                     <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
                     </svg>
@@ -522,7 +643,7 @@
             </div>
             <p class="card-desc">Streamlit companion app for <strong>elabFTW</strong>. Create experiment transcripts, manage templates, browse entries, and streamline your lab notebook workflows from a dedicated web interface.</p>
             <div class="card-actions">
-                <span class="btn btn-primary proespm">
+                <span class="btn btn-primary app">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
                     Open App
                 </span>
@@ -530,8 +651,32 @@
             </div>
         </a>
 
+        <!-- proespm -->
+        <a class="card proespm" href="https://proespm.researchmcp.duckdns.org">
+            <div class="card-header">
+                <div class="card-icon proespm">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                </div>
+                <div class="card-header-text">
+                    <h2>Proespm</h2>
+                    <span class="path-tag proespm">proespm.researchmcp.duckdns.org</span>
+                </div>
+            </div>
+            <p class="card-desc">Upload scientific data files (SPM, XPS, AES, TPD, RGA, EC) and generate interactive <strong>HTML reports</strong>. A web frontend for the <strong>proespm-py3</strong> data processing pipeline by matkrin.</p>
+            <div class="card-actions">
+                <span class="btn btn-primary proespm">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
+                    Open App
+                </span>
+                <span class="btn btn-secondary">proespm.researchmcp.duckdns.org</span>
+            </div>
+        </a>
+
     </div>
-<!-- proespm -->        <a class="card proespm" href="https://proespm.researchmcp.duckdns.org">            <div class="card-header">                <div class="card-icon proespm">                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>                        <line x1="12" y1="22.08" x2="12" y2="12"/>                    </svg>                </div>                <div class="card-header-text">                    <h2>Proespm</h2>                    <span class="path-tag proespm">proespm.researchmcp.duckdns.org</span>                </div>            </div>            <p class="card-desc">Upload scientific data files (SPM, XPS, AES, TPD, RGA, EC) and generate interactive <strong>HTML reports</strong>. A web frontend for the <strong>proespm-py3</strong> data processing pipeline by matkrin.</p>            <div class="card-actions">                <span class="btn btn-primary proespm">                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>                    Open App                </span>                <span class="btn btn-secondary">proespm.researchmcp.duckdns.org</span>            </div>        </a>
 
     <!-- How to Use (MCP only) -->
     <section class="guide">
