@@ -210,14 +210,13 @@ async def mcp_messages(request: Request):
 
     # GET requests (SSE handshake) return endpoint event without touching R
     if request.method == "GET":
-        from urllib.parse import urlencode
-        qs = urlencode({"token": token})
-        endpoint_url = f"https://{request.url.hostname}/el/mcp?{qs}"
-        return Response(
-            content=f"event: endpoint\ndata: {endpoint_url}\n\n",
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+        # Return empty 204. The MCP client's handle_get_stream reads SSE events
+        # from this response. If we return an endpoint event, the client
+        # reconnects immediately after the stream ends, creating an infinite
+        # connection loop that exhausts httpx connection pool. Returning no
+        # events causes the SSE reader to exit cleanly and stop reconnecting.
+        from starlette.responses import Response
+        return Response(status_code=204)
 
     if R_TRANSPORT == "http":
         # HTTP transport: proxy request to the R subprocess's HTTP server
