@@ -11,8 +11,8 @@ Host two MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datatagg
 
 | MCP Server | Backend | Auth Mechanism |
 |---|---|---|
-| **datatagger-mcp** | [Python / FastMCP](https://github.com/modelcontextprotocol/python-sdk) | Built-in `/register` → session token |
-| **elabrmcp** (elabFTW) | [R / ellmer](https://cran.r-project.org/package=ellmer) + [mcptools](https://cran.r-project.org/package=mcptools) | **elabmcp-proxy** → per-user R subprocess |
+| **datatagger-mcp** | [Python / FastMCP](https://github.com/modelcontextprotocol/python-sdk) | `/register` → HMAC-signed JWT (no server storage) |
+| **elabrmcp** (elabFTW) | [R / ellmer](https://cran.r-project.org/package=ellmer) + [mcptools](https://cran.r-project.org/package=mcptools) | **elabmcp-proxy** → per-user R subprocess, JWT tokens |
 
 ---
 
@@ -100,7 +100,8 @@ docker compose up -d --build
 3. 🔗 Receives scoped URL:  https://elab.your-domain.com/mcp?token=<uuid>
 4. ⚙️ Registers URL in MCP client
 5. 🚀 Proxy spawns a dedicated R subprocess with those credentials
-6. 🧹 After 30 minutes idle, process is killed and memory reclaimed
+6. 🧹 After 30 minutes idle, R process is killed and memory reclaimed
+7. 🪙 Token is valid for 30 days — no re-registration needed after restarts
 ```
 
 > **Note:** With path-based routing (single domain), replace the URLs accordingly:
@@ -171,7 +172,7 @@ elabmcp-proxy/
 
 ### How it works
 
-1. **Registration** -- user enters credentials into web form -> stored in memory with UUID4 token
+1. **Registration** -- user enters credentials into web form -> server creates an HMAC-SHA256 JWT embedding the credentials (no server-side storage)
 2. **R subprocess spawn** -- first `POST /mcp?token=X` spawns `Rscript -e "elabrmcp::elabr_mcp_server(type='stdio')"` with credentials as env vars
 3. **Bridge** -- proxy translates MCP SSE events <-> stdio JSON-RPC lines via asyncio subprocess
 4. **Isolation** -- each user gets a separate R process, no shared state
@@ -192,7 +193,7 @@ The stdio read timeout is 120s (configurable via `ELABMCP_STDIO_TIMEOUT`) to han
 
 ### Known issues
 
-- **Container restart wipes sessions:** token_store is in-memory. After any docker compose restart/build/reboot, all tokens are invalid (401). Re-register after restart.
+- ~~Container restart wipes sessions:~~ **FIXED** — tokens are now self-contained JWTs signed with `MCP_JWT_SECRET`. Container restarts do NOT invalidate tokens. 30-day expiry.
 - **Response timeout:** If R takes >120s to respond via stdout, the proxy returns 504. Increase ELABMCP_STDIO_TIMEOUT if needed.
 
 ### Running tests### Running tests
@@ -218,15 +219,15 @@ DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
 |---|---|---|
 | No admin-managed secrets | ✅ | `.env` contains no API keys |
 | Per-user isolation | ✅ | Each user gets an OS-level R subprocess |
-| Session expiry | ✅ | 30-minute inactivity timeout |
+| Session expiry | ✅ | 30-minute inactivity (R process), 30-day token lifetime |
 | In-transit encryption | ✅ | Terminated by Caddy (TLS) |
 | Rate limiting | ✅ | [slowapi](https://github.com/AsylumSecurity/fastapi-limiter), 10 POST/min per IP |
 | Subprocess resource caps | ✅ | `RLIMIT_AS` (256 MB), `RLIMIT_CPU` (300 s), `RLIMIT_NPROC` (64), global max 20 sessions |
 | Audit logging | ✅ | Structured log at `ELABMCP_AUDIT_LOG` |
 | Graceful shutdown | ✅ | `SIGTERM` → 3 s wait → `SIGKILL` |
 | Docker resource limits | ✅ | Per-container `mem_limit` + `stop_grace_period` |
-| Token-based auth | ✅ | UUID4 tokens, one per session |
-| No persistent secrets | ⚠️ Partial | Tokens stored in-memory only (lost on restart) |
+| Token-based auth | ✅ | HMAC-SHA256 JWTs, self-contained, no server storage |
+| No persistent secrets | ✅ | JWTs are self-contained, no server-side credential storage |
 | Test coverage | ✅ | 40 pytest + 15 Docker integration tests |
 
 ### Remaining areas
@@ -245,7 +246,6 @@ DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
 
 3. **Subprocess isolation** — all R subprocesses share the same Linux user inside the container. For stronger isolation, consider spawning each R process in a separate Docker container or using [nsjail](https://github.com/google/nsjail).
 
-4. **Session persistence** — restarting the elabmcp-proxy container drops all active sessions. For high-availability deployments, consider storing session tokens in [Redis](https://redis.io/) with automatic expiry (TTL).
 
 5. **Subprocess restart on crash** — if an R subprocess crashes, the SSE connection to the user drops and the session becomes unusable. The proxy could detect the crash and automatically re-spawn the subprocess for reconnect attempts.
 
