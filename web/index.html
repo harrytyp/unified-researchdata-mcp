@@ -9,24 +9,22 @@
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --bg: #0b0f1a;
-            --surface: #131827;
-            --surface-2: #1a2236;
-            --border: #1f2b40;
-            --text: #e8edf5;
-            --text-dim: #8898b4;
-            --accent-dt: #3b82f6;
-            --accent-dt-muted: #1e3a6e;
-            --accent-el: #a78bfa;
-            --accent-el-muted: #2d1f55;
-            --accent-github: #8b949e;
-            --radius: 14px;
+            --color-paper: #0d111c;
+            --color-paper-2: #151e30;
+            --color-paper-3: #1c2740;
+            --color-rule: #26304a;
+            --color-ink: #e2e8f0;
+            --color-muted: #8898b4;
+            --color-neutral: #5a6e8c;
+            --color-accent: #3b82f6;
+            --color-accent-muted: #1e3a6e;
+            --radius: 12px;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--color-paper);
+            color: var(--color-ink);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -38,303 +36,265 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(8px);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: rgba(11, 15, 26, 0.85);
+            padding: 0.85rem 2rem;
+            border-bottom: 1px solid var(--color-rule);
+            background: var(--color-paper);
         }
         .nav-brand {
             font-weight: 700;
             font-size: 1rem;
-            color: var(--text);
+            color: var(--color-ink);
             letter-spacing: -0.02em;
         }
-        .nav-brand span { color: var(--accent-dt); }
+        .nav-brand span { color: var(--color-accent); }
         .nav-links { display: flex; align-items: center; gap: 1.5rem; }
         .nav-link {
-            font-size: 0.875rem;
-            color: var(--text-dim);
+            font-size: 0.85rem;
+            color: var(--color-muted);
             text-decoration: none;
             transition: color 0.15s;
         }
-        .nav-link:hover { color: var(--text); }
-        .nav-link.github {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            color: var(--accent-github);
-        }
-        .nav-link.github:hover { color: #fff; }
+        .nav-link:hover { color: var(--color-ink); }
 
         /* ── Hero ── */
         .hero {
             text-align: center;
-            padding: 5rem 1.5rem 1rem;
+            padding: 4rem 1.5rem 0.5rem;
         }
         .hero-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 0.3rem 0.9rem;
-            font-size: 0.78rem;
-            color: var(--text-dim);
-            margin-bottom: 1.5rem;
+            gap: 0.35rem;
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-radius: 8px;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            color: var(--color-muted);
+            margin-bottom: 1.25rem;
         }
         .hero-badge .dot {
-            width: 7px; height: 7px;
+            width: 6px; height: 6px;
             border-radius: 50%;
-            background: #22c55e;
-            box-shadow: 0 0 6px #22c55e99;
+            background: var(--color-accent);
         }
         .hero h1 {
-            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-size: clamp(1.8rem, 4.5vw, 3rem);
             font-weight: 800;
             line-height: 1.15;
             letter-spacing: -0.03em;
-            margin-bottom: 1rem;
-        }
-        .hero h1 .gradient {
-            background: linear-gradient(135deg, var(--accent-dt) 0%, var(--accent-el) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            margin-bottom: 0.75rem;
+            color: var(--color-ink);
         }
         .hero p {
-            font-size: 1.1rem;
-            color: var(--text-dim);
-            max-width: 640px;
+            font-size: 1rem;
+            color: var(--color-muted);
+            max-width: 600px;
             margin: 0 auto 0.5rem;
         }
         .hero-sub {
-            font-size: 0.9rem;
-            color: #5c6f8c;
-            max-width: 560px;
+            font-size: 0.85rem;
+            color: var(--color-neutral);
+            max-width: 520px;
             margin: 0 auto 2rem;
+        }
+
+        /* ── How to Use ── */
+        .guide {
+            max-width: 700px;
+            margin: 0 auto 2rem;
+            padding: 0 1.5rem;
+        }
+        .guide h2 {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 1.25rem;
+            color: var(--color-ink);
+            font-weight: 700;
+        }
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .step {
+            display: flex;
+            gap: 0.85rem;
+            align-items: flex-start;
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+        }
+        .step-num {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-accent-muted);
+            color: var(--color-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        .step-content h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 2px;
+        }
+        .step-content p {
+            font-size: 0.82rem;
+            color: var(--color-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .step-content code {
+            background: var(--color-paper-3);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            word-break: break-all;
+        }
+        .guide-detail {
+            margin-top: 0.75rem;
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .guide-detail summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--color-accent);
+            font-size: 0.82rem;
+        }
+        .guide-detail pre {
+            margin-top: 0.75rem;
+            background: var(--color-paper-3);
+            padding: 0.75rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.75rem;
         }
 
         /* ── Cards ── */
         .cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-            gap: 1.5rem;
-            max-width: 860px;
-            margin: 2rem auto 0;
-            padding: 0 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 1.5rem 2rem;
         }
         .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
             border-radius: var(--radius);
-            padding: 2rem;
+            padding: 1.5rem;
             text-decoration: none;
             color: inherit;
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
-            transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-            position: relative;
-            overflow: hidden;
+            gap: 0.75rem;
+            transition: border-color 0.2s, transform 0.2s;
         }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            border-radius: var(--radius) var(--radius) 0 0;
-        }
-        .card.datatagger::before { background: linear-gradient(90deg, var(--accent-dt), #1d4ed8); }
-        .card.elab::before { background: linear-gradient(90deg, var(--accent-el), #7c3aed); }
-
         .card:hover {
-            border-color: #2e4060;
-            transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+            border-color: var(--color-accent);
+            transform: translateY(-2px);
         }
         .card-header {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.85rem;
         }
         .card-icon {
-            width: 44px; height: 44px;
-            border-radius: 10px;
+            width: 40px; height: 40px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            background: var(--color-accent-muted);
+            color: var(--color-accent);
         }
-        .card-icon.datatagger { background: var(--accent-dt-muted); color: var(--accent-dt); }
-        .card-icon.elab { background: var(--accent-el-muted); color: var(--accent-el); }
-
         .card-header-text h2 {
-            font-size: 1.15rem;
+            font-size: 1rem;
             font-weight: 700;
-            color: var(--text);
+            color: var(--color-ink);
         }
         .card-header-text .path-tag {
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 600;
             letter-spacing: 0.04em;
-            padding: 0.15rem 0.5rem;
-            border-radius: 5px;
-            margin-top: 0.2rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 4px;
+            margin-top: 0.15rem;
             display: inline-block;
+            background: var(--color-paper-3);
+            color: var(--color-muted);
         }
-        .path-tag.dt { background: var(--accent-dt-muted); color: var(--accent-dt); }
-        .path-tag.el { background: var(--accent-el-muted); color: var(--accent-el); }
-
         .card p {
-            font-size: 0.9rem;
-            color: var(--text-dim);
-            line-height: 1.65;
+            font-size: 0.85rem;
+            color: var(--color-muted);
+            line-height: 1.6;
         }
         .card-actions {
             display: flex;
-            gap: 0.65rem;
+            gap: 0.5rem;
             margin-top: auto;
             padding-top: 0.75rem;
-            border-top: 1px solid var(--border);
+            border-top: 1px solid var(--color-rule);
         }
         .btn {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.45rem 0.95rem;
-            border-radius: 8px;
-            font-size: 0.82rem;
+            gap: 0.3rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
             font-weight: 600;
             text-decoration: none;
-            transition: opacity 0.15s, transform 0.15s;
             cursor: pointer;
             border: none;
         }
-        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-primary {
-            background: var(--accent-dt);
+            background: var(--color-accent);
             color: #fff;
         }
-        .card.elab .btn-primary { background: var(--accent-el); }
-
         .btn-secondary {
-            background: var(--surface-2);
-            color: var(--text-dim);
-            border: 1px solid var(--border);
+            background: var(--color-paper-3);
+            color: var(--color-muted);
+            border: 1px solid var(--color-rule);
         }
-        .btn-secondary:hover { color: var(--text); border-color: #334155; }
-
-        .btn svg { width: 14px; height: 14px; }
+        .btn-secondary:hover { color: var(--color-ink); }
 
         /* ── Footer ── */
         .footer {
             margin-top: auto;
-            padding: 1.8rem 2rem;
+            padding: 1.5rem 2rem;
             text-align: center;
-            border-top: 1px solid var(--border);
-            font-size: 0.78rem;
-            color: #3d4e68;
+            border-top: 1px solid var(--color-rule);
+            font-size: 0.75rem;
+            color: var(--color-neutral);
         }
         .footer a {
-            color: var(--text-dim);
+            color: var(--color-muted);
             text-decoration: none;
-            transition: color 0.15s;
         }
-        .footer a:hover { color: var(--text); }
-        .guide {
-            max-width: 700px;
-            margin: 0 auto 48px;
-            padding: 0 24px;
-        }
-        .guide h2 {
-            text-align: center;
-            font-size: 1.5em;
-            margin-bottom: 28px;
-            color: var(--text);
-        }
-        .steps {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .step {
-            display: flex;
-            gap: 16px;
-            align-items: flex-start;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px 20px;
-        }
-        .step-num {
-            flex-shrink: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent-dt), var(--accent-el));
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1em;
-        }
-        .step-content h3 {
-            font-size: 1em;
-            font-weight: 600;
-            color: var(--text);
-            margin-bottom: 4px;
-        }
-        .step-content p {
-            font-size: 0.9em;
-            color: var(--text-dim);
-            margin: 0;
-            line-height: 1.5;
-        }
-        .step-content code {
-            background: var(--surface-2);
-            padding: 1px 5px;
-            border-radius: 4px;
-            font-size: 0.85em;
-            word-break: break-all;
-        }
-        .guide-detail {
-            margin-top: 20px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 20px;
-        }
-        .guide-detail summary {
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--accent-dt);
-            font-size: 0.9em;
-        }
-        .guide-detail pre {
-            margin-top: 12px;
-            background: var(--surface-2);
-            padding: 14px;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 0.82em;
-        }
-        .guide-detail code {
-            background: none;
-            padding: 0;
-        }
-        .footer .separator { margin: 0 0.6rem; color: var(--border); }
+        .footer a:hover { color: var(--color-ink); }
+        .separator { margin: 0 0.5rem; color: var(--color-rule); }
 
         /* ── Responsive ── */
-        @media (max-width: 600px) {
-            .nav { padding: 0.85rem 1rem; }
-            .hero { padding: 3.5rem 1rem 0.5rem; }
-            .cards { grid-template-columns: 1fr; padding: 0 1rem; }
-            .card { padding: 1.5rem; }
+        @media (max-width: 48rem) {
+            .nav { padding: 0.75rem 1rem; }
+            .hero { padding: 2.5rem 1rem 0.25rem; }
+            .cards { grid-template-columns: 1fr; padding: 0 1rem 1.5rem; }
+            .card { padding: 1.25rem; }
+            .guide { padding: 0 1rem; }
+            .footer { padding: 1rem; }
         }
     </style>
 </head>
@@ -344,25 +304,19 @@
     <nav class="nav">
         <div class="nav-brand"><span>◈</span> Unified Research Data MCP</div>
         <div class="nav-links">
-            <a class="nav-link" href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">
-                GitHub
-            </a>
-            <a class="nav-link github" href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-                github.com/harrytyp/unified-researchdata-mcp
-            </a>
+            <a class="nav-link" href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
         </div>
     </nav>
 
     <!-- Hero -->
     <section class="hero">
         <div class="hero-badge"><span class="dot"></span> Self-hosted · No admin secrets</div>
-        <h1>Research Data<br><span class="gradient">MCP Servers</span></h1>
-        <p>Bring-your-own-key MCP endpoints for DataTagger (FDM) and elabFTW. Register your API credentials and connect your AI editor in one step.</p>
+        <h1>Research Data MCP Servers</h1>
+        <p>Bring-your-own-key MCP endpoints for DataTagger (FDM) and elabFTW. Register your API credentials and connect any MCP client in one step.</p>
         <p class="hero-sub">Self-contained JWT tokens — no server-side storage, survive restarts, valid 30 days.</p>
     </section>
 
-    <!-- How to Use Guide -->
+    <!-- How to Use -->
     <section class="guide">
         <h2>How to Use</h2>
         <div class="steps">
@@ -370,47 +324,43 @@
                 <div class="step-num">1</div>
                 <div class="step-content">
                     <h3>Register</h3>
-                    <p>Click any card below, paste your API key / FDM token, and get a session URL back.</p>
+                    <p>Click a card below, paste your API key / FDM token, and get back a self-contained JWT URL.</p>
                 </div>
             </div>
             <div class="step">
                 <div class="step-num">2</div>
                 <div class="step-content">
-                    <h3>Copy the URL</h3>
-                    <p>The page gives you a URL like <code>https://researchmcp.duckdns.org/el/mcp?token=...</code></p>
+                    <h3>Copy the JWT URL</h3>
+                    <p>The token embeds your credentials, signed with the server secret. No credentials stored on the server.</p>
                 </div>
             </div>
             <div class="step">
                 <div class="step-num">3</div>
                 <div class="step-content">
                     <h3>Paste in your agent</h3>
-                    <p>Add it to your MCP client (Hermes, Claude Desktop, Cursor, etc.). <strong>Valid 30 days</strong> — survives server restarts.</p>
+                    <p>Add it to any MCP client (Claude Desktop, Cursor, Hermes, etc.). Valid for 30 days — survives restarts.</p>
                 </div>
             </div>
         </div>
         <details class="guide-detail">
-            <summary>Hermes Agent config example</summary>
+            <summary>Example config</summary>
             <pre><code>mcp_servers:
   elabmcp:
-    url: "https://researchmcp.duckdns.org/el/mcp?token=[paste-here]"
+    url: "https://researchmcp.duckdns.org/el/mcp?token=eyJ..."
     timeout: 120
-    connect_timeout: 30
   datatagger:
-    url: "https://researchmcp.duckdns.org/dt/mcp?token=[paste-here]"
-    timeout: 120
-    connect_timeout: 30</code></pre>
-            <p style="margin-top:8px;color:var(--text-dim);font-size:0.9em">Then type <code>/reload-mcp</code> in Hermes CLI &mdash; tools appear as <code>mcp_elabmcp_*</code> and <code>mcp_datatagger_*</code>. No token management needed.</p>
+    url: "https://researchmcp.duckdns.org/dt/mcp/?token=eyJ..."
+    timeout: 120</code></pre>
         </details>
     </section>
 
     <!-- Service Cards -->
     <div class="cards">
 
-        <!-- DataTagger -->
-        <a class="card datatagger" href="/dt/register">
+        <a class="card" href="/dt/register">
             <div class="card-header">
-                <div class="card-icon datatagger">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                         <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                         <line x1="12" y1="22.08" x2="12" y2="12"/>
@@ -418,74 +368,54 @@
                 </div>
                 <div class="card-header-text">
                     <h2>DataTagger MCP</h2>
-                    <span class="path-tag dt">/dt</span>
+                    <span class="path-tag">/dt</span>
                 </div>
             </div>
             <p>Tag and manage research datasets on the <strong>DataTagger</strong> (FDM) platform. Register your FDM API token and start querying metadata, tags, and search tools through your MCP client.</p>
             <div class="card-actions">
-                <span class="btn btn-primary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
-                    Register
-                </span>
-                <span class="btn btn-secondary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 8L8 8 8 11.5 9.5 10 11.5 8z"/><path d="M8.5 2L8 2.5 8 5 7.5 5 8 4.5 8.5 5z"/><path d="M11 2a1 1 0 0 1 1 1v2h-2V3a1 1 0 0 1 1-1zM6 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H6z"/></svg>
-                    MCP Endpoint
-                </span>
+                <span class="btn btn-primary">Register</span>
+                <span class="btn btn-secondary">MCP Endpoint</span>
             </div>
         </a>
 
-        <!-- elabFTW -->
-        <a class="card elab" href="/el/register">
+        <a class="card" href="/el/register">
             <div class="card-header">
-                <div class="card-icon elab">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <line x1="16" y1="13" x2="8" y2="13"/>
                         <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
                     </svg>
                 </div>
                 <div class="card-header-text">
                     <h2>elabFTW MCP</h2>
-                    <span class="path-tag el">/el</span>
+                    <span class="path-tag">/el</span>
                 </div>
             </div>
             <p>Connect to your <strong>elabFTW</strong> lab notebook via MCP. Register your elabFTW credentials and manage experiments, items, and metadata from any MCP-compatible AI editor.</p>
             <div class="card-actions">
-                <span class="btn btn-primary" style="background-color: var(--accent-el);">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
-                    Register
-                </span>
-                <span class="btn btn-secondary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 8L8 8 8 11.5 9.5 10 11.5 8z"/><path d="M8.5 2L8 2.5 8 5 7.5 5 8 4.5 8.5 5z"/><path d="M11 2a1 1 0 0 1 1 1v2h-2V3a1 1 0 0 1 1-1zM6 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H6z"/></svg>
-                    MCP Endpoint
-                </span>
+                <span class="btn btn-primary">Register</span>
+                <span class="btn btn-secondary">MCP Endpoint</span>
             </div>
         </a>
-        <!-- NOMAD OASIS -->
-        <a class="card elab" href="/nomad-oasis/">
+
+        <a class="card" href="/nomad-oasis/">
             <div class="card-header">
-                <div class="card-icon elab">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
                     </svg>
                 </div>
                 <div class="card-header-text">
                     <h2>NOMAD OASIS</h2>
-                    <span class="path-tag el">/nomad-oasis</span>
+                    <span class="path-tag">/nomad-oasis</span>
                 </div>
             </div>
-            <p>Materials science data management platform. Browse, search, and manage research data from your <strong>NOMAD</strong> OASIS installation.</p>
+            <p>Materials science data management platform. Browse, search, and publish research data.</p>
             <div class="card-actions">
-                <span class="btn btn-primary" style="background-color: var(--accent-el);">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
-                    Open GUI
-                </span>
-                <span class="btn btn-secondary">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 8L8 8 8 11.5 9.5 10 11.5 8z"/><path d="M8.5 2L8 2.5 8 5 7.5 5 8 4.5 8.5 5z"/><path d="M11 2a1 1 0 0 1 1 1v2h-2V3a1 1 0 0 1 1-1zM6 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H6z"/></svg>
-                    Browse Data
-                </span>
+                <span class="btn btn-primary">Open GUI</span>
+                <span class="btn btn-secondary">Browse Data</span>
             </div>
         </a>
 
@@ -495,7 +425,7 @@
     <footer class="footer">
         <a href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
         <span class="separator">·</span>
-        <a href="/nomad-oasis/">Open NOMAD OASIS GUI</a>
+        <a href="/nomad-oasis/">NOMAD OASIS</a>
         <span class="separator">·</span>
         <a href="/dt/register">Register DataTagger</a>
         <span class="separator">·</span>
