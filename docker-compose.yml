@@ -1,78 +1,75 @@
 services:
-  # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
-    # Use the Docker Hub image for production deployments. The image at
-    # harrytyp/datatagger-mcp:latest contains the URL_PREFIX fix for hosted mode.
-    # For local development against the working tree, change `image` → `build`
-    # and point context at ./datatagger-mcp instead.
     build:
       context: ./datatagger-mcp
     restart: unless-stopped
     expose:
-      - "8000"
+    - '8000'
     environment:
-      - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
-      - URL_PREFIX=/dt
-      - MCP_MODE=hosted
-      - MCP_PORT=8000
-      - MCP_HOST=0.0.0.0
-      - PYTHONUNBUFFERED=1
+    - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
+    - URL_PREFIX=/dt
+    - MCP_MODE=hosted
+    - MCP_PORT=8000
+    - MCP_HOST=0.0.0.0
+    - PYTHONUNBUFFERED=1
+    - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+    - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
     mem_limit: 512m
     stop_grace_period: 10s
-
-  # ── elabFTW MCP (auth-proxy wrapping elabrmcp with per-user subprocesses) ──
   elabmcp-proxy:
     build:
       context: .
       dockerfile: elabmcp-proxy/Dockerfile
     restart: unless-stopped
     expose:
-      - "8081"
+    - '8081'
     environment:
-      - ELABMCP_PROXY_HOST=0.0.0.0
-      - ELABMCP_PROXY_PORT=8081
-      - URL_PREFIX=/el
-      # Transport mode for R subprocess: "stdio" (default, local) or "http" (hosted)
-      # http transport avoids the nanonext stdio pipe bug where the R process exits
-      # immediately because wait(cv) returns false on an empty pipe.
-      - ELABMCP_R_TRANSPORT=http
-      # Rate limit: registration attempts per IP
-      - ELABMCP_RATE_LIMIT=10/minute
-      # Max concurrent R subprocesses
-      - ELABMCP_MAX_SESSIONS=20
-      # Max memory per R subprocess (MB)
-      - ELABMCP_MAX_MEM_MB=256
-      # Max CPU seconds per R subprocess
-      - ELABMCP_MAX_CPU_SECONDS=300
-      # Audit log path
-      - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
-      # Optional: passthrough the elabrmcp config path for subprocesses
-      - MCP_CONFIG_PATH=
-      # Uncomment to allow writes:
-      # - MCP_CONFIG_PATH=mcp/elabrmcp/inst/config/config.hybrid.yml
+    - ELABMCP_PROXY_HOST=0.0.0.0
+    - ELABMCP_PROXY_PORT=8081
+    - URL_PREFIX=/el
+    - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+    - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+    - ELABMCP_RATE_LIMIT=10/minute
+    - ELABMCP_R_PORT=18080
+    - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
     mem_limit: 2g
     stop_grace_period: 30s
-
-  # ── Caddy reverse proxy ────────────────────────────────────────────────────
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+    - 80:80
+    - 443:443
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./web:/srv/http:ro
-      - caddy_data:/data
-      - caddy_config:/config
+    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    - ./web:/srv/http:ro
+    - caddy_data:/data
+    - caddy_config:/config
     depends_on:
-      - datatagger-mcp
-      - elabmcp-proxy
+    - datatagger-mcp
+    - elabmcp-proxy
+    - elab-app
+    - proespm-app
     mem_limit: 128m
-
+  elab-app:
+    build:
+      context: ./elab-app
+    restart: unless-stopped
+    expose:
+    - '8501'
+    mem_limit: 256m
+    stop_grace_period: 10s
+    volumes:
+    - elab_app_data:/root/.config/elab_app
+  proespm-app:
+    build:
+      context: ./proespm-app
+    restart: unless-stopped
+    expose:
+    - '8501'
+    mem_limit: 512m
+    stop_grace_period: 30s
 volumes:
-  caddy_data:
-  caddy_config:
-
-
-
+  caddy_data: null
+  caddy_config: null
+  elab_app_data: {}
