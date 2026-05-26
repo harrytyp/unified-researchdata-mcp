@@ -1,3 +1,31 @@
+elab-app.researchmcp.duckdns.org {
+    reverse_proxy elab-app:8501 {
+        flush_interval -1
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
+proespm.researchmcp.duckdns.org {
+    reverse_proxy proespm-app:8501 {
+        flush_interval -1
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
 researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt
@@ -33,6 +61,15 @@ researchmcp.duckdns.org {
         Cache-Control no-cache
         Connection keep-alive
         X-Accel-Buffering no
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
     }
 
     handle @options {
