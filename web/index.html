@@ -33,25 +33,16 @@
         html { overflow-x: hidden; }
 
         :root {
-            --color-paper: #0b0f1a;
-            --color-paper-2: #131827;
-            --color-paper-3: #1a2236;
-            --color-rule: #1f2b40;
-            --color-ink: #e8edf5;
+            --color-paper: #0d111c;
+            --color-paper-2: #151e30;
+            --color-paper-3: #1c2740;
+            --color-rule: #26304a;
+            --color-ink: #e2e8f0;
             --color-muted: #8898b4;
-            --color-neutral: #5c6f8c;
-            --color-accent-dt: #3b82f6;
-            --color-accent-dt-muted: #1e3a6e;
-            --color-accent-el: #a78bfa;
-            --color-accent-el-muted: #2d1f55;
-            --color-accent-nomad: #22c55e;
-            --color-accent-nomad-muted: #14532d;
-            --color-accent-app: #f59e0b;
-            --color-accent-app-muted: #5c3d0e;
-            --color-accent-proespm: #ec4899;
-            --color-accent-proespm-muted: #4c1d3a;
-            --radius: 14px;
-            --shadow-card: 0 12px 40px rgba(0,0,0,0.35);
+            --color-neutral: #5a6e8c;
+            --color-accent: #3b82f6;
+            --color-accent-muted: #1e3a6e;
+            --radius: 12px;
         }
 
         body {
@@ -69,13 +60,9 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1rem 2rem;
+            padding: 0.85rem 2rem;
             border-bottom: 1px solid var(--color-rule);
-            backdrop-filter: blur(8px);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: rgba(11, 15, 26, 0.85);
+            background: var(--color-paper);
         }
         .nav-brand {
             font-weight: 700;
@@ -83,204 +70,205 @@
             color: var(--color-ink);
             letter-spacing: -0.02em;
         }
-        .nav-brand span { color: var(--color-accent-dt); }
+        .nav-brand span { color: var(--color-accent); }
         .nav-links { display: flex; align-items: center; gap: 1.5rem; }
         .nav-link {
-            font-size: 0.875rem;
+            font-size: 0.85rem;
             color: var(--color-muted);
             text-decoration: none;
             transition: color 0.15s;
         }
         .nav-link:hover { color: var(--color-ink); }
 
-        /* ── Privacy Bar ── */
-        .legal-bar {
-            grid-column: 1 / -1;
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            padding: 0.45rem 1.5rem;
-            font-size: 0.65rem;
-            color: var(--color-neutral);
-            border-bottom: 1px solid var(--color-rule);
-            background: var(--color-paper-2);
-        }
-        .legal-bar a {
-            color: var(--color-muted);
-            text-decoration: none;
-        }
-        .legal-bar a:hover { color: var(--color-ink); }
-        .legal-bar .sep { margin: 0 0.15rem; }
-
         /* ── Hero ── */
         .hero {
             text-align: center;
-            padding: 4rem 1.5rem 0.75rem;
+            padding: 4rem 1.5rem 0.5rem;
         }
         .hero-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            background: var(--color-paper-3);
+            gap: 0.35rem;
+            background: var(--color-paper-2);
             border: 1px solid var(--color-rule);
             border-radius: 8px;
-            padding: 0.3rem 0.9rem;
-            font-size: 0.78rem;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
             color: var(--color-muted);
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.25rem;
         }
         .hero-badge .dot {
-            width: 7px; height: 7px;
+            width: 6px; height: 6px;
             border-radius: 50%;
-            background: var(--color-accent-nomad);
+            background: var(--color-accent);
         }
         .hero h1 {
-            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-size: clamp(1.8rem, 4.5vw, 3rem);
             font-weight: 800;
             line-height: 1.15;
             letter-spacing: -0.03em;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
             color: var(--color-ink);
         }
-        .hero h1 .accent {
-            color: var(--color-accent-dt);
-        }
         .hero p {
-            font-size: 1.1rem;
+            font-size: 1rem;
             color: var(--color-muted);
-            max-width: 680px;
+            max-width: 600px;
             margin: 0 auto 0.5rem;
         }
         .hero-sub {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: var(--color-neutral);
-            max-width: 600px;
+            max-width: 520px;
             margin: 0 auto 2rem;
         }
 
-        /* ── Section Headers ── */
-        .section-header {
-            max-width: 1100px;
-            margin: 2.5rem auto 0;
+        /* ── How to Use ── */
+        .guide {
+            max-width: 700px;
+            margin: 0 auto 2rem;
             padding: 0 1.5rem;
+        }
+        .guide h2 {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 1.25rem;
+            color: var(--color-ink);
+            font-weight: 700;
+        }
+        .steps {
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 0.75rem;
         }
-        .section-header h2 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: var(--color-ink);
-            letter-spacing: -0.01em;
-        }
-        .section-header .tag {
-            font-size: 0.7rem;
-            font-weight: 600;
-            letter-spacing: 0.05em;
-            padding: 0.15rem 0.55rem;
-            border-radius: 999px;
-            background: var(--color-paper-3);
-            color: var(--color-muted);
+        .step {
+            display: flex;
+            gap: 0.85rem;
+            align-items: flex-start;
+            background: var(--color-paper-2);
             border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
         }
-        .section-desc {
-            max-width: 1100px;
-            margin: 0.25rem auto 0;
-            padding: 0 1.5rem;
-            font-size: 0.85rem;
+        .step-num {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-accent-muted);
+            color: var(--color-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        .step-content h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            margin-bottom: 2px;
+        }
+        .step-content p {
+            font-size: 0.82rem;
             color: var(--color-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .step-content code {
+            background: var(--color-paper-3);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            word-break: break-all;
+        }
+        .guide-detail {
+            margin-top: 0.75rem;
+            background: var(--color-paper-2);
+            border: 1px solid var(--color-rule);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .guide-detail summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--color-accent);
+            font-size: 0.82rem;
+        }
+        .guide-detail pre {
+            margin-top: 0.75rem;
+            background: var(--color-paper-3);
+            padding: 0.75rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.75rem;
         }
 
         /* ── Cards ── */
         .cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 1.25rem;
-            max-width: 1100px;
-            margin: 1rem auto 0;
-            padding: 0 1.5rem;
+            gap: 1rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 1.5rem 2rem;
         }
         .card {
             background: var(--color-paper-2);
             border: 1px solid var(--color-rule);
             border-radius: var(--radius);
-            padding: 1.75rem;
+            padding: 1.5rem;
             text-decoration: none;
             color: inherit;
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
-            transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-            position: relative;
-            overflow: hidden;
+            gap: 0.75rem;
+            transition: border-color 0.2s, transform 0.2s;
         }
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            border-radius: var(--radius) var(--radius) 0 0;
-        }
-        .card.dt::before { background: linear-gradient(90deg, var(--color-accent-dt), #1d4ed8); }
-        .card.elab::before { background: linear-gradient(90deg, var(--color-accent-el), #7c3aed); }
-        .card.nomad::before { background: linear-gradient(90deg, var(--color-accent-nomad), #16a34a); }
-        .card.app::before { background: linear-gradient(90deg, var(--color-accent-app), #d97706); }
-        .card.proespm::before { background: linear-gradient(90deg, var(--color-accent-proespm), #be185d); }
-
         .card:hover {
-            border-color: #2e4060;
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-card);
+            border-color: var(--color-accent);
+            transform: translateY(-2px);
         }
         .card-header {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.85rem;
         }
         .card-icon {
-            width: 44px; height: 44px;
-            border-radius: 10px;
+            width: 40px; height: 40px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            background: var(--color-accent-muted);
+            color: var(--color-accent);
         }
-        .card-icon.dt { background: var(--color-accent-dt-muted); color: var(--color-accent-dt); }
-        .card-icon.elab { background: var(--color-accent-el-muted); color: var(--color-accent-el); }
-        .card-icon.nomad { background: var(--color-accent-nomad-muted); color: var(--color-accent-nomad); }
-        .card-icon.app { background: var(--color-accent-app-muted); color: var(--color-accent-app); }
-        .card-icon.proespm { background: var(--color-accent-proespm-muted); color: var(--color-accent-proespm); }
-
         .card-header-text h2 {
-            font-size: 1.15rem;
+            font-size: 1rem;
             font-weight: 700;
             color: var(--color-ink);
         }
         .card-header-text .path-tag {
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 600;
             letter-spacing: 0.04em;
-            padding: 0.15rem 0.5rem;
-            border-radius: 5px;
-            margin-top: 0.2rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 4px;
+            margin-top: 0.15rem;
             display: inline-block;
-        }
-        .path-tag.dt { background: var(--color-accent-dt-muted); color: var(--color-accent-dt); }
-        .path-tag.elab { background: var(--color-accent-el-muted); color: var(--color-accent-el); }
-        .path-tag.nomad { background: var(--color-accent-nomad-muted); color: var(--color-accent-nomad); }
-        .path-tag.app { background: var(--color-accent-app-muted); color: var(--color-accent-app); }
-        .path-tag.proespm { background: var(--color-accent-proespm-muted); color: var(--color-accent-proespm); }
-
-        .card-desc {
-            font-size: 0.9rem;
+            background: var(--color-paper-3);
             color: var(--color-muted);
-            line-height: 1.65;
+        }
+        .card p {
+            font-size: 0.85rem;
+            color: var(--color-muted);
+            line-height: 1.6;
         }
         .card-desc strong { color: var(--color-ink); }
         .card-actions {
             display: flex;
-            gap: 0.65rem;
+            gap: 0.5rem;
             margin-top: auto;
             padding-top: 0.75rem;
             border-top: 1px solid var(--color-rule);
@@ -288,31 +276,25 @@
         .btn {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.45rem 0.95rem;
-            border-radius: 8px;
-            font-size: 0.82rem;
+            gap: 0.3rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
             font-weight: 600;
             text-decoration: none;
-            transition: opacity 0.15s, transform 0.15s;
             cursor: pointer;
             border: none;
         }
-        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .btn-primary.dt { background: var(--color-accent-dt); color: #fff; }
-        .btn-primary.elab { background: var(--color-accent-el); color: #fff; }
-        .btn-primary.nomad { background: var(--color-accent-nomad); color: #fff; }
-        .btn-primary.app { background: var(--color-accent-app); color: #fff; }
-        .btn-primary.proespm { background: var(--color-accent-proespm); color: #fff; }
-
+        .btn-primary {
+            background: var(--color-accent);
+            color: #fff;
+        }
         .btn-secondary {
             background: var(--color-paper-3);
             color: var(--color-muted);
             border: 1px solid var(--color-rule);
         }
-        .btn-secondary:hover { color: var(--color-ink); border-color: var(--color-muted); }
-
-        .btn svg { width: 14px; height: 14px; }
+        .btn-secondary:hover { color: var(--color-ink); }
 
         /* ── How to Use (MCP only) ── */
         .guide {
@@ -508,50 +490,27 @@
         /* ── Footer ── */
         .footer {
             margin-top: auto;
-            padding: 1.8rem 2rem;
+            padding: 1.5rem 2rem;
             text-align: center;
             border-top: 1px solid var(--color-rule);
-            font-size: 0.78rem;
+            font-size: 0.75rem;
             color: var(--color-neutral);
         }
         .footer a {
             color: var(--color-muted);
             text-decoration: none;
-            transition: color 0.15s;
         }
         .footer a:hover { color: var(--color-ink); }
-        .footer .separator { margin: 0 0.6rem; color: var(--color-rule); }
+        .separator { margin: 0 0.5rem; color: var(--color-rule); }
 
         /* ── Responsive ── */
-        @media (max-width: 64rem) {
-            .hero { padding: 3rem 1rem 0.5rem; }
-            .cards { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-            .card { padding: 1.25rem; }
-            .hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); }
-            .hero p { font-size: 1rem; }
-        }
-
         @media (max-width: 48rem) {
-            .nav { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
-            .nav-links { gap: 0.75rem; flex-wrap: wrap; }
+            .nav { padding: 0.75rem 1rem; }
             .hero { padding: 2.5rem 1rem 0.25rem; }
-            .hero-sub { margin-bottom: 1.5rem; }
-            .section-header { padding: 0 1rem; flex-wrap: wrap; }
-            .section-desc { padding: 0 1rem; }
-            .cards { grid-template-columns: 1fr; padding: 0 1rem; gap: 0.85rem; }
+            .cards { grid-template-columns: 1fr; padding: 0 1rem 1.5rem; }
             .card { padding: 1.25rem; }
             .guide { padding: 0 1rem; }
-            .legal-bar { font-size: 0.6rem; padding: 0.35rem 0.75rem; }
             .footer { padding: 1rem; }
-        }
-
-        @media (max-width: 360px) {
-            .nav { flex-direction: column; align-items: flex-start; }
-            .hero { padding: 1.5rem 0.75rem 0.25rem; }
-            .nav-link { font-size: 0.8rem; }
-            .card-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-            .card-actions { flex-direction: column; }
-            .btn { justify-content: center; }
         }
     </style>
 </head>
@@ -623,10 +582,48 @@
 
     <!-- Hero -->
     <section class="hero">
-        <div class="hero-badge"><span class="dot"></span> Self-hosted</div>
-        <h1>Research Data <span class="accent">Platform</span></h1>
-        <p>MCP servers for DataTagger and elabFTW, plus web GUIs for NOMAD, elabFTW, and Proespm - all under one roof.</p>
-        <p class="hero-sub">Self-hosted research data tools - no cloud middleware, no shared secrets.</p>
+        <div class="hero-badge"><span class="dot"></span> Self-hosted · No admin secrets</div>
+        <h1>Research Data MCP Servers</h1>
+        <p>Bring-your-own-key MCP endpoints for DataTagger (FDM) and elabFTW. Register your API credentials and connect any MCP client in one step.</p>
+        <p class="hero-sub">Self-contained JWT tokens — no server-side storage, survive restarts, valid 30 days.</p>
+    </section>
+
+    <!-- How to Use -->
+    <section class="guide">
+        <h2>How to Use</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>Register</h3>
+                    <p>Click a card below, paste your API key / FDM token, and get back a self-contained JWT URL.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>Copy the JWT URL</h3>
+                    <p>The token embeds your credentials, signed with the server secret. No credentials stored on the server.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <h3>Paste in your agent</h3>
+                    <p>Add it to any MCP client (Claude Desktop, Cursor, Hermes, etc.). Valid for 30 days — survives restarts.</p>
+                </div>
+            </div>
+        </div>
+        <details class="guide-detail">
+            <summary>Example config</summary>
+            <pre><code>mcp_servers:
+  elabmcp:
+    url: "https://researchmcp.duckdns.org/el/mcp?token=eyJ..."
+    timeout: 120
+  datatagger:
+    url: "https://researchmcp.duckdns.org/dt/mcp/?token=eyJ..."
+    timeout: 120</code></pre>
+        </details>
     </section>
 
     <!-- ── MCP Servers ── -->
@@ -637,11 +634,10 @@
 
     <div class="cards">
 
-        <!-- DataTagger -->
-        <a class="card dt" href="/dt/register">
+        <a class="card" href="/dt/register">
             <div class="card-header">
-                <div class="card-icon dt">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                         <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                         <line x1="12" y1="22.08" x2="12" y2="12"/>
@@ -649,162 +645,54 @@
                 </div>
                 <div class="card-header-text">
                     <h2>DataTagger MCP</h2>
-                    <span class="path-tag dt">/dt</span>
+                    <span class="path-tag">/dt</span>
                 </div>
             </div>
             <p class="card-desc">Tag and manage research datasets on the <strong>DataTagger</strong> (FDM) platform. Query metadata, tags, and search datasets through your MCP client. <a href="https://github.com/harrytyp/datatagger-mcp" target="_blank" rel="noopener" style="color: var(--color-accent-dt);">datatagger-mcp</a> on GitHub.</p>
             <div class="card-actions">
-                <span class="btn btn-primary dt">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
-                    Register
-                </span>
+                <span class="btn btn-primary">Register</span>
+                <span class="btn btn-secondary">MCP Endpoint</span>
             </div>
         </a>
 
-        <!-- elabFTW -->
-        <a class="card elab" href="/el/register">
+        <a class="card" href="/el/register">
             <div class="card-header">
-                <div class="card-icon elab">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <line x1="16" y1="13" x2="8" y2="13"/>
                         <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
                     </svg>
                 </div>
                 <div class="card-header-text">
                     <h2>elabFTW MCP</h2>
-                    <span class="path-tag elab">/el</span>
+                    <span class="path-tag">/el</span>
                 </div>
             </div>
             <p class="card-desc">Connect to your <strong>elabFTW</strong> electronic lab notebook via MCP. Manage experiments, database items, and metadata from any AI editor. Powered by <a href="https://github.com/MarvinLuepke/elabR" target="_blank" rel="noopener" style="color: var(--color-accent-el);">elabR / elabrmcp</a> on GitHub.</p>
             <div class="card-actions">
-                <span class="btn btn-primary elab">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
-                    Register
-                </span>
+                <span class="btn btn-primary">Register</span>
+                <span class="btn btn-secondary">MCP Endpoint</span>
             </div>
         </a>
 
-    </div>
-
-    <!-- Collapsed MCP Guide -->
-    <details class="guide-collapsed">
-        <summary><span class="guide-summary-text">How to use the MCP servers</span> <span class="guide-arrow">▸</span></summary>
-        <div class="guide-content">
-            <div class="steps">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <div class="step-content">
-                        <h3>Register</h3>
-                        <p>Click an MCP card above, paste your API key or FDM token, and get back a self-contained JWT URL. No credentials stored on the server.</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <div class="step-content">
-                        <h3>Copy the JWT URL</h3>
-                        <p>The token embeds your credentials, signed with the server secret. Valid for 30 days - survives restarts.</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-num">3</div>
-                    <div class="step-content">
-                        <h3>Paste in your agent</h3>
-                        <p>Add it to any MCP client (Claude Desktop, Cursor, Hermes, etc.). That's it - you're connected.</p>
-                    </div>
-                </div>
-            </div>
-            <details class="guide-detail">
-                <summary>Example config</summary>
-                <pre><code>mcp_servers:
-  elabmcp:
-    url: "https://researchmcp.duckdns.org/el/mcp?token=***"
-    timeout: 120
-  datatagger:
-    url: "https://researchmcp.duckdns.org/dt/mcp/?token=***"
-    timeout: 120</code></pre>
-            </details>
-        </div>
-    </details>
-
-    <!-- ── Web GUIs ── -->
-    <div class="section-header">
-        <h2>Web GUIs &amp; Tools</h2>
-    </div>
-    <p class="section-desc">Browser-based research data tools. The elab App needs your elabFTW credentials; NOMAD and Proespm are ready to use.</p>
-
-    <div class="cards">
-
-        <!-- NOMAD OASIS -->
-        <a class="card nomad" href="/nomad-oasis/">
+        <a class="card" href="/nomad-oasis/">
             <div class="card-header">
-                <div class="card-icon nomad">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <div class="card-icon">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
                     </svg>
                 </div>
                 <div class="card-header-text">
                     <h2>NOMAD OASIS</h2>
-                    <span class="path-tag nomad">/nomad-oasis</span>
+                    <span class="path-tag">/nomad-oasis</span>
                 </div>
             </div>
-            <p class="card-desc">Materials science data management platform. Browse, search, and publish research data. <a href="https://github.com/FAIRmat-NFDI/nomad" target="_blank" rel="noopener" style="color: var(--color-accent-nomad);">NOMAD</a> on GitHub.</p>
+            <p>Materials science data management platform. Browse, search, and publish research data.</p>
             <div class="card-actions">
-                <span class="btn btn-primary nomad">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
-                    Open GUI
-                </span>
-
-            </div>
-        </a>
-
-        <!-- elab-app -->
-        <a class="card app" href="https://elab-app.researchmcp.duckdns.org">
-            <div class="card-header">
-                <div class="card-icon app">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
-                    </svg>
-                </div>
-                <div class="card-header-text">
-                    <h2>elab App</h2>
-                    <span class="path-tag app">elab-app</span>
-                </div>
-            </div>
-            <p class="card-desc">Streamlit companion app for <strong>elabFTW</strong>. Create experiment transcripts, manage templates, browse entries, and streamline your lab notebook workflows. <a href="https://github.com/ffelsen/elab_app" target="_blank" rel="noopener" style="color: var(--color-accent-app);">elab_app</a> on GitHub.</p>
-            <div class="card-actions">
-                <span class="btn btn-primary app">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
-                    Open App
-                </span>
-
-            </div>
-        </a>
-
-        <!-- proespm -->
-        <a class="card proespm" href="https://proespm.researchmcp.duckdns.org">
-            <div class="card-header">
-                <div class="card-icon proespm">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                        <line x1="12" y1="22.08" x2="12" y2="12"/>
-                    </svg>
-                </div>
-                <div class="card-header-text">
-                    <h2>Proespm</h2>
-                    <span class="path-tag proespm">proespm</span>
-                </div>
-            </div>
-            <p class="card-desc">Upload scientific data files (SPM, XPS, AES, TPD, RGA, EC) and generate interactive <strong>HTML reports</strong>. A web frontend for <a href="https://github.com/matkrin/proespm-py3" target="_blank" rel="noopener" style="color: var(--color-accent-proespm);">proespm-py3</a> by matkrin.</p>
-            <div class="card-actions">
-                <span class="btn btn-primary proespm">
-                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
-                    Open App
-                </span>
-
+                <span class="btn btn-primary">Open GUI</span>
+                <span class="btn btn-secondary">Browse Data</span>
             </div>
         </a>
 
@@ -812,7 +700,15 @@
 
     <!-- Footer -->
     <footer class="footer">
-        Self-hosted research data tools
+        <a href="https://github.com/harrytyp/unified-researchdata-mcp" target="_blank" rel="noopener">GitHub</a>
+        <span class="separator">·</span>
+        <a href="/nomad-oasis/">NOMAD OASIS</a>
+        <span class="separator">·</span>
+        <a href="/dt/register">Register DataTagger</a>
+        <span class="separator">·</span>
+        <a href="/el/register">Register elabFTW</a>
+        <span class="separator">·</span>
+        <span>No admin-managed secrets · Bring your own keys</span>
     </footer>
 
 </body>

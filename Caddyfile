@@ -1,15 +1,3 @@
-elab-app.researchmcp.duckdns.org {
-    reverse_proxy elab-app:8501 {
-        flush_interval -1
-    }
-}
-
-proespm.researchmcp.duckdns.org {
-    reverse_proxy proespm-app:8501 {
-        flush_interval -1
-    }
-}
-
 researchmcp.duckdns.org {
     handle_path /dt* {
         uri strip_prefix /dt

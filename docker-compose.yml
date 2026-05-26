@@ -6,16 +6,18 @@ services:
     expose:
     - '8000'
     environment:
-    - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
-    - URL_PREFIX=/dt
-    - MCP_MODE=hosted
-    - MCP_PORT=8000
-    - MCP_HOST=0.0.0.0
-    - PYTHONUNBUFFERED=1
-    - MCP_JWT_SECRET=${MCP_JWT_SECRET}
-    - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+      - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
+      - URL_PREFIX=/dt
+      - MCP_MODE=hosted
+      - MCP_PORT=8000
+      - MCP_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
     mem_limit: 512m
     stop_grace_period: 10s
+
+  # ── elabFTW MCP (shared R worker, one process for all users) ──
   elabmcp-proxy:
     build:
       context: .
@@ -24,14 +26,14 @@ services:
     expose:
     - '8081'
     environment:
-    - ELABMCP_PROXY_HOST=0.0.0.0
-    - ELABMCP_PROXY_PORT=8081
-    - URL_PREFIX=/el
-    - MCP_JWT_SECRET=${MCP_JWT_SECRET}
-    - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
-    - ELABMCP_RATE_LIMIT=10/minute
-    - ELABMCP_R_PORT=18080
-    - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
+      - ELABMCP_PROXY_HOST=0.0.0.0
+      - ELABMCP_PROXY_PORT=8081
+      - URL_PREFIX=/el
+      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+      - ELABMCP_RATE_LIMIT=10/minute
+      - ELABMCP_R_PORT=18080
+      - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
     mem_limit: 2g
     stop_grace_period: 30s
   caddy:
@@ -70,6 +72,5 @@ services:
     mem_limit: 512m
     stop_grace_period: 30s
 volumes:
-  caddy_data: null
-  caddy_config: null
-  elab_app_data: {}
+  caddy_data:
+  caddy_config:
