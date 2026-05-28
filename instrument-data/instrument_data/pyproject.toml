@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instrument-data"
+description = "Instrument measurement schemas (TGA, DMA, FTIR, MS) for NOMAD Oasis"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "requests",
+    "numpy",
+    "scipy",
+]
+
+[project.entry-points."nomad.plugin"]
+instrument-schema = "instrument_data.entrypoint:instrument_schema"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["instrument_data*"]

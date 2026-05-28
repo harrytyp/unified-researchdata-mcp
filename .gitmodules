@@ -1,0 +1,3 @@
+[submodule "datatagger-mcp"]
+	path = datatagger-mcp
+	url = git@github.com:harrytyp/datatagger-mcp.git
