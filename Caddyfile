@@ -5,7 +5,7 @@ elab-app.researchmcp.duckdns.org {
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "DENY"
+        X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
@@ -19,7 +19,7 @@ proespm.researchmcp.duckdns.org {
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "DENY"
+        X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
@@ -65,7 +65,7 @@ researchmcp.duckdns.org {
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "DENY"
+        X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"

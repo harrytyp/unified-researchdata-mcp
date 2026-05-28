@@ -1,10 +1,11 @@
 services:
+  # ── DataTagger MCP ──────────────────────────────────────────────────────────
   datatagger-mcp:
     build:
       context: ./datatagger-mcp
     restart: unless-stopped
     expose:
-    - '8000'
+      - "8000"
     environment:
       - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
       - URL_PREFIX=/dt
@@ -24,7 +25,7 @@ services:
       dockerfile: elabmcp-proxy/Dockerfile
     restart: unless-stopped
     expose:
-    - '8081'
+      - "8081"
     environment:
       - ELABMCP_PROXY_HOST=0.0.0.0
       - ELABMCP_PROXY_PORT=8081
@@ -36,41 +37,24 @@ services:
       - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
     mem_limit: 2g
     stop_grace_period: 30s
+
+  # ── Caddy reverse proxy ────────────────────────────────────────────────────
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
-    - 80:80
-    - 443:443
+      - "80:80"
+      - "443:443"
     volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - ./web:/srv/http:ro
-    - caddy_data:/data
-    - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv/http:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
-    - datatagger-mcp
-    - elabmcp-proxy
-    - elab-app
-    - proespm-app
+      - datatagger-mcp
+      - elabmcp-proxy
     mem_limit: 128m
-  elab-app:
-    build:
-      context: ./elab-app
-    restart: unless-stopped
-    expose:
-    - '8501'
-    mem_limit: 256m
-    stop_grace_period: 10s
-    volumes:
-    - elab_app_data:/root/.config/elab_app
-  proespm-app:
-    build:
-      context: ./proespm-app
-    restart: unless-stopped
-    expose:
-    - '8501'
-    mem_limit: 512m
-    stop_grace_period: 30s
+
 volumes:
   caddy_data:
   caddy_config:
