@@ -110,6 +110,8 @@ docker compose up -d --build
 
 ---
 
+> **DuckDNS auto-update:** See [docs/duckdns-setup.md](docs/duckdns-setup.md) for the cronjob setup to keep your domain IP current.
+
 ## Caddy Configuration
 
 Edit [`Caddyfile`](./Caddyfile) to match your domain setup.
