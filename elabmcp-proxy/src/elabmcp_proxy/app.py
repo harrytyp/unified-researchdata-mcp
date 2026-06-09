@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import httpx
 import logging
 import os
 import time
@@ -52,96 +53,282 @@ def _audit(event: str, **kwargs):
 
 # ── Auth helper ──
 
-def _get_creds_from_jwt(token: str) -> tuple[str, str] | None:
-    """Decode JWT and return (api_key, base_url) or None."""
+def _get_creds_and_profile_from_jwt(token: str) -> tuple[str, str, str] | None:
+    """Decode JWT and return (api_key, base_url, profile) or None."""
     payload = decode_token(token)
     if payload is None:
         return None
-    return payload["k"], payload["u"]
+    profile = payload.get("p", "r")
+    if profile not in ("r", "h", "f"):
+        profile = "r"
+    return payload["k"], payload["u"], profile
+_shared_http = None
+
+
+async def _get_http():
+    global _shared_http
+    if _shared_http is None:
+        _shared_http = httpx.AsyncClient(verify=False, timeout=15.0, limits=httpx.Limits(max_keepalive_connections=10))
+    return _shared_http
+
+
+async def _validate_elabftw_key(base_url: str, api_key: str) -> dict:
+    """Validate an elabFTW API key and check write capability."""
+    result = {"valid": False, "user": None, "can_write": False, "error": None}
+    url = base_url.rstrip("/") + "/api/v2"
+    headers = {"Authorization": api_key}
+    try:
+        client = await _get_http()
+        resp = await client.get(f"{url}/users/me", headers=headers)
+        if resp.status_code != 200:
+            result["error"] = f"API key rejected (HTTP {resp.status_code}). Check your key and base URL."
+            return result
+        user = resp.json()
+        result["valid"] = True
+        result["user"] = {
+            "userid": user.get("userid"),
+            "fullname": user.get("fullname") or f"{user.get('firstname', '')} {user.get('lastname', '')}".strip(),
+            "is_sysadmin": user.get("is_sysadmin", 0),
+            "team": user.get("team"),
+        }
+        is_sysadmin = int(user.get("is_sysadmin", 0))
+        current_team = user.get("team")
+        can_write = bool(is_sysadmin)
+        if current_team:
+            team_resp = await client.get(f"{url}/teams/{current_team}", headers=headers)
+            if team_resp.status_code == 200:
+                team_data = team_resp.json()
+                if not can_write:
+                    can_write = bool(
+                        int(team_data.get("users_canwrite_experiments", 0))
+                        or int(team_data.get("users_canwrite_resources", 0))
+                    )
+        result["can_write"] = can_write
+    except httpx.TimeoutError:
+        result["error"] = f"Connection timeout for {base_url}."
+    except httpx.ConnectError as e:
+        result["error"] = f"Connection error: {e}"
+    except Exception as e:
+        result["error"] = f"Validation error: {e}"
+    return result
+
 
 
 # ── HTML templates ──
 
+
+PROFILE_NAMES = {"r": "Read-only", "h": "Hybrid", "f": "Full"}
+REGFORM_CSS = """<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0b0f1a; --bg2: #131827; --bg3: #1a2236;
+  --brd: #1f2b40; --brd-hover: #2a3f60;
+  --fg: #e8edf5; --muted: #8898b4; --neutral: #5c6f8c;
+  --acc: #3b82f6; --acc-hover: #2563eb;
+  --acc-glow: rgba(59,130,246,0.15);
+  --rad: 14px; --rad-sm: 10px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  background: var(--bg); color: var(--fg);
+  min-height: 100vh; display: flex; justify-content: center; align-items: center;
+  padding: 20px; line-height: 1.5;
+}
+.card {
+  background: var(--bg2); border: 1px solid var(--brd);
+  border-radius: var(--rad); padding: 36px; max-width: 480px; width: 100%;
+  box-shadow: var(--shadow);
+  animation: fadeUp 0.35s var(--ease) both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; color: var(--fg); }
+.sub { font-size: 0.82rem; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+.field-label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--neutral); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+input[type=text], input[type=password] {
+  width: 100%; padding: 11px 14px; margin-bottom: 18px;
+  background: var(--bg3); border: 1px solid var(--brd);
+  border-radius: var(--rad-sm); color: var(--fg); font-size: 0.9rem;
+  outline: none; transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  box-sizing: border-box; font-family: inherit;
+}
+input:focus { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-glow); }
+input::placeholder { color: var(--neutral); }
+button {
+  width: 100%; padding: 12px; margin-top: 4px;
+  background: var(--acc); color: #fff; border: none;
+  border-radius: var(--rad-sm); font-size: 0.88rem; font-weight: 600;
+  cursor: pointer; transition: background 0.2s var(--ease), transform 0.15s var(--ease);
+  font-family: inherit; letter-spacing: 0.01em;
+}
+button:hover { background: var(--acc-hover); transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+.alert { padding: 12px 16px; border-radius: var(--rad-sm); font-size: 0.82rem; margin-bottom: 18px; animation: fadeUp 0.25s var(--ease) both; }
+.alert-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; }
+
+/* Profile cards */
+.profile-cards { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 20px; }
+.profile-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 16px; background: var(--bg3); border: 1.5px solid var(--brd);
+  border-radius: var(--rad-sm); cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+  position: relative;
+}
+.profile-card:hover { border-color: var(--brd-hover); background: rgba(26,34,54,0.7); }
+.profile-card input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
+.profile-card .radio-dot {
+  flex-shrink: 0; width: 20px; height: 20px;
+  border: 2px solid var(--brd-hover); border-radius: 50%;
+  margin-top: 1px; position: relative;
+  transition: border-color 0.2s var(--ease);
+}
+.profile-card .radio-dot::after {
+  content: ""; position: absolute; inset: 3px;
+  border-radius: 50%; background: var(--acc);
+  transform: scale(0); transition: transform 0.2s var(--ease);
+}
+.profile-card input[type=radio]:checked + .radio-dot { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-glow); }
+.profile-card input[type=radio]:checked + .radio-dot::after { transform: scale(1); }
+.profile-card:has(input[type=radio]:checked) { border-color: var(--acc); background: rgba(59,130,246,0.06); }
+.pcard-title { font-size: 0.9rem; font-weight: 600; color: var(--muted); margin-bottom: 2px; transition: color 0.2s var(--ease); display: block; }
+.profile-card:has(input[type=radio]:checked) .pcard-title { color: var(--fg); }
+.pcard-desc { font-size: 0.78rem; color: var(--neutral); line-height: 1.4; }
+
+/* Info boxes */
+.info-box { padding: 14px 16px; border-radius: var(--rad-sm); margin-bottom: 16px; font-size: 0.82rem; animation: fadeUp 0.25s var(--ease) both; }
+.info-box.write { background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); }
+.info-box.none { background: rgba(234,179,8,0.06); border: 1px solid rgba(234,179,8,0.15); }
+.info-box p { margin: 0; }
+.info-box strong { color: var(--fg); }
+.info-muted { color: var(--muted); margin-top: 2px; }
+
+/* URL box */
+.url-box { background: var(--bg3); padding: 14px; border-radius: var(--rad-sm); word-break: break-all; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.72rem; border: 1px solid var(--brd); margin: 16px 0; color: var(--acc); line-height: 1.5; }
+.footer { font-size: 0.75rem; color: var(--neutral); margin-top: 20px; }
+a { color: var(--acc); text-decoration: none; transition: color 0.15s var(--ease); }
+a:hover { color: #60a5fa; }
+</style>"""
+
 def _create_register_form(error: str = "") -> str:
-    err_html = f'<p style="color:red">{error}</p>' if error else ""
+    err_html = f'<div class="alert alert-error">{error}</div>' if error else ""
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>elabFTW MCP Registration</title>
-<style>
-body {{ font-family: sans-serif; padding: 20px; max-width: 600px; margin: 40px auto; }}
-label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
-input[type=text], input[type=password] {{ width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; margin-bottom: 15px; }}
-button {{ background: #3498db; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 1em; width: 100%; }}
-</style></head><body>
-<div style="border:1px solid #ddd;border-radius:8px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)">
-<h2 style="color:#2c3e50;">elabFTW MCP Registration</h2>
-<p style="color:#666;">Enter your elabFTW credentials to generate a permanent MCP session URL.</p>
+{REGFORM_CSS}</head><body>
+<div class="card">
+<h2>elabFTW MCP Registration</h2>
+<p class="sub">Enter your elabFTW credentials to generate a permanent MCP session URL.</p>
 {err_html}
 <form method="post">
-<label>elabFTW Base URL:</label>
-<input type="text" name="base_url" value="https://eln.example.org" required>
-<label>elabFTW API Key:</label>
+<label class="field-label">elabFTW Base URL</label>
+<input type="text" name="base_url" value="https://elntest.ub.tum.de" required>
+<label class="field-label">elabFTW API Key</label>
 <input type="password" name="api_key" placeholder="Paste your elabFTW API key" required>
 <button type="submit">Generate MCP URL</button>
 </form>
 </div></body></html>"""
 
 
-def _registration_success_page(personal_url: str) -> str:
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Registration Successful</title>
-<style>
-body {{ font-family: sans-serif; padding: 20px; max-width: 600px; margin: 40px auto; }}
-</style></head><body>
-<div style="border:1px solid #ddd;border-radius:8px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)">
-<h2 style="color:#2c3e50;">Registration Successful</h2>
-<p>Use the following URL in your MCP client (Claude Desktop, KISSKI, any MCP agent):</p>
-<div style="background:#f8f9fa;padding:15px;border-radius:4px;word-break:break-all;font-family:monospace;border:1px solid #eee;margin:10px 0;">
-{personal_url}
-</div>
-<p style="color:#666;font-size:0.9em;margin-top:20px;">
-Token expires in 30 days — re-visit this page to generate a new one.<br>
-Single shared R worker — no per-user processes, supports unlimited users.
-</p>
-<a href="/register" style="color:#3498db;">&larr; Register another key</a>
-</div></body></html>"""
+# KEPT FOR BACKWARD COMPAT - _success_page is the new version
 
 
 # ── Routes ──
+
+
+def _profile_form(base_url, api_key, user_info, can_write, error=""):
+    err_html = f'<div class="alert alert-error">{error}</div>' if error else ""
+    fullname = (user_info or {}).get("fullname", "Unknown") or "Unknown"
+    if can_write:
+        radios = ""
+        for k, n, d in [("r","Read-only","browse and search only"),("h","Hybrid","read + comments, tags, metadata (recommended)"),("f","Full","read + create, update, links")]:
+            chk = ' checked' if k == 'h' else ''
+            radios += '<label class="profile-card"><input type="radio" name="profile" value="' + k + '" ' + chk + '><span class="radio-dot"></span><span class="profile-card-label"><span class="pcard-title">' + n + '</span><span class="pcard-desc">' + d + '</span></span></label>'
+        box = '<div class="info-box write"><p><strong>&#10003; Authenticated as ' + fullname + '</strong></p><p class="info-muted">API key has write access. Choose a scope:</p><div class="profile-cards">' + radios + '</div></div>'
+        btn = "Generate MCP URL"
+    else:
+        box = '<div class="info-box none"><p><strong>&#9888; Read-only key</strong></p><p class="info-muted">' + fullname + ' &mdash; only browsing allowed</p><input type="hidden" name="profile" value="r"></div>'
+        btn = "Generate MCP URL"
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>elabFTW MCP Registration</title>
+{REGFORM_CSS}
+</head><body>
+<div class="card">
+<h2>elabFTW MCP Registration</h2>
+{err_html}
+<form method="post">
+<label class="field-label">elabFTW Base URL</label>
+<input type="text" name="base_url" value="{base_url}">
+<label class="field-label">elabFTW API Key</label>
+<input type="password" name="api_key" value="{api_key}">
+<input type="hidden" name="validated" value="1">
+{box}
+<button type="submit">{btn}</button>
+</form>
+</div></body></html>"""
+
+def _success_page(personal_url, profile, prefix="/el"):
+    pname = PROFILE_NAMES.get(profile, "Read-only")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Registration Successful</title>
+{REGFORM_CSS}</head><body>
+<div class="card">
+<h2>Registration Successful</h2>
+<p>Profile: <strong>{pname}</strong></p>
+<p>Use the following URL in your MCP client:</p>
+<div class="url-box">
+{personal_url}
+</div>
+<p class="footer">Token expires in 30 days. To change profile, re-register.</p>
+<a href="{prefix}/register">&larr; Register another key</a>
+</div></body></html>"""
+
 
 async def register_page(request: Request):
     if request.method == "POST":
         form = await request.form()
         api_key = str(form.get("api_key", "")).strip()
         base_url = str(form.get("base_url", "")).strip()
-        remote_ip = request.client.host if request.client else "unknown"
+        validated = str(form.get("validated", "0")).strip()
+        profile = str(form.get("profile", "")).strip()
 
         if not api_key or not base_url:
-            return HTMLResponse(_create_register_form("API Key and Base URL are required."), status_code=400)
+            return HTMLResponse(_create_register_form("Both fields required."), status_code=400)
 
-        try:
-            token = encode_token(base_url, api_key)
-        except RuntimeError as e:
-            logger.error("Token creation failed: %s", e)
+        # ALWAYS validate the key first
+        validation = await _validate_elabftw_key(base_url, api_key)
+        if not validation["valid"]:
             return HTMLResponse(
-                _create_register_form("Server misconfiguration: MCP_JWT_SECRET not set."),
-                status_code=500,
+                _create_register_form(validation.get("error", "Key rejected by elabFTW API.")),
+                status_code=401,
             )
 
-        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
-        host = request.headers.get("host", "localhost:8081")
-        url_prefix = os.environ.get("URL_PREFIX", "")
-        if not url_prefix or not url_prefix.strip():
-            url_prefix = "/el"
-        elif not url_prefix.startswith("/"):
-            url_prefix = "/" + url_prefix
-        url_prefix = url_prefix.rstrip("/")
-        personal_url = f"{forwarded_proto}://{host}{url_prefix}/mcp?token={token}"
-        logger.info("Registered new JWT token from %s", remote_ip)
-        _audit("REGISTER", remote_ip=remote_ip)
-        return HTMLResponse(_registration_success_page(personal_url))
+        # Key is valid — proceed based on step
+        if validated == "1" and profile in ("r", "h", "f"):
+            # Step 2: User already saw profile selection, generate token
+            try:
+                token = encode_token(base_url, api_key, profile=profile)
+            except RuntimeError as e:
+                logger.error("Token creation failed: %s", e)
+                return HTMLResponse(_create_register_form("Server misconfiguration."), status_code=500)
+            fwd = request.headers.get("x-forwarded-proto", "https")
+            host = request.headers.get("host", "localhost:8081")
+            prefix = os.environ.get("URL_PREFIX", "/el").strip().strip("/")
+            personal_url = f"{fwd}://{host}/{prefix}/mcp?token={token}"
+            remote_ip = request.client.host if request.client else "unknown"
+            logger.info("Registered JWT from %s (profile=%s)", remote_ip, profile)
+            _audit("REGISTER", remote_ip=remote_ip, profile=profile)
+            return HTMLResponse(_success_page(personal_url, profile, prefix="/" + prefix))
+
+        # Step 1: Show profile selection
+        return HTMLResponse(
+            _profile_form(base_url, api_key, validation["user"], validation["can_write"])
+        )
+
     return HTMLResponse(_create_register_form())
-
-
 async def handle_mcp(request: Request):
     """Handle both GET and POST to /mcp.
 
@@ -159,12 +346,12 @@ async def handle_mcp(request: Request):
 
     # POST: decode JWT and proxy to R
     token = request.query_params.get("token", "")
-    creds = _get_creds_from_jwt(token)
-    if creds is None:
+    result = _get_creds_and_profile_from_jwt(token)
+    if result is None:
         _audit("POST_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
 
-    api_key, base_url = creds
+    api_key, base_url, profile = result
 
     if not r_worker.is_alive:
         try:
@@ -173,7 +360,7 @@ async def handle_mcp(request: Request):
             return HTMLResponse(str(e), status_code=503)
 
     body = await request.body()
-    status, resp_text = await r_worker.proxy_request(api_key, base_url, body)
+    status, resp_text = await r_worker.proxy_request(api_key, base_url, body, extra_headers={"X-Write-Scope": profile})
 
     if status == 202:
         # Notification accepted — no response body

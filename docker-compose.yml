@@ -34,6 +34,7 @@ services:
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - ELABMCP_RATE_LIMIT=10/minute
       - ELABMCP_R_PORT=18080
+      - MCP_CONFIG_PATH=/elabmcp-proxy/config.dynamic.yml
       - ELABMCP_AUDIT_LOG=/var/log/elabmcp-proxy/audit.log
     mem_limit: 2g
     stop_grace_period: 30s

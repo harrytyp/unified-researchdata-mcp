@@ -1,7 +1,8 @@
 """JWT-like token encode/decode using HMAC-SHA256 (no external libs needed).
 
 Token format: urlsafe_base64(json_payload).hex(HMAC-SHA256)
-Payload: {"u": <base64 base_url>, "k": <base64 api_key>, "exp": <unix_epoch_seconds>}
+Payload: {"u": <base64 base_url>, "k": <base64 api_key>, "p": <profile>, "exp": <unix_epoch_seconds>}
+Profile: "r" = readonly, "h" = hybrid, "f" = full (write)
 The token is self-contained — no server-side storage required.
 Expiry: 30 days from registration.
 """
@@ -30,7 +31,7 @@ def _get_jwt_secret() -> str:
 
 # ── Token encoding ───────────────────────────────────────────────────────────
 
-def encode_token(base_url: str, api_key: str, secret: str | None = None, expiry_days: int | None = None) -> str:
+def encode_token(base_url: str, api_key: str, profile: str = 'r', secret: str | None = None, expiry_days: int | None = None) -> str:
     """Create a self-contained HMAC-signed token with embedded credentials."""
     if secret is None:
         secret = _get_jwt_secret()
@@ -40,6 +41,7 @@ def encode_token(base_url: str, api_key: str, secret: str | None = None, expiry_
     payload = {
         "u": base64.urlsafe_b64encode(base_url.encode()).decode(),
         "k": base64.urlsafe_b64encode(api_key.encode()).decode(),
+        "p": profile,
         "exp": int(time.time()) + expiry_days * 86400,
     }
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
@@ -69,6 +71,9 @@ def decode_token(token: str, secret: str | None = None) -> dict | None:
         # Check expiry
         if time.time() > payload.get("exp", 0):
             return None
+        # Backward compat: old tokens without profile default to readonly
+        if "p" not in payload:
+            payload["p"] = "r"
         # Decode embedded strings
         payload["u"] = base64.urlsafe_b64decode(payload["u"]).decode()
         payload["k"] = base64.urlsafe_b64decode(payload["k"]).decode()

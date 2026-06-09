@@ -1,0 +1,57 @@
+server:
+  name: "elabrmcp"
+  version: "0.1.0"
+  transport: "http"
+  host: "127.0.0.1"
+  port: 18080
+
+elabftw:
+  base_url: "http://placeholder.local"
+  api_key: "placeholder"
+  timeout: 30
+
+features:
+  write_enabled: true
+  ai_review: true
+  tag_suggestions: true
+  metadata_suggestions: true
+  write_comments: true
+  write_tags: true
+  write_metadata: true
+  write_links: true
+  write_create: true
+  write_update: true
+  allow_body_overwrite: true
+  write_steps: true
+  inventory_tools: true
+  write_inventory: true
+  compounds_tools: true
+  write_compounds: true
+  low_level_tools: false
+  cache_ttl_seconds: 300
+  bulk_links_max_pairs: 100
+  links_network_default_max_depth: 2
+  links_network_default_max_nodes: 200
+  links_network_default_max_edges: 500
+  links_network_default_max_per_node: 50
+
+ai:
+  model: "gpt-4o"
+  max_tokens: 2048
+  temperature: 0.3
+
+provenance:
+  require_ai_header: true
+  ai_header_prefix: "[AI-GENERATED]"
+  include_trace_id: true
+  include_model_name: true
+
+audit:
+  enabled: true
+  log_path: "logs/audit.jsonl"
+  log_level: "info"
+  log_writes: true
+
+storage:
+  tmp_dir: "/tmp/elabrmcp"
+  cache_max_mb: 100

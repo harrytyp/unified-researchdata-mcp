@@ -103,7 +103,7 @@ class SharedRWorker:
 
         raise RuntimeError(f"Shared R worker failed to start within {R_START_TIMEOUT}s")
 
-    async def proxy_request(self, api_key: str, base_url: str, body: bytes) -> tuple[int, str]:
+    async def proxy_request(self, api_key: str, base_url: str, body: bytes, extra_headers: dict | None = None) -> tuple[int, str]:
         if not self._ready or self.process is None or self.process.returncode is not None:
             await self._restart()
 
@@ -112,6 +112,8 @@ class SharedRWorker:
             "x-elabftw-api-key": api_key,
             "x-elabftw-base-url": base_url,
         }
+        if extra_headers:
+            headers.update(extra_headers)
 
         try:
             resp = await self._client.post(R_URL, content=body, headers=headers)
