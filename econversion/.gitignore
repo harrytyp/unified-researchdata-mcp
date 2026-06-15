@@ -1,0 +1,23 @@
+# App code (remains in alexburg14/MCP_eConversion)
+src/
+.mcp.json
+context.md
+log.md
+README.md
+requirements.txt
+.claude/
+
+# Data files (sensitive - proposal PDF, API credentials)
+data/
+.env
+.env.*
+*.pdf
+*.enl
+*.csv
+*.json
+*.npz
+
+# Python
+__pycache__/
+*.pyc
+.venv/

@@ -1,3 +1,21 @@
+econversion.researchmcp.duckdns.org {
+    basicauth {
+        econversion $2a$14$ir6TRfyEnlEgFUwXdKhrcO7IyODmuGbNJkixxz3uVcPJhaaN7XF4y
+    }
+
+    reverse_proxy econversion:8501 {
+        flush_interval -1
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
 elab-app.researchmcp.duckdns.org {
     reverse_proxy elab-app:8501 {
         flush_interval -1

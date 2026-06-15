@@ -39,6 +39,21 @@ services:
     mem_limit: 2g
     stop_grace_period: 30s
 
+  # ── eConversion Papers MCP / Streamlit ───────────────────────────────────
+  econversion:
+    build:
+      context: ./econversion
+    restart: unless-stopped
+    expose:
+      - "8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - API_KEY=${ECONVERSION_API_KEY:-}
+    volumes:
+      - ./econversion/data:/app/data
+    mem_limit: 2g
+    stop_grace_period: 30s
+
   # ── Caddy reverse proxy ────────────────────────────────────────────────────
   caddy:
     image: caddy:2
@@ -54,6 +69,7 @@ services:
     depends_on:
       - datatagger-mcp
       - elabmcp-proxy
+      - econversion
     mem_limit: 128m
 
 volumes:
