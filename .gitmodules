@@ -1,3 +1,6 @@
 [submodule "datatagger-mcp"]
 	path = datatagger-mcp
 	url = git@github.com:harrytyp/datatagger-mcp.git
+[submodule "econversion"]
+	path = econversion
+	url = git@github.com:alexburg14/MCP_eConversion.git

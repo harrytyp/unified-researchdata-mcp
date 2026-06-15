@@ -42,7 +42,8 @@ services:
   # ── eConversion Papers MCP / Streamlit ───────────────────────────────────
   econversion:
     build:
-      context: ./econversion
+      context: .
+      dockerfile: ./econversion.Dockerfile
     restart: unless-stopped
     expose:
       - "8501"
