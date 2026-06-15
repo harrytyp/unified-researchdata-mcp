@@ -81,9 +81,12 @@ The [eConversion Knowledge Assistant](https://econversion.researchmcp.duckdns.or
 git clone https://github.com/harrytyp/unified-researchdata-mcp.git
 cd unified-researchdata-mcp
 
-# Clone the two MCP server dependencies alongside it
+# Clone all dependencies
 git clone https://github.com/harrytyp/datatagger-mcp.git
 git clone https://github.com/MarvinLuepke/elabR.git
+git clone https://github.com/alexburg14/MCP_eConversion.git econversion
+git clone https://github.com/ffelsen/elab_app.git
+git clone https://github.com/matkrin/proespm-py3.git
 ```
 
 ### 2. Configure
@@ -227,7 +230,7 @@ The stdio read timeout is 120s (configurable via `ELABMCP_STDIO_TIMEOUT`) to han
 - ~~Container restart wipes sessions:~~ **FIXED** — tokens are now self-contained JWTs signed with `MCP_JWT_SECRET`. Container restarts do NOT invalidate tokens. 30-day expiry.
 - **Response timeout:** If R takes >120s to respond via stdout, the proxy returns 504. Increase ELABMCP_STDIO_TIMEOUT if needed.
 
-### Running tests### Running tests
+### Running tests
 
 ```bash
 cd elabmcp-proxy
