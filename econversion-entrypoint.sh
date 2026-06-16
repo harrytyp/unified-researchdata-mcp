@@ -24,5 +24,8 @@ if [ ! -f /app/data/proposal_summary.md ]; then
     python src/scripts/extract_proposal_summary.py
 fi
 
+# Patch: hide SAIA endpoint URL in sidebar (security - leak prevention)
+sed -i 's/st.sidebar.caption(f"Endpoint: {BASE_URL}")/# st.sidebar.caption(f"Endpoint: {BASE_URL}")  # hidden/' src/app.py
+
 echo "[entrypoint] Starting Streamlit app..."
 exec streamlit run src/app.py
