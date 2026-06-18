@@ -98,7 +98,10 @@ async def register_route(request: Request):
         except Exception as e:
             return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>Validation failed: {e}</p></div>", status_code=500)
         try:
-            token = encode_token(base_url, api_key)
+            # Get selected tools from form
+            selected_tools = form.getlist("tools")
+            enabled_tools = selected_tools if selected_tools and "all" not in selected_tools else None
+            token = encode_token(base_url, api_key, enabled_tools=enabled_tools)
         except RuntimeError as e:
             return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>{e}</p></div>", status_code=500)
         forwarded = request.headers.get("x-forwarded-proto", "https")
@@ -117,6 +120,7 @@ async def register_route(request: Request):
 <html lang="en"><head><meta charset="utf-8"><title>Registration Successful</title>{REG_CSS}</head><body>
 <div class="card"><h2>Registration Successful</h2>
 <p>Use the following URL in your MCP client:</p>
+<p style="font-size:0.78rem;color:#8898b4;margin-bottom:12px">Key type: <span style="display:inline-block;padding:2px 8px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:4px;font-size:0.72rem;font-weight:600;color:#3b82f6">write</span></p>
 <div class="url-box">{personal}</div>
 <p class="note">Token expires in 30 days.</p>
 {buttons}
@@ -131,6 +135,32 @@ async def register_route(request: Request):
 <input type="password" name="api_key" placeholder="Paste your token here" required>
 <label>Data Tagger Base URL</label>
 <input type="text" name="base_url" value="https://datatagger.ub.tum.de">
+<div style="margin:20px 0">
+<h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Select Tools</h3>
+<p style="font-size:0.78rem;color:#8898b4;margin-bottom:16px">Choose which MCP tools to enable. Leave all checked for full access.</p>
+<div style="margin-bottom:12px">
+<label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">
+<input type="checkbox" name="tools" value="all" checked style="accent-color:#3b82f6" onchange="toggleAllTools(this)">
+<span style="color:#e8edf5">All Tools</span>
+</label>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="search_datatagger" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Search</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_projects" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List projects</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_folders" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List folders</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_datasets" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List datasets</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_project" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create project</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_folder" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create folder</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_dataset" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create dataset</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="upload_dataset_file" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Upload file</span></label>
+</div>
+</div>
+<script>
+function toggleAllTools(checkbox) {{
+  var tools = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  tools.forEach(function(t) {{ t.checked = checkbox.checked; }});
+}}
+</script>
 <button type="submit">Generate MCP URL</button>
 </form>
 </div></body></html>""")
