@@ -45,9 +45,16 @@ proespm.researchmcp.duckdns.org {
 }
 
 researchmcp.duckdns.org {
+    @api path /dt/* /el/*
+    @options method OPTIONS
+
+    handle @options {
+        respond  204
+    }
+
     handle_path /dt* {
         uri strip_prefix /dt
-        reverse_proxy datatagger-mcp:8000 {
+        reverse_proxy datatagger-proxy:8000 {
             flush_interval -1
         }
     }
@@ -68,9 +75,6 @@ researchmcp.duckdns.org {
     root * /srv/http
     file_server browse
 
-    @api path /dt/* /el/*
-    @options method OPTIONS
-
     header @api {
         Access-Control-Allow-Origin *
         Access-Control-Allow-Methods GET, POST, HEAD, OPTIONS
@@ -88,9 +92,5 @@ researchmcp.duckdns.org {
         Referrer-Policy "no-referrer"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
-    }
-
-    handle @options {
-        respond  204
     }
 }

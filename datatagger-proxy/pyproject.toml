@@ -1,0 +1,18 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools >= 77", "wheel"]
+
+[project]
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "httpx>=0.28.0",
+    "uvicorn>=0.30.0",
+    "fastapi>=0.110.0",
+    "starlette>=0.37.0"
+]
+name = "datatagger-proxy"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[project.scripts]
+datatagger-proxy = "datatagger_proxy.__main__:main"

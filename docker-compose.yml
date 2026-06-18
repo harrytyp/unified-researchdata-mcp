@@ -1,22 +1,25 @@
 services:
   # ── DataTagger MCP ──────────────────────────────────────────────────────────
-  datatagger-mcp:
+  datatagger-proxy:
     build:
-      context: ./datatagger-mcp
+      context: .
+      dockerfile: datatagger-proxy/Dockerfile
     restart: unless-stopped
+
     expose:
       - "8000"
     environment:
       - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
       - URL_PREFIX=/dt
-      - MCP_MODE=hosted
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
-    mem_limit: 512m
-    stop_grace_period: 10s
+      - MCP_JWT_SECRET=***      - MCP_TOKEN_EXPIRY_DAYS=***
+      - MCP_JWT_SECRET=***
+      - MCP_TOKEN_EXPIRY_DAYS=30
+    mem_limit: 256m
 
   # ── elabFTW MCP (shared R worker, one process for all users) ──
   elabmcp-proxy:
@@ -49,6 +52,8 @@ services:
       - "8501"
     environment:
       - PYTHONUNBUFFERED=1
+      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
     volumes:
       - ./econversion/data:/app/data
@@ -68,7 +73,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - datatagger-mcp
+      - datatagger-proxy
       - elabmcp-proxy
       - econversion
     mem_limit: 128m
@@ -76,3 +81,6 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  internal:
