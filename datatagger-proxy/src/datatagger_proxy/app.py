@@ -137,23 +137,158 @@ async def register_route(request: Request):
 <input type="text" name="base_url" value="https://datatagger.ub.tum.de">
 <div style="margin:20px 0">
 <h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Select Tools</h3>
-<p style="font-size:0.78rem;color:#8898b4;margin-bottom:16px">Choose which MCP tools to enable. Leave all checked for full access.</p>
+<p style="font-size:0.78rem;color:#8898b4;margin-bottom:16px">Choose which MCP tools to enable. Toggle entire categories or individual tools.</p>
+
 <div style="margin-bottom:12px">
 <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">
 <input type="checkbox" name="tools" value="all" checked style="accent-color:#3b82f6" onchange="toggleAllTools(this)">
 <span style="color:#e8edf5">All Tools</span>
 </label>
 </div>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="search_datatagger" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Search</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_projects" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List projects</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_folders" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List folders</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_datasets" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">List datasets</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_project" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create project</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_folder" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create folder</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_dataset" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Create dataset</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="upload_dataset_file" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">Upload file</span></label>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em">
+<input type="checkbox" id="cat_read_toggle" checked style="accent-color:#3b82f6" onchange="toggleCategory('cat_read', this)">
+Read (7)
+</label>
 </div>
+<div id="cat_read" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="search_datatagger" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Global search</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_projects" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">List projects</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_project" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Get project</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_folders" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">List folders</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_folder" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Get folder</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_datasets" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">List datasets</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="download_fdm_file" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Download file</span>
+</label>
+</div>
+</div>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em">
+<input type="checkbox" id="cat_write_toggle" checked style="accent-color:#3b82f6" onchange="toggleCategory('cat_write', this)">
+Write (15)
+</label>
+</div>
+<div id="cat_write" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_project" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Create project</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_project" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Update project</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="delete_project" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Delete project</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_folder" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Create folder</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_folder" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Update folder</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="delete_folder" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Delete folder</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_dataset" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Create dataset</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="delete_dataset" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Delete dataset</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="publish_dataset" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Publish dataset</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="restore_dataset_version" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Restore version</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="compare_dataset_versions" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Compare versions</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="upload_dataset_file" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Upload file</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="add_metadata_to_dataset" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Add metadata</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_project" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Update project</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_folder" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Update folder</span>
+</label>
+</div>
+</div>
+<script>
+function toggleAllTools(checkbox) {{
+  var allCheckboxes = document.querySelectorAll('input[name="tools"]');
+  allCheckboxes.forEach(function(cb) {{ cb.checked = checkbox.checked; }});
+  var catToggles = document.querySelectorAll('[id$="_toggle"]');
+  catToggles.forEach(function(ct) {{ ct.checked = checkbox.checked; }});
+}}
+function toggleCategory(catId, checkbox) {{
+  var items = document.querySelectorAll('.' + catId + '_item');
+  items.forEach(function(item) {{ item.checked = checkbox.checked; }});
+  updateAllToolsCheckbox();
+}}
+function updateAllToolsCheckbox() {{
+  var allCheckbox = document.querySelector('input[name="tools"][value="all"]');
+  var allItems = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  var allChecked = Array.from(allItems).every(function(cb) {{ return cb.checked; }});
+  allCheckbox.checked = allChecked;
+}}
+document.addEventListener('DOMContentLoaded', function() {{
+  var itemCheckboxes = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  itemCheckboxes.forEach(function(cb) {{
+    cb.addEventListener('change', function() {{
+      var classes = this.className.split(' ');
+      var catId = classes.find(function(c) {{ return c.endsWith('_item'); }});
+      if (catId) {{
+        catId = catId.replace('_item', '');
+        var catCheckbox = document.getElementById(catId + '_toggle');
+        var catItems = document.querySelectorAll('.' + catId + '_item');
+        var allCatChecked = Array.from(catItems).every(function(item) {{ return item.checked; }});
+        catCheckbox.checked = allCatChecked;
+      }}
+      updateAllToolsCheckbox();
+    }});
+  }});
+}});
+</script>
 </div>
 <script>
 function toggleAllTools(checkbox) {{

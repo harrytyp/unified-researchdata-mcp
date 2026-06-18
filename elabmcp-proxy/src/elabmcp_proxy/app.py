@@ -250,23 +250,240 @@ def _create_register_form(error: str = "") -> str:
 <input type="password" name="api_key" placeholder="Paste your elabFTW API key" required>
 <div class="tool-selector" style="margin:20px 0">
 <h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:var(--fg)">Select Tools</h3>
-<p style="font-size:0.78rem;color:var(--neutral);margin-bottom:16px">Choose which MCP tools to enable. Leave all checked for full access.</p>
+<p style="font-size:0.78rem;color:var(--neutral);margin-bottom:16px">Choose which MCP tools to enable. Toggle entire categories or individual tools.</p>
+
 <div style="margin-bottom:12px">
 <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">
 <input type="checkbox" name="tools" value="all" checked style="accent-color:var(--acc)" onchange="toggleAllTools(this)">
 <span style="color:var(--fg)">All Tools</span>
 </label>
 </div>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_connection_info" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Connection info</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_experiments" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List experiments</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Get experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_items" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List items</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Create experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="update_experiment_body" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Update experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="apply_tag_suggestions" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Apply tags</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="add_ai_review_comment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">AI comment</span></label>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">
+<input type="checkbox" id="cat_read_toggle" checked style="accent-color:var(--acc)" onchange="toggleCategory('cat_read', this)">
+Read (19)
+</label>
 </div>
+<div id="cat_read" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_connection_info" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Connection details</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_current_user_capabilities" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">User capabilities</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="refresh_team_caps" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Refresh team caps</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_item_statuses" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Item statuses</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_experiment_statuses" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Experiment statuses</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_experiment" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Get experiment</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_experiments" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">List experiments</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_item" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Get item</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_items" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">List items</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_experiment_categories" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Experiment categories</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_item_categories" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Item categories</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_experiment_templates" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Experiment templates</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_experiment_template" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Get template</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_item_types" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Item types</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_item_type" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Get item type</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_steps" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">List steps</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_entity_links" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Entity links</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="expand_links_network" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Link network</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="resolve_entity_by_query" checked class="cat_read_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Resolve by query</span>
+</label>
+</div>
+</div>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">
+<input type="checkbox" id="cat_write_toggle" checked style="accent-color:var(--acc)" onchange="toggleCategory('cat_write', this)">
+Write (16)
+</label>
+</div>
+<div id="cat_write" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="add_step" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Add step</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_step" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Update step</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="toggle_step" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Toggle step</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="delete_step" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Delete step</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_experiment" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Create experiment</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_item" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Create item</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="create_experiment_from_template" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Create from template</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_experiment_body" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Update experiment body</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_item_body" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Update item body</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_entity_metadata" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Update metadata</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="update_entity_fields" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Update fields</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="ensure_link" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Create link</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="bulk_ensure_links" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Bulk create links</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="delete_link" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Delete link</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="bulk_delete_links" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Bulk delete links</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="ensure_link_by_query" checked class="cat_write_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Link by query</span>
+</label>
+</div>
+</div>
+<div style="margin-bottom:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">
+<input type="checkbox" id="cat_ai_toggle" checked style="accent-color:var(--acc)" onchange="toggleCategory('cat_ai', this)">
+Ai (5)
+</label>
+</div>
+<div id="cat_ai" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="review_experiment" checked class="cat_ai_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">AI review</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="suggest_tags" checked class="cat_ai_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Suggest tags</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="suggest_metadata" checked class="cat_ai_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Suggest metadata</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="apply_tag_suggestions" checked class="cat_ai_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">Apply tags</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="add_ai_review_comment" checked class="cat_ai_item" style="accent-color:var(--acc)">
+<span style="color:var(--fg)">AI comment</span>
+</label>
+</div>
+</div>
+<script>
+function toggleAllTools(checkbox) {{
+  var allCheckboxes = document.querySelectorAll('input[name="tools"]');
+  allCheckboxes.forEach(function(cb) {{ cb.checked = checkbox.checked; }});
+  var catToggles = document.querySelectorAll('[id$="_toggle"]');
+  catToggles.forEach(function(ct) {{ ct.checked = checkbox.checked; }});
+}}
+function toggleCategory(catId, checkbox) {{
+  var items = document.querySelectorAll('.' + catId + '_item');
+  items.forEach(function(item) {{ item.checked = checkbox.checked; }});
+  updateAllToolsCheckbox();
+}}
+function updateAllToolsCheckbox() {{
+  var allCheckbox = document.querySelector('input[name="tools"][value="all"]');
+  var allItems = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  var allChecked = Array.from(allItems).every(function(cb) {{ return cb.checked; }});
+  allCheckbox.checked = allChecked;
+}}
+document.addEventListener('DOMContentLoaded', function() {{
+  var itemCheckboxes = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  itemCheckboxes.forEach(function(cb) {{
+    cb.addEventListener('change', function() {{
+      var classes = this.className.split(' ');
+      var catId = classes.find(function(c) {{ return c.endsWith('_item'); }});
+      if (catId) {{
+        catId = catId.replace('_item', '');
+        var catCheckbox = document.getElementById(catId + '_toggle');
+        var catItems = document.querySelectorAll('.' + catId + '_item');
+        var allCatChecked = Array.from(catItems).every(function(item) {{ return item.checked; }});
+        catCheckbox.checked = allCatChecked;
+      }}
+      updateAllToolsCheckbox();
+    }});
+  }});
+}});
+</script>
 </div>
 <script>
 function toggleAllTools(checkbox) {{
