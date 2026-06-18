@@ -80,6 +80,24 @@ async def register_route(request: Request):
         if not api_key:
             return HTMLResponse(REG_CSS + "<div class=card><h2>Error</h2><p>API Key is required</p></div>", status_code=400)
         try:
+            # Validate the token against the DataTagger API
+            import httpx
+            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+                resp = await client.get(
+                    f"{base_url.rstrip('/')}/api/v1/project/?limit=1",
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
+                if resp.status_code == 401:
+                    return HTMLResponse(REG_CSS + "<div class=card><h2>Invalid Key</h2><p>Token rejected by DataTagger API (HTTP 401). Check your token.</p></div>", status_code=401)
+                if resp.status_code == 403:
+                    return HTMLResponse(REG_CSS + "<div class=card><h2>Access Denied</h2><p>Token valid but access denied (HTTP 403). Check permissions.</p></div>", status_code=403)
+                if resp.status_code != 200:
+                    return HTMLResponse(REG_CSS + f"<div class=card><h2>Validation Failed</h2><p>DataTagger API returned HTTP {resp.status_code}.</p></div>", status_code=400)
+        except httpx.ConnectError:
+            return HTMLResponse(REG_CSS + "<div class=card><h2>Connection Error</h2><p>Could not connect to DataTagger API. Check the base URL.</p></div>", status_code=400)
+        except Exception as e:
+            return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>Validation failed: {e}</p></div>", status_code=500)
+        try:
             token = encode_token(base_url, api_key)
         except RuntimeError as e:
             return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>{e}</p></div>", status_code=500)
