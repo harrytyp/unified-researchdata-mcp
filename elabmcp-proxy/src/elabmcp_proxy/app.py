@@ -272,6 +272,10 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
 
 def _success_page(personal_url, profile, prefix="/el"):
     pname = PROFILE_NAMES.get(profile, "Read-only")
+    buttons = """<div style="display:flex;gap:10px;margin-top:18px">
+  <button onclick="(function(e){var b=document.querySelector('.url-box');if(!b||!b.textContent)return;var u=b.textContent.trim();var t=u.split('token=')[1];if(!t)return;t=t.split(/[\s<&]/)[0];navigator.clipboard.writeText(t).then(function(){var btn=e.currentTarget||e;btn.textContent='✓ Copied';setTimeout(function(){btn.innerHTML='<span style=font-size:1.2em>📋</span> Token'},2000)}).catch(function(){prompt('Token:',t)})})(this)" type="button" style="flex:1;padding:10px 14px;background:var(--bg3);color:var(--fg);border:1px solid var(--brd-hover);border-radius:var(--rad-sm);font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;justify-content:center"><span style="font-size:1.2em">📋</span> Token</button>
+  <button onclick="(function(e){var b=document.querySelector('.url-box');if(!b||!b.textContent)return;var u=b.textContent.trim();navigator.clipboard.writeText(u).then(function(){var btn=e.currentTarget||e;btn.textContent='✓ Copied';setTimeout(function(){btn.innerHTML='<span style=font-size:1.2em>📂</span> URL'},2000)}).catch(function(){prompt('URL:',u)})})(this)" type="button" style="flex:1;padding:10px 14px;background:var(--acc);color:#fff;border:none;border-radius:var(--rad-sm);font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;justify-content:center"><span style="font-size:1.2em">📂</span> URL</button>
+</div>"""
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Registration Successful</title>
 {REGFORM_CSS}</head><body>
@@ -283,6 +287,7 @@ def _success_page(personal_url, profile, prefix="/el"):
 {personal_url}
 </div>
 <p class="footer">Token expires in 30 days. To change profile, re-register.</p>
+{buttons}
 <a href="{prefix}/register">&larr; Register another key</a>
 </div></body></html>"""
 
