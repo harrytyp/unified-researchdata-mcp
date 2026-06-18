@@ -84,25 +84,45 @@ async def _validate_elabftw_key(base_url: str, api_key: str) -> dict:
             result["error"] = f"API key rejected (HTTP {resp.status_code}). Check your key and base URL."
             return result
         user = resp.json()
+        
+        # Sysadmin check - block immediately
+        is_sysadmin = int(user.get("is_sysadmin", 0))
+        if is_sysadmin:
+            result["error"] = "Sysadmin keys are not allowed for MCP registration. Please use a regular user key or a team admin key."
+            return result
+        
         result["valid"] = True
         result["user"] = {
             "userid": user.get("userid"),
             "fullname": user.get("fullname") or f"{user.get('firstname', '')} {user.get('lastname', '')}".strip(),
-            "is_sysadmin": user.get("is_sysadmin", 0),
+            "is_sysadmin": 0,
             "team": user.get("team"),
         }
         is_sysadmin = int(user.get("is_sysadmin", 0))
         current_team = user.get("team")
-        can_write = bool(is_sysadmin)
-        if current_team:
+
+        # Check per-key can_write from /apikeys
+        key_id = api_key.split("-")[0]
+        key_can_write = 0
+        try:
+            keys_resp = await client.get(f"{url}/apikeys", headers=headers)
+            if keys_resp.status_code == 200:
+                for k in keys_resp.json():
+                    if str(k.get("id")) == key_id:
+                        key_can_write = int(k.get("can_write", 0))
+                        break
+        except Exception:
+            pass
+
+        can_write = bool(is_sysadmin) or bool(key_can_write)
+        if current_team and can_write:
             team_resp = await client.get(f"{url}/teams/{current_team}", headers=headers)
             if team_resp.status_code == 200:
                 team_data = team_resp.json()
-                if not can_write:
-                    can_write = bool(
-                        int(team_data.get("users_canwrite_experiments", 0))
-                        or int(team_data.get("users_canwrite_resources", 0))
-                    )
+                can_write = bool(
+                    int(team_data.get("users_canwrite_experiments", 0))
+                    or int(team_data.get("users_canwrite_resources", 0))
+                )
         result["can_write"] = can_write
     except httpx.TimeoutError:
         result["error"] = f"Connection timeout for {base_url}."
@@ -228,6 +248,32 @@ def _create_register_form(error: str = "") -> str:
 <input type="text" name="base_url" value="https://elntest.ub.tum.de" required>
 <label class="field-label">elabFTW API Key</label>
 <input type="password" name="api_key" placeholder="Paste your elabFTW API key" required>
+<div class="tool-selector" style="margin:20px 0">
+<h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:var(--fg)">Select Tools</h3>
+<p style="font-size:0.78rem;color:var(--neutral);margin-bottom:16px">Choose which MCP tools to enable. Leave all checked for full access.</p>
+<div style="margin-bottom:12px">
+<label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">
+<input type="checkbox" name="tools" value="all" checked style="accent-color:var(--acc)" onchange="toggleAllTools(this)">
+<span style="color:var(--fg)">All Tools</span>
+</label>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_connection_info" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Connection info</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_experiments" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List experiments</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Get experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_items" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List items</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Create experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="update_experiment_body" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Update experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="apply_tag_suggestions" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Apply tags</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="add_ai_review_comment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">AI comment</span></label>
+</div>
+</div>
+<script>
+function toggleAllTools(checkbox) {{
+  var tools = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  tools.forEach(function(t) {{ t.checked = checkbox.checked; }});
+}}
+</script>
 <button type="submit">Generate MCP URL</button>
 </form>
 </div></body></html>"""
@@ -242,12 +288,15 @@ def _create_register_form(error: str = "") -> str:
 def _profile_form(base_url, api_key, user_info, can_write, error=""):
     err_html = f'<div class="alert alert-error">{error}</div>' if error else ""
     fullname = (user_info or {}).get("fullname", "Unknown") or "Unknown"
+    key_type = "write" if can_write else "read-only"
+    key_type_badge = f'<span style="display:inline-block;padding:2px 8px;background:{"rgba(59,130,246,0.1)" if can_write else "rgba(234,179,8,0.1)"};border:1px solid {"rgba(59,130,246,0.2)" if can_write else "rgba(234,179,8,0.2)"};border-radius:4px;font-size:0.72rem;font-weight:600;color:{"var(--acc)" if can_write else "#e5a500"};margin-left:8px">{key_type}</span>'
+    
     if can_write:
         radios = ""
-        for k, n, d in [("r","Read-only","browse and search only"),("h","Hybrid","read + comments, tags, metadata (recommended)"),("f","Full","read + create, update, links")]:
+        for k, n, d in [("r","Read-only","browse and search only"),("h","Hybrid","read + comments, tags, metadata"),("f","Full","read + create, update, links")]:
             chk = ' checked' if k == 'h' else ''
             radios += '<label class="profile-card"><input type="radio" name="profile" value="' + k + '" ' + chk + '><span class="radio-dot"></span><span class="profile-card-label"><span class="pcard-title">' + n + '</span><span class="pcard-desc">' + d + '</span></span></label>'
-        box = '<div class="info-box write"><p><strong>&#10003; Authenticated as ' + fullname + '</strong></p><p class="info-muted">API key has write access. Choose a scope:</p><div class="profile-cards">' + radios + '</div></div>'
+        box = '<div class="info-box write"><p><strong>&#10003; Authenticated as ' + fullname + key_type_badge + '</strong></p><p class="info-muted">API key has write access. Choose a scope:</p><div class="profile-cards">' + radios + '</div></div>'
         btn = "Generate MCP URL"
     else:
         box = '<div class="info-box none"><p><strong>&#9888; Read-only key</strong></p><p class="info-muted">' + fullname + ' &mdash; only browsing allowed</p><input type="hidden" name="profile" value="r"></div>'
@@ -318,7 +367,10 @@ async def register_page(request: Request):
         if validated == "1" and profile in ("r", "h", "f"):
             # Step 2: User already saw profile selection, generate token
             try:
-                token = encode_token(base_url, api_key, profile=profile)
+                # Get selected tools from form
+                selected_tools = form.getlist("tools")
+                enabled_tools = selected_tools if selected_tools and "all" not in selected_tools else None
+                token = encode_token(base_url, api_key, profile=profile, enabled_tools=enabled_tools)
             except RuntimeError as e:
                 logger.error("Token creation failed: %s", e)
                 return HTMLResponse(_create_register_form("Server misconfiguration."), status_code=500)
@@ -359,7 +411,7 @@ async def handle_mcp(request: Request):
         _audit("POST_INVALID_TOKEN", token_prefix=token[:16] if token else "none")
         return HTMLResponse("Invalid or expired token.", status_code=401)
 
-    api_key, base_url, profile = result
+    api_key, base_url, profile, enabled_tools = result
 
     if not r_worker.is_alive:
         try:
@@ -368,6 +420,24 @@ async def handle_mcp(request: Request):
             return HTMLResponse(str(e), status_code=503)
 
     body = await request.body()
+    
+    # Check if this is a tools/call request and if the tool is enabled
+    if enabled_tools:
+        try:
+            import json
+            body_json = json.loads(body)
+            method = body_json.get("method", "")
+            if method == "tools/call":
+                tool_name = body_json.get("params", {}).get("name", "")
+                if tool_name and tool_name not in enabled_tools:
+                    return Response(
+                        content=json.dumps({"jsonrpc": "2.0", "error": {"code": -32601, "message": f"Tool '{tool_name}' is not enabled for this token"}}),
+                        media_type="application/json",
+                        status_code=403
+                    )
+        except:
+            pass
+    
     status, resp_text = await r_worker.proxy_request(api_key, base_url, body, extra_headers={"X-Write-Scope": profile})
 
     if status == 202:
@@ -375,6 +445,19 @@ async def handle_mcp(request: Request):
         return Response(status_code=202)
 
     if status == 200 and resp_text:
+        # Filter tools/list response if enabled_tools is set
+        if enabled_tools:
+            try:
+                import json
+                resp_json = json.loads(resp_text)
+                if "result" in resp_json and "tools" in resp_json["result"]:
+                    original_count = len(resp_json["result"]["tools"])
+                    resp_json["result"]["tools"] = [t for t in resp_json["result"]["tools"] if t.get("name") in enabled_tools]
+                    filtered_count = len(resp_json["result"]["tools"])
+                    if filtered_count < original_count:
+                        resp_text = json.dumps(resp_json)
+            except:
+                pass
         return Response(
             content=resp_text,
             media_type="application/json",
