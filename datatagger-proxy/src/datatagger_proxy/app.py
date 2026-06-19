@@ -71,7 +71,6 @@ button:hover{opacity:0.9}
 .note{font-size:0.78rem;color:#5c6f8c;margin-top:1rem}
 a{color:#3b82f6;text-decoration:none;font-size:0.82rem}
 a:hover{text-decoration:underline}
-</style>
 .tool-section{border:1px solid #1f2b40;border-radius:8px;margin-bottom:10px;overflow:hidden}
 .tool-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1a2236;cursor:pointer;user-select:none;transition:background 0.15s}
 .tool-section-header:hover{background:rgba(26,34,54,0.8)}
