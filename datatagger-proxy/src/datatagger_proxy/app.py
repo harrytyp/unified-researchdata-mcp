@@ -92,23 +92,60 @@ a:hover{text-decoration:underline}
 .preset-card:has(input:checked) .preset-radio::after{transform:scale(1)}
 .preset-card-text{margin-top:8px}
 .preset-name{font-size:0.82rem;font-weight:600;color:#e8edf5;display:block}
+
+.toggle-wrapper{display:flex;align-items:center;flex:1}
+.toggle-label{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;cursor:pointer;min-height:36px}
+.toggle-text{font-size:0.78rem;color:#e8edf5;flex:1}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-switch input{position:absolute;opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#2a3f60;border-radius:24px;transition:all 0.2s ease}
+.toggle-slider::before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#8898b4;border-radius:50%;transition:all 0.2s ease}
+.toggle-switch input:checked + .toggle-slider{background:#3b82f6}
+.toggle-switch input:checked + .toggle-slider::before{transform:translateX(20px);background:#fff}
 .preset-badge{font-size:0.7rem;color:#5c6f8c}</style>"""
 
 def _dt_profile_form(base_url, api_key):
     css = REG_CSS
-    read_tools = [("search_datatagger","Search"),("list_projects","List projects"),("get_project","Get project"),("list_folders","List folders"),("get_folder","Get folder"),("list_datasets","List datasets"),("download_fdm_file","Download file")]
-    write_tools = [("create_project","Create project"),("update_project","Update project"),("delete_project","Delete project"),("create_folder","Create folder"),("update_folder","Update folder"),("delete_folder","Delete folder"),("create_dataset","Create dataset"),("delete_dataset","Delete dataset"),("publish_dataset","Publish dataset"),("restore_dataset_version","Restore version"),("compare_dataset_versions","Compare versions"),("upload_dataset_file","Upload file"),("add_metadata_to_dataset","Add metadata")]
+    # Tool definitions with proper descriptions
+    read_tools = [
+        ("search_datatagger","Search","Full-text search across projects, folders, and datasets"),
+        ("list_projects","List projects","Browse all DataTagger projects with pagination"),
+        ("get_project","Get project","View a single project and its metadata"),
+        ("list_folders","List folders","Browse folders within a project"),
+        ("get_folder","Get folder","View a single folder and its contents"),
+        ("list_datasets","List datasets","Browse datasets within a folder with filtering"),
+        ("download_fdm_file","Download file","Download a dataset file to your local machine"),
+    ]
+    write_tools = [
+        ("create_project","Create project","Create a new top-level project"),
+        ("update_project","Update project","Modify an existing project's name or description"),
+        ("delete_project","Delete project","Permanently remove a project and all its contents"),
+        ("create_folder","Create folder","Create a new folder inside a project"),
+        ("update_folder","Update folder","Rename or update a folder"),
+        ("delete_folder","Delete folder","Remove a folder and its datasets"),
+        ("create_dataset","Create dataset","Create a new dataset entry inside a folder"),
+        ("delete_dataset","Delete dataset","Permanently remove a dataset"),
+        ("publish_dataset","Publish dataset","Finalize/commit a dataset (lock for editing)"),
+        ("restore_dataset_version","Restore version","Roll back a dataset to a previous historical version"),
+        ("compare_dataset_versions","Compare versions","View a diff between two dataset versions"),
+        ("upload_dataset_file","Upload file","Upload a raw file from your computer to a dataset"),
+        ("add_metadata_to_dataset","Add metadata","Attach structured metadata tags to a dataset"),
+    ]
+
+    # Build tool HTML with toggle switches and descriptions
+    tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3>'
     
-    tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3><label style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:0.8rem;font-weight:600;color:#e8edf5;margin-bottom:10px"><input type="checkbox" name="tools" value="all" checked style="accent-color:#3b82f6;width:16px;height:16px" onchange="toggleAllTools(this)">All Tools</label>'
-    categories = [("read","Read",read_tools),("write","Write",write_tools)]
-    for cat_id, cat_name, cat_tools in categories:
+    for cat_id, cat_name, cat_tools in [("read","Read",read_tools),("write","Write",write_tools)]:
         tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><input type="checkbox" id="' + cat_id + '_toggle" checked style="accent-color:#3b82f6;width:14px;height:14px" onclick="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)">' + cat_name + ' <span style="color:#5c6f8c;font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9660;</span></div><div id="' + cat_id + '">'
-        for t_name, t_label in cat_tools:
-            tools_html += '<div class="tool-row"><label style="font-size:0.78rem;color:#e8edf5"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked>' + t_label + '</label><button type="button" class="tool-info" title="' + t_name + '">?</button></div>'
+        for t_name, t_label, t_desc in cat_tools:
+            # Toggle switch HTML
+            tools_html += '<div class="tool-row"><div class="toggle-wrapper"><label class="toggle-label"><span class="toggle-text">' + t_label + '</span><div class="toggle-switch"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked><span class="toggle-slider"></span></div></label><button type="button" class="tool-info" title="' + t_desc + '">?</button></div></div>'
         tools_html += '</div></div>'
     tools_html += '</div>'
-    
-    return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>DataTagger MCP Registration</title>' + css + '</head><body><div class="card"><h2>DataTagger MCP Registration</h2><p class="sub">Key validated. Choose your tools:</p><form method="post"><input type="hidden" name="base_url" value="' + base_url + '"><input type="hidden" name="api_key" value="' + api_key + '"><input type="hidden" name="validated" value="1"><div style="margin-bottom:20px"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Profile Preset</h3><div class="preset-grid"><label class="preset-card"><input type="radio" name="profile" value="r" data-preset="r" style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Read-only</span><span class="preset-badge">Browse & search only</span></span></label><label class="preset-card"><input type="radio" name="profile" value="h" data-preset="h" checked style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Hybrid</span><span class="preset-badge">Read + publish, metadata</span></span></label><label class="preset-card"><input type="radio" name="profile" value="f" data-preset="f" style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Full</span><span class="preset-badge">All tools enabled</span></span></label></div></div>' + tools_html + '<button type="submit">Generate MCP URL</button></form></div><script>function toggleAllTools(cb){var all=document.querySelectorAll("input[name=tools]:not([value=all])");all.forEach(function(t){t.checked=cb.checked});document.querySelectorAll("[id$=_toggle]").forEach(function(ct){ct.checked=cb.checked})}function toggleSection(id){var el=document.getElementById(id);var arr=document.getElementById(id+"_arrow");if(el.style.display==="none"){el.style.display="block";arr.classList.remove("open")}else{el.style.display="none";arr.classList.add("open")}}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll("."+cid+"_item");items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){var all=document.querySelectorAll("input[name=tools]:not([value=all])");var ac=document.querySelector("input[name=tools][value=all]");ac.checked=Array.from(all).every(function(t){return t.checked})}function applyPreset(p){var r=document.querySelectorAll(".read_item"),w=document.querySelectorAll(".write_item"),a=document.querySelector("input[name=tools][value=all]");if(p==="r"){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false})}else if(p==="h"){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false})}else if(p==="f"){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true})}updateAllToggle();["read","write"].forEach(function(id){var ct=document.getElementById(id+"_toggle");if(ct){var its=document.querySelectorAll("."+id+"_item");ct.checked=Array.from(its).every(function(t){return t.checked})}})}document.querySelectorAll("input[name=profile][data-preset]").forEach(function(r){r.addEventListener("change",function(){applyPreset(this.value)})});document.querySelectorAll("input[name=tools]:not([value=all])").forEach(function(cb){cb.addEventListener("change",function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith("_item")});if(cl){var id=cl.replace("_item","");var ct=document.getElementById(id+"_toggle");var its=document.querySelectorAll("."+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}updateAllToggle()})});document.addEventListener("DOMContentLoaded",function(){applyPreset("h")});</script></body></html>'
+
+    js = "<script>function toggleSection(id){var el=document.getElementById(id);var arr=document.getElementById(id+'_arrow');if(el.style.display==='none'){el.style.display='block';arr.classList.remove('open')}else{el.style.display='none';arr.classList.add('open')}}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll('.'+cid+'_item');items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){['read','write'].forEach(function(id){var ct=document.getElementById(id+'_toggle');if(ct){var its=document.querySelectorAll('.'+id+'_item');ct.checked=Array.from(its).every(function(t){return t.checked})}})}function applyPreset(p){var r=document.querySelectorAll('.read_item'),w=document.querySelectorAll('.write_item');if(p==='r'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false})}else if(p==='h'){r.forEach(function(t){t.checked=true});w.forEach(function(t){var n=t.value;t.checked=(n==='publish_dataset'||n==='add_metadata_to_dataset'||n==='restore_dataset_version'||n==='compare_dataset_versions')})}else if(p==='f'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true})}updateAllToggle()}document.querySelectorAll('input[name=profile][data-preset]').forEach(function(r){r.addEventListener('change',function(){applyPreset(this.value)})});document.querySelectorAll('.toggle-switch input').forEach(function(cb){cb.addEventListener('change',function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith('_item')});if(cl){var id=cl.replace('_item','');var ct=document.getElementById(id+'_toggle');var its=document.querySelectorAll('.'+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}})});document.addEventListener('DOMContentLoaded',function(){applyPreset('h')});</script>"
+
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>DataTagger MCP Registration</title>' + css + '</head><body><div class="card"><h2>DataTagger MCP Registration</h2><p class="sub">Key validated. Choose your tools:</p><form method="post"><input type="hidden" name="base_url" value="' + base_url + '"><input type="hidden" name="api_key" value="' + api_key + '"><input type="hidden" name="validated" value="1"><div style="margin-bottom:20px"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Profile Preset</h3><div class="preset-grid"><label class="preset-card"><input type="radio" name="profile" value="r" data-preset="r" style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Read-only</span><span class="preset-badge">Browse &amp; search only</span></span></label><label class="preset-card"><input type="radio" name="profile" value="h" data-preset="h" checked style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Hybrid</span><span class="preset-badge">Read + publish, metadata</span></span></label><label class="preset-card"><input type="radio" name="profile" value="f" data-preset="f" style="display:none"><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">Full</span><span class="preset-badge">All tools enabled</span></span></label></div></div>' + tools_html + '<button type="submit">Generate MCP URL</button></form></div>' + js + '</body></html>'
 
 @app.api_route("/register", methods=["GET", "POST"])
 async def register_route(request: Request):
