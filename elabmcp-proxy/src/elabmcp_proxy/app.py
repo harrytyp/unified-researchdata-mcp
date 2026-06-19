@@ -289,23 +289,66 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
         info_box = '<div style="margin-bottom:20px"><p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px"><strong>' + fullname + '</strong>' + key_type_badge + ' &mdash; read-only key</p></div>'
         btn = "Generate MCP URL"
     
-    read_tools = [("get_connection_info","Connection details"),("get_current_user_capabilities","User capabilities"),("refresh_team_caps","Refresh team caps"),("list_item_statuses","Item statuses"),("list_experiment_statuses","Experiment statuses"),("get_experiment","Get experiment"),("list_experiments","List experiments"),("get_item","Get item"),("list_items","List items"),("list_experiment_categories","Experiment categories"),("list_item_categories","Item categories"),("list_experiment_templates","Experiment templates"),("get_experiment_template","Get template"),("list_item_types","Item types"),("get_item_type","Get item type"),("list_steps","List steps"),("get_entity_links","Entity links"),("expand_links_network","Link network"),("resolve_entity_by_query","Resolve by query")]
-    write_tools = [("add_step","Add step"),("update_step","Update step"),("toggle_step","Toggle step"),("delete_step","Delete step"),("create_experiment","Create experiment"),("create_item","Create item"),("create_experiment_from_template","Create from template"),("update_experiment_body","Update experiment body"),("update_item_body","Update item body"),("update_entity_metadata","Update metadata"),("update_entity_fields","Update fields"),("ensure_link","Create link"),("bulk_ensure_links","Bulk create links"),("delete_link","Delete link"),("bulk_delete_links","Bulk delete links"),("ensure_link_by_query","Link by query")]
-    ai_tools = [("review_experiment","AI review"),("suggest_tags","Suggest tags"),("suggest_metadata","Suggest metadata"),("apply_tag_suggestions","Apply tags"),("add_ai_review_comment","AI comment")]
+    read_tools = [
+        ("get_connection_info","Connection details","Server URL, active user identity, team, available categories and statuses"),
+        ("get_current_user_capabilities","User capabilities","Current user permissions, team membership, admin/sysadmin flags"),
+        ("refresh_team_caps","Refresh team caps","Refresh cached team capability flags for current session"),
+        ("list_item_statuses","Item statuses","All available statuses for database items"),
+        ("list_experiment_statuses","Experiment statuses","All available statuses for experiments"),
+        ("get_experiment","Get experiment","Full experiment: body, metadata, tags, comments, links, uploads"),
+        ("list_experiments","List experiments","Search or list experiments with category/status/owner/tag filters"),
+        ("get_item","Get item","Full database item with all metadata fields"),
+        ("list_items","List items","Search or list database items with category/status/owner/tag filters"),
+        ("list_experiment_categories","Experiment categories","All experiment categories with id, title, color, default flag"),
+        ("list_item_categories","Item categories","All item/resource categories with id, title, color"),
+        ("list_experiment_templates","Experiment templates","All reusable experiment templates with paging support"),
+        ("get_experiment_template","Get template","Single template with full body, metadata, and steps"),
+        ("list_item_types","Item types","All item types (resource categories) with default body templates"),
+        ("get_item_type","Get item type","Single item type with full body, metadata, and steps"),
+        ("list_steps","List steps","All steps/tasks with completion status (0/1) and ordering"),
+        ("get_entity_links","Entity links","All outgoing and incoming links for an entity with target metadata"),
+        ("expand_links_network","Link network","BFS link graph traversal from root entity up to configurable depth"),
+        ("resolve_entity_by_query","Resolve by query","Find experiment/item by search query, returns candidate list"),
+    ]
+    write_tools = [
+        ("add_step","Add step","Append a new step/task to an experiment, item, or template"),
+        ("update_step","Update step","Modify the text body of an existing step"),
+        ("toggle_step","Toggle step","Mark a step as complete or incomplete"),
+        ("delete_step","Delete step","Permanently remove a step from an entity"),
+        ("create_experiment","Create experiment","Create new experiment with title, body, category, status, tags"),
+        ("create_item","Create item","Create new database item (resource) with title, body, category"),
+        ("create_experiment_from_template","Create from template","Create experiment using an existing template, copying steps"),
+        ("update_experiment_body","Update experiment","Append or overwrite experiment body (preserves content type)"),
+        ("update_item_body","Update item","Append or overwrite item body (preserves content type)"),
+        ("update_entity_metadata","Update metadata","Update extra_fields metadata with merge or overwrite mode"),
+        ("update_entity_fields","Update fields","Update top-level fields: title, status, category on entity"),
+        ("ensure_link","Create link","Idempotently create directed link between two entities"),
+        ("bulk_ensure_links","Bulk create links","Create multiple directed links in one call"),
+        ("delete_link","Delete link","Idempotently remove a directed link between two entities"),
+        ("bulk_delete_links","Bulk delete links","Remove multiple directed links in one call"),
+        ("ensure_link_by_query","Link by query","Resolve target entity by search query and create the link"),
+    ]
+    ai_tools = [
+        ("review_experiment","AI review","AI-generated structured review summary for an experiment"),
+        ("suggest_tags","Suggest tags","AI-suggested tags based on experiment/item content analysis"),
+        ("suggest_metadata","Suggest metadata","AI-suggested structured metadata key-value pairs"),
+        ("apply_tag_suggestions","Apply tags","Persist AI-suggested tags to experiment or item"),
+        ("add_ai_review_comment","AI comment","Attach AI-generated review comment with provenance header"),
+    ]
     
-    tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3><label style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:0.8rem;font-weight:600;color:var(--fg);margin-bottom:10px"><input type="checkbox" name="tools" value="all" checked style="accent-color:var(--acc);width:16px;height:16px" onchange="toggleAllTools(this)">All Tools</label>'
+    tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3>'
     categories = [("read","Read",read_tools)]
     if can_write:
         categories += [("write","Write",write_tools), ("ai","AI",ai_tools)]
     for cat_id, cat_name, cat_tools in categories:
         tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><input type="checkbox" id="' + cat_id + '_toggle" checked style="accent-color:var(--acc);width:14px;height:14px" onclick="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)">' + cat_name + ' <span style="color:var(--neutral);font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9660;</span></div><div id="' + cat_id + '">'
-        for t_name, t_label in cat_tools:
-            tools_html += '<div class="tool-row"><label style="font-size:0.78rem;color:var(--fg)"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked>' + t_label + '</label><button type="button" class="tool-info" title="' + t_name + '">?</button></div>'
+        for t_name, t_label, t_desc in cat_tools:
+            tools_html += '<div class="tool-row"><div class="toggle-wrapper"><label class="toggle-label"><span class="toggle-text">' + t_label + '</span><div class="toggle-switch"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked><span class="toggle-slider"></span></div></label><button type="button" class="tool-info" title="' + t_desc + '">?</button></div></div>'
         tools_html += '</div></div>'
     tools_html += '</div>'
     
-    js = "<script>function toggleAllTools(cb){var all=document.querySelectorAll('input[name=tools]:not([value=all])');all.forEach(function(t){t.checked=cb.checked});document.querySelectorAll('[id$=_toggle]').forEach(function(ct){ct.checked=cb.checked})}function toggleSection(id){var el=document.getElementById(id);var arr=document.getElementById(id+'_arrow');if(el.style.display==='none'){el.style.display='block';arr.classList.remove('open')}else{el.style.display='none';arr.classList.add('open')}}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll('.'+cid+'_item');items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){var all=document.querySelectorAll('input[name=tools]:not([value=all])');var ac=document.querySelector('input[name=tools][value=all]');ac.checked=Array.from(all).every(function(t){return t.checked})}function applyPreset(p){var r=document.querySelectorAll('.read_item'),w=document.querySelectorAll('.write_item'),ai=document.querySelectorAll('.ai_item');if(p==='r'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=false})}else if(p==='h'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=true})}else if(p==='f'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true});ai.forEach(function(t){t.checked=true})}updateAllToggle();['read','write','ai'].forEach(function(id){var ct=document.getElementById(id+'_toggle');if(ct){var its=document.querySelectorAll('.'+id+'_item');ct.checked=Array.from(its).every(function(t){return t.checked})}})}document.querySelectorAll('input[name=profile][data-preset]').forEach(function(r){r.addEventListener('change',function(){applyPreset(this.value)})});document.querySelectorAll('input[name=tools]:not([value=all])').forEach(function(cb){cb.addEventListener('change',function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith('_item')});if(cl){var id=cl.replace('_item','');var ct=document.getElementById(id+'_toggle');var its=document.querySelectorAll('.'+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}updateAllToggle()})});document.addEventListener('DOMContentLoaded',function(){applyPreset('h')});</script>"
-    
+    js = "<script>function toggleSection(id){var el=document.getElementById(id);var arr=document.getElementById(id+'_arrow');if(el.style.display==='none'){el.style.display='block';arr.classList.remove('open')}else{el.style.display='none';arr.classList.add('open')}}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll('.'+cid+'_item');items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){['read','write','ai'].forEach(function(id){var ct=document.getElementById(id+'_toggle');if(ct){var its=document.querySelectorAll('.'+id+'_item');ct.checked=Array.from(its).every(function(t){return t.checked})}})}function applyPreset(p){var r=document.querySelectorAll('.read_item'),w=document.querySelectorAll('.write_item'),ai=document.querySelectorAll('.ai_item');if(p==='r'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=false})}else if(p==='h'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=true})}else if(p==='f'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true});ai.forEach(function(t){t.checked=true})}updateAllToggle()}document.querySelectorAll('input[name=profile][data-preset]').forEach(function(r){r.addEventListener('change',function(){applyPreset(this.value)})});document.querySelectorAll('.toggle-switch input').forEach(function(cb){cb.addEventListener('change',function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith('_item')});if(cl){var id=cl.replace('_item','');var ct=document.getElementById(id+'_toggle');var its=document.querySelectorAll('.'+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}})});document.addEventListener('DOMContentLoaded',function(){applyPreset('h')});</script>"
+
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>elabFTW MCP Registration</title>
 {REGFORM_CSS}
