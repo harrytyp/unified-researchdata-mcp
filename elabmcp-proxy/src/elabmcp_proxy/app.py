@@ -233,7 +233,59 @@ button:active { transform: translateY(0); }
 .footer { font-size: 0.75rem; color: var(--neutral); margin-top: 20px; }
 a { color: var(--acc); text-decoration: none; transition: color 0.15s var(--ease); }
 a:hover { color: #60a5fa; }
-</style>"""
+</style>
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0b0f1a;color:#e8edf5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#131827;border:1px solid #1f2b40;border-radius:14px;padding:2rem;max-width:480px;width:100%}
+h2{font-size:1.15rem;font-weight:700;margin-bottom:0.3rem}
+p{font-size:0.85rem;color:#8898b4;margin-bottom:1.25rem;line-height:1.5}
+label{display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.3rem;color:#8898b4}
+input{width:100%;padding:0.6rem 0.75rem;background:#1a2236;border:1px solid #1f2b40;border-radius:8px;color:#e8edf5;font-size:0.9rem;outline:none;box-sizing:border-box;margin-bottom:0.85rem}
+input:focus{border-color:#3b82f6}
+button{width:100%;padding:0.6rem;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:0.9rem;font-weight:600;cursor:pointer}
+button:hover{opacity:0.9}
+.url-box{background:#1a2236;border:1px solid #1f2b40;border-radius:8px;padding:0.85rem;font-family:monospace;font-size:0.78rem;word-break:break-all;margin:0.85rem 0;color:#e8edf5}
+.note{font-size:0.78rem;color:#5c6f8c;margin-top:1rem}
+a{color:#3b82f6;text-decoration:none;font-size:0.82rem}
+a:hover{text-decoration:underline}
+.tool-section{border:1px solid #1f2b40;border-radius:8px;margin-bottom:10px;overflow:hidden}
+.tool-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1a2236;cursor:pointer;user-select:none;transition:background 0.15s}
+.tool-section-header:hover{background:rgba(26,34,54,0.8)}
+.tool-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:4px;transition:background 0.1s}
+.tool-row:hover{background:#1a2236}
+.tool-row label{display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-height:28px}
+.tool-info{background:none;border:1px solid #2a3f60;color:#5c6f8c;cursor:help;font-size:0.65rem;padding:1px 5px;border-radius:50%;opacity:0.6;transition:all 0.15s;width:18px;height:18px;line-height:16px;text-align:center;font-style:italic;font-family:serif}
+.tool-info:hover{opacity:1;background:#1a2236;color:#8898b4}
+.tool-desc{display:none;padding:6px 10px 6px 12px;font-size:0.72rem;color:#5c6f8c;line-height:1.4;background:rgba(26,34,54,0.3);border-radius:0 0 4px 4px}
+.tool-row.expanded .tool-desc{display:block}
+.cat-arrow{font-size:0.85rem;font-weight:700;color:#5c6f8c;transition:all 0.2s;display:inline-block;width:18px;text-align:center}
+.tool-section.open .cat-arrow{content:"\2212"}
+.tool-section-body{max-height:0;overflow:hidden;transition:max-height 0.3s ease}
+.tool-section.open .tool-section-body{max-height:2000px}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px}
+.preset-card{flex:1;display:flex;flex-direction:column;padding:14px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:8px;cursor:pointer;transition:all 0.15s ease;position:relative}
+.preset-card:hover{border-color:#2a3f60;transform:translateY(-1px)}
+.preset-card input{position:absolute;opacity:0;width:0;height:0}
+.preset-card:has(input:checked){border-color:#3b82f6;background:rgba(59,130,246,0.06)}
+.preset-radio{display:inline-block;width:18px;height:18px;border:2px solid #2a3f60;border-radius:50%;position:relative;flex-shrink:0}
+.preset-card:has(input:checked) .preset-radio{border-color:#3b82f6}
+.preset-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:#3b82f6;transform:scale(0);transition:transform 0.15s ease}
+.preset-card:has(input:checked) .preset-radio::after{transform:scale(1)}
+.preset-card-text{margin-top:8px}
+.preset-name{font-size:0.82rem;font-weight:600;color:#e8edf5;display:block}
+
+.toggle-wrapper{display:flex;align-items:center;flex:1}
+.toggle-label{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;cursor:pointer;min-height:36px}
+.toggle-text{font-size:0.78rem;color:#e8edf5;flex:1}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-switch input{position:absolute;opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#2a3f60;border-radius:24px;transition:all 0.2s ease}
+.toggle-slider::before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#8898b4;border-radius:50%;transition:all 0.2s ease}
+.toggle-switch input:checked + .toggle-slider{background:#3b82f6}
+.toggle-switch input:checked + .toggle-slider::before{transform:translateX(20px);background:#fff}
+.preset-badge{font-size:0.7rem;color:#5c6f8c}
+"""
 
 def _create_register_form(error: str = "") -> str:
     err_html = f'<div class="alert alert-error">{error}</div>' if error else ""
@@ -276,7 +328,7 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
     key_bg = "rgba(59,130,246,0.1)" if can_write else "rgba(234,179,8,0.1)"
     key_bd = "rgba(59,130,246,0.2)" if can_write else "rgba(234,179,8,0.2)"
     key_cl = "var(--acc)" if can_write else "#e5a500"
-    key_type_badge = f'<span style="display:inline-block;padding:3px 10px;background:{key_bg};border:1px solid {key_bd};border-radius:6px;font-size:0.78rem;font-weight:700;color:{key_cl};margin-left:10px;text-transform:uppercase;letter-spacing:0.03em">&#9679; {key_type} key</span>'
+    key_type_badge = f'<span style="display:inline-block;padding:2px 8px;background:{key_bg};border:1px solid {key_bd};border-radius:4px;font-size:0.72rem;font-weight:600;color:{key_cl};margin-left:10px;text-transform:uppercase;letter-spacing:0.03em">{key_type} key</span>'
     
     if can_write:
         radios = ""
