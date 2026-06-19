@@ -79,8 +79,8 @@ a:hover{text-decoration:underline}
 .tool-row label{display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-height:28px}
 .tool-info{background:none;border:none;color:#5c6f8c;cursor:help;font-size:0.75rem;padding:3px 6px;border-radius:3px;opacity:0.5;transition:all 0.15s}
 .tool-info:hover{opacity:1;background:#1a2236;color:#8898b4}
-.cat-arrow{font-size:0.7rem;color:#5c6f8c;transition:transform 0.2s}
-.cat-arrow.open{transform:rotate(180deg)}
+.cat-arrow{font-size:0.7rem;color:#5c6f8c;transition:transform 0.2s;display:inline-block}
+.cat-arrow.open{transform:rotate(90deg)}
 .preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px}
 .preset-card{flex:1;display:flex;flex-direction:column;padding:14px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:8px;cursor:pointer;transition:all 0.15s ease;position:relative}
 .preset-card:hover{border-color:#2a3f60;transform:translateY(-1px)}
@@ -136,7 +136,7 @@ def _dt_profile_form(base_url, api_key):
     tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3>'
     
     for cat_id, cat_name, cat_tools in [("read","Read",read_tools),("write","Write",write_tools)]:
-        tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><input type="checkbox" id="' + cat_id + '_toggle" checked style="accent-color:#3b82f6;width:14px;height:14px" onclick="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)">' + cat_name + ' <span style="color:#5c6f8c;font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9660;</span></div><div id="' + cat_id + '">'
+        tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><input type="checkbox" id="' + cat_id + '_toggle" checked style="accent-color:#3b82f6;width:14px;height:14px" onclick="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)">' + cat_name + ' <span style="color:#5c6f8c;font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9654;</span></div><div id="' + cat_id + '">'
         for t_name, t_label, t_desc in cat_tools:
             # Toggle switch HTML
             tools_html += '<div class="tool-row"><div class="toggle-wrapper"><label class="toggle-label"><span class="toggle-text">' + t_label + '</span><div class="toggle-switch"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked><span class="toggle-slider"></span></div></label><button type="button" class="tool-info" title="' + t_desc + '">?</button></div></div>'
