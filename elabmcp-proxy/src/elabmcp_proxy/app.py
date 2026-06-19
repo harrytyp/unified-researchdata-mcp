@@ -233,7 +233,6 @@ button:active { transform: translateY(0); }
 .footer { font-size: 0.75rem; color: var(--neutral); margin-top: 20px; }
 a { color: var(--acc); text-decoration: none; transition: color 0.15s var(--ease); }
 a:hover { color: #60a5fa; }
-</style>
 
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0b0f1a;color:#e8edf5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -285,6 +284,9 @@ a:hover{text-decoration:underline}
 .toggle-switch input:checked + .toggle-slider{background:#3b82f6}
 .toggle-switch input:checked + .toggle-slider::before{transform:translateX(20px);background:#fff}
 .preset-badge{font-size:0.7rem;color:#5c6f8c}
+</style>
+
+
 """
 
 def _create_register_form(error: str = "") -> str:
