@@ -92,7 +92,7 @@ a:hover{text-decoration:underline}
 .preset-card:has(input:checked) .preset-radio::after{transform:scale(1)}
 .preset-card-text{margin-top:8px}
 .preset-name{font-size:0.82rem;font-weight:600;color:#e8edf5;display:block}
-.preset-badge{font-size:0.7rem;color:#5c6f8c}"""
+.preset-badge{font-size:0.7rem;color:#5c6f8c}</style>"""
 
 def _dt_profile_form(base_url, api_key):
     css = REG_CSS
