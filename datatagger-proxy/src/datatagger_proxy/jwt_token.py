@@ -27,7 +27,7 @@ def _get_jwt_secret() -> str:
     return secret
 
 
-def encode_token(base_url: str, api_key: str, secret: str | None = None, expiry_days: int | None = None) -> str:
+def encode_token(base_url: str, api_key: str, secret: str | None = None, expiry_days: int | None = None, enabled_tools: list | None = None) -> str:
     """Create a self-contained HMAC-signed token with embedded credentials."""
     if secret is None:
         secret = _get_jwt_secret()
@@ -39,6 +39,8 @@ def encode_token(base_url: str, api_key: str, secret: str | None = None, expiry_
         "k": base64.urlsafe_b64encode(api_key.encode()).decode(),
         "exp": int(time.time()) + expiry_days * 86400,
     }
+    if enabled_tools is not None:
+        payload["t"] = enabled_tools
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
     sig = hmac.new(secret.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{sig}"

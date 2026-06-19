@@ -14,6 +14,7 @@ from .jwt_token import encode_token, decode_token
 
 session_key_var: ContextVar[Optional[str]] = ContextVar("session_key", default=None)
 session_base_url_var: ContextVar[Optional[str]] = ContextVar("session_base_url", default=None)
+session_enabled_tools_var: ContextVar[Optional[list]] = ContextVar("session_enabled_tools", default=None)
 
 app = FastAPI()
 
@@ -23,7 +24,7 @@ class URLPrefixFixMiddleware(BaseHTTPMiddleware):
         if response.status_code in (307, 308, 301, 302):
             location = response.headers.get("location", "")
             if location and not location.startswith("/"):
-                parsed = __import__("urllib.parse").urlparse(location)
+                parsed = __import__("urllib.parse").parse.urlparse(location)
                 forwarded = request.headers.get("x-forwarded-proto", "")
                 if forwarded and parsed.scheme != forwarded:
                     loc = parsed._replace(scheme=forwarded).geturl()
@@ -45,6 +46,7 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
                     payload = decode_token(token)
                     session_key_var.set(payload["k"])
                     session_base_url_var.set(payload["u"])
+                    session_enabled_tools_var.set(payload.get("t"))
                 except Exception:
                     return JSONResponse(
                         {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Invalid token"}},
@@ -349,11 +351,18 @@ async def mcp_handler(request: Request):
         return JSONResponse(None, status_code=202)
     elif method == "tools/list":
         tools = await mcp_server.list_tools()
+        enabled = session_enabled_tools_var.get()
         result = [{"name": t.name, "description": t.description or "",
                     "inputSchema": t.inputSchema or {"type": "object", "properties": {}}}
-                  for t in tools]
+                  for t in tools
+                  if enabled is None or t.name in enabled]
         return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": result}})
     elif method == "tools/call":
+        enabled = session_enabled_tools_var.get()
+        if enabled is not None and params["name"] not in enabled:
+            tool_name = params["name"]
+            return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
+                "error": {"code": -32601, "message": "Tool " + repr(tool_name) + " is not enabled for this token"}})
         try:
             raw = await mcp_server.call_tool(params["name"], params.get("arguments", {}))
         except Exception as e:
