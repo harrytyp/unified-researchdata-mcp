@@ -77,8 +77,10 @@ a:hover{text-decoration:underline}
 .tool-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:4px;transition:background 0.1s}
 .tool-row:hover{background:#1a2236}
 .tool-row label{display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;min-height:28px}
-.tool-info{background:none;border:none;color:#5c6f8c;cursor:help;font-size:0.75rem;padding:3px 6px;border-radius:3px;opacity:0.5;transition:all 0.15s}
+.tool-info{background:none;border:1px solid #2a3f60;color:#5c6f8c;cursor:help;font-size:0.65rem;padding:1px 5px;border-radius:50%;opacity:0.6;transition:all 0.15s;width:18px;height:18px;line-height:16px;text-align:center;font-style:italic;font-family:serif}
 .tool-info:hover{opacity:1;background:#1a2236;color:#8898b4}
+.tool-desc{display:none;padding:6px 10px 6px 12px;font-size:0.72rem;color:#5c6f8c;line-height:1.4;background:rgba(26,34,54,0.3);border-radius:0 0 4px 4px}
+.tool-row.expanded .tool-desc{display:block}
 .cat-arrow{font-size:0.7rem;color:#5c6f8c;transition:transform 0.2s;display:inline-block}
 .cat-arrow.open{transform:rotate(90deg)}
 .preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px}
@@ -136,10 +138,10 @@ def _dt_profile_form(base_url, api_key):
     tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3>'
     
     for cat_id, cat_name, cat_tools in [("read","Read",read_tools),("write","Write",write_tools)]:
-        tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><div class="toggle-switch" style="width:36px;height:20px"><input type="checkbox" id="' + cat_id + '_toggle" checked onchange="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)" style="position:absolute;opacity:0;width:0;height:0"><span class="toggle-slider"></span></div>' + cat_name + ' <span style="color:#5c6f8c;font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9654;</span></div><div id="' + cat_id + '">'
+        tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><div class="toggle-switch" style="width:44px;height:24px"><input type="checkbox" id="' + cat_id + '_toggle" checked onchange="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)" style="position:absolute;opacity:0;width:0;height:0"><span class="toggle-slider"></span></div>' + cat_name + ' <span style="color:#5c6f8c;font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">&#9654;</span></div><div id="' + cat_id + '">'
         for t_name, t_label, t_desc in cat_tools:
             # Toggle switch HTML
-            tools_html += '<div class="tool-row"><div class="toggle-wrapper"><label class="toggle-label"><span class="toggle-text">' + t_label + '</span><div class="toggle-switch"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked><span class="toggle-slider"></span></div></label><button type="button" class="tool-info" title="' + t_desc + '">?</button></div></div>'
+            tools_html += '<div class="tool-row" onclick="if(!event.target.closest(''.toggle-switch''))this.classList.toggle(''expanded'')"><div class="toggle-wrapper"><label class="toggle-label"><span class="toggle-text">' + t_label + '</span><div class="toggle-switch"><input type="checkbox" name="tools" value="' + t_name + '" class="' + cat_id + '_item" checked><span class="toggle-slider"></span></div></label></div></div>'
         tools_html += '</div></div>'
     tools_html += '</div>'
 
