@@ -71,8 +71,6 @@ a{color:#3b82f6;text-decoration:none;font-size:0.82rem}
 a:hover{text-decoration:underline}
 </style>"""
 
-@app.api_route("/register", methods=["GET", "POST"])
-
 def _dt_profile_form(base_url, api_key):
     css = REG_CSS
     read_tools = [("search_datatagger","Search"),("list_projects","List projects"),("get_project","Get project"),("list_folders","List folders"),("get_folder","Get folder"),("list_datasets","List datasets"),("download_fdm_file","Download file")]
@@ -84,7 +82,23 @@ def _dt_profile_form(base_url, api_key):
         th += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="' + name + '" data-cat="write" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">' + label + '</span></label>'
     return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>DataTagger MCP Registration</title>' + css + '</head><body><div class="card"><h2>DataTagger MCP Registration</h2><p class="sub">Key validated. Choose your tools:</p><form method="post"><input type="hidden" name="base_url" value="' + base_url + '"><input type="hidden" name="api_key" value="' + api_key + '"><input type="hidden" name="validated" value="1"><div style="margin-bottom:20px"><h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Profile Presets</h3><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="r" data-preset="r" style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Read-only</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">Browse and search</span></label><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="h" data-preset="h" checked style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Hybrid</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">Read + metadata</span></label><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="f" data-preset="f" style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Full</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">All tools enabled</span></label></div></div><div style="margin-bottom:20px"><h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Select Tools</h3><div style="margin-bottom:12px"><label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600"><input type="checkbox" name="tools" value="all" checked style="accent-color:#3b82f6" onchange="toggleAllTools(this)"><span style="color:#e8edf5">All Tools</span></label></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">' + th + '</div></div><button type="submit">Generate MCP URL</button></form></div><script>function toggleAllTools(cb){document.querySelectorAll("input[name=tools]").forEach(function(t){if(t.value!=="all")t.checked=cb.checked})}function applyPreset(p){var r=document.querySelectorAll("input[name=tools][data-cat=read]"),w=document.querySelectorAll("input[name=tools][data-cat=write]"),a=document.querySelector("input[name=tools][value=all]");if(p==="r"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!1})}else if(p==="h"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!1})}else if(p==="f"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!0})}var all=document.querySelectorAll("input[name=tools]:not([value=all])");var c=Array.from(all).every(function(t){return t.checked});if(a)a.checked=c}document.querySelectorAll("input[name=profile][data-preset]").forEach(function(r){r.addEventListener("change",function(){applyPreset(this.value)})});document.addEventListener("DOMContentLoaded",function(){applyPreset("h")});</script></body></html>'
 
+@app.api_route("/register", methods=["GET", "POST"])
 async def register_route(request: Request):
+    if request.method == "GET":
+        prefix = os.environ.get("URL_PREFIX", "/dt").rstrip("/") or "/dt"
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>DataTagger MCP Registration</title>{REG_CSS}</head><body>
+<div class="card">
+<h2>DataTagger MCP Registration</h2>
+<p>Enter your DataTagger API key to generate a permanent MCP session URL.</p>
+<form method="post">
+<label>DataTagger Base URL</label>
+<input type="text" name="base_url" value="https://datatagger.ub.tum.de" required>
+<label>DataTagger API Token</label>
+<input type="password" name="api_key" placeholder="Paste your DataTagger API token" required>
+<button type="submit">Validate Key</button>
+</form>
+</div></body></html>""")
     if request.method == "POST":
         form = await request.form()
         api_key = str(form.get("api_key", "")).strip()
