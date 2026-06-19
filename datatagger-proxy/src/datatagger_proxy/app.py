@@ -72,33 +72,50 @@ a:hover{text-decoration:underline}
 </style>"""
 
 @app.api_route("/register", methods=["GET", "POST"])
+
+def _dt_profile_form(base_url, api_key):
+    css = REG_CSS
+    read_tools = [("search_datatagger","Search"),("list_projects","List projects"),("get_project","Get project"),("list_folders","List folders"),("get_folder","Get folder"),("list_datasets","List datasets"),("download_fdm_file","Download file")]
+    write_tools = [("create_project","Create project"),("update_project","Update project"),("delete_project","Delete project"),("create_folder","Create folder"),("update_folder","Update folder"),("delete_folder","Delete folder"),("create_dataset","Create dataset"),("delete_dataset","Delete dataset"),("publish_dataset","Publish dataset"),("restore_dataset_version","Restore version"),("compare_dataset_versions","Compare versions"),("upload_dataset_file","Upload file"),("add_metadata_to_dataset","Add metadata")]
+    th = ""
+    for name, label in read_tools:
+        th += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="' + name + '" data-cat="read" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">' + label + '</span></label>'
+    for name, label in write_tools:
+        th += '<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="' + name + '" data-cat="write" checked style="accent-color:#3b82f6"><span style="color:#e8edf5">' + label + '</span></label>'
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>DataTagger MCP Registration</title>' + css + '</head><body><div class="card"><h2>DataTagger MCP Registration</h2><p class="sub">Key validated. Choose your tools:</p><form method="post"><input type="hidden" name="base_url" value="' + base_url + '"><input type="hidden" name="api_key" value="' + api_key + '"><input type="hidden" name="validated" value="1"><div style="margin-bottom:20px"><h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Profile Presets</h3><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="r" data-preset="r" style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Read-only</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">Browse and search</span></label><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="h" data-preset="h" checked style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Hybrid</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">Read + metadata</span></label><label style="display:flex;flex-direction:column;align-items:center;padding:16px;background:#1a2236;border:1.5px solid #1f2b40;border-radius:10px;cursor:pointer"><input type="radio" name="profile" value="f" data-preset="f" style="display:none"><span style="font-size:0.82rem;font-weight:600;color:#e8edf5;margin-bottom:4px">Full</span><span style="font-size:0.72rem;color:#5c6f8c;text-align:center">All tools enabled</span></label></div></div><div style="margin-bottom:20px"><h3 style="font-size:0.95rem;font-weight:600;margin:0 0 12px;color:#e8edf5">Select Tools</h3><div style="margin-bottom:12px"><label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600"><input type="checkbox" name="tools" value="all" checked style="accent-color:#3b82f6" onchange="toggleAllTools(this)"><span style="color:#e8edf5">All Tools</span></label></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">' + th + '</div></div><button type="submit">Generate MCP URL</button></form></div><script>function toggleAllTools(cb){document.querySelectorAll("input[name=tools]").forEach(function(t){if(t.value!=="all")t.checked=cb.checked})}function applyPreset(p){var r=document.querySelectorAll("input[name=tools][data-cat=read]"),w=document.querySelectorAll("input[name=tools][data-cat=write]"),a=document.querySelector("input[name=tools][value=all]");if(p==="r"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!1})}else if(p==="h"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!1})}else if(p==="f"){r.forEach(function(t){t.checked=!0});w.forEach(function(t){t.checked=!0})}var all=document.querySelectorAll("input[name=tools]:not([value=all])");var c=Array.from(all).every(function(t){return t.checked});if(a)a.checked=c}document.querySelectorAll("input[name=profile][data-preset]").forEach(function(r){r.addEventListener("change",function(){applyPreset(this.value)})});document.addEventListener("DOMContentLoaded",function(){applyPreset("h")});</script></body></html>'
+
 async def register_route(request: Request):
     if request.method == "POST":
         form = await request.form()
         api_key = str(form.get("api_key", "")).strip()
         base_url = str(form.get("base_url", "https://datatagger.ub.tum.de")).strip()
+        validated = str(form.get("validated", "")).strip()
         if not api_key:
             return HTMLResponse(REG_CSS + "<div class=card><h2>Error</h2><p>API Key is required</p></div>", status_code=400)
+        if validated != "1":
+            # Step 1: validate key, then show profile form
+            try:
+                import httpx
+                async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{base_url.rstrip('/')}/api/v1/project/?limit=1",
+                        headers={"Authorization": f"Bearer {api_key}"}
+                    )
+                    if resp.status_code == 401:
+                        return HTMLResponse(REG_CSS + "<div class=card><h2>Invalid Key</h2><p>Token rejected by DataTagger API (HTTP 401). Check your token.</p></div>", status_code=401)
+                    if resp.status_code == 403:
+                        return HTMLResponse(REG_CSS + "<div class=card><h2>Access Denied</h2><p>Token valid but access denied (HTTP 403). Check permissions.</p></div>", status_code=403)
+                    if resp.status_code != 200:
+                        return HTMLResponse(REG_CSS + f"<div class=card><h2>Validation Failed</h2><p>DataTagger API returned HTTP {resp.status_code}.</p></div>", status_code=400)
+            except httpx.ConnectError:
+                return HTMLResponse(REG_CSS + "<div class=card><h2>Connection Error</h2><p>Could not connect to DataTagger API. Check the base URL.</p></div>", status_code=400)
+            except Exception as e:
+                return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>Validation failed: {e}</p></div>", status_code=500)
+            # Show profile form after validation
+            prefix = os.environ.get("URL_PREFIX", "/dt").rstrip("/") or "/dt"
+            return HTMLResponse(_dt_profile_form(base_url, api_key))
         try:
-            # Validate the token against the DataTagger API
-            import httpx
-            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-                resp = await client.get(
-                    f"{base_url.rstrip('/')}/api/v1/project/?limit=1",
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-                if resp.status_code == 401:
-                    return HTMLResponse(REG_CSS + "<div class=card><h2>Invalid Key</h2><p>Token rejected by DataTagger API (HTTP 401). Check your token.</p></div>", status_code=401)
-                if resp.status_code == 403:
-                    return HTMLResponse(REG_CSS + "<div class=card><h2>Access Denied</h2><p>Token valid but access denied (HTTP 403). Check permissions.</p></div>", status_code=403)
-                if resp.status_code != 200:
-                    return HTMLResponse(REG_CSS + f"<div class=card><h2>Validation Failed</h2><p>DataTagger API returned HTTP {resp.status_code}.</p></div>", status_code=400)
-        except httpx.ConnectError:
-            return HTMLResponse(REG_CSS + "<div class=card><h2>Connection Error</h2><p>Could not connect to DataTagger API. Check the base URL.</p></div>", status_code=400)
-        except Exception as e:
-            return HTMLResponse(REG_CSS + f"<div class=card><h2>Error</h2><p>Validation failed: {e}</p></div>", status_code=500)
-        try:
-            # Get selected tools from form
+            # Step 2: already validated, generate token
             selected_tools = form.getlist("tools")
             enabled_tools = selected_tools if selected_tools and "all" not in selected_tools else None
             token = encode_token(base_url, api_key, enabled_tools=enabled_tools)
