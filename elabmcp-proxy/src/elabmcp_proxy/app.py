@@ -251,14 +251,16 @@ def _create_register_form(error: str = "") -> str:
 <input type="password" name="api_key" placeholder="Paste your elabFTW API key" required>
 
 <script>
-function toggleAllTools(checkbox) {{
+function toggleAllTools(checkbox) {{{{
   var tools = document.querySelectorAll('input[name="tools"]:not([value="all"])');
-  tools.forEach(function(t) {{ t.checked = checkbox.checked; }});
-}}
+  tools.forEach(function(t) {{{{ t.checked = checkbox.checked; }}}});
+}}}}
 </script>
 <button type="submit">Generate MCP URL</button>
 </form>
-</div></body></html>"""
+</div>
+
+</body></html>"""
 
 
 # KEPT FOR BACKWARD COMPAT - _success_page is the new version
@@ -281,7 +283,7 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
         box = '<div class="info-box write"><p><strong>&#10003; Authenticated as ' + fullname + key_type_badge + '</strong></p><p class="info-muted">API key has write access. Choose a scope:</p><div class="profile-cards">' + radios + '</div></div>'
         btn = "Generate MCP URL"
     else:
-        box = '<div class="info-box none"><p><strong>&#9888; Read-only key</strong></p><p class="info-muted">' + fullname + ' &mdash; only browsing allowed</p><input type="hidden" name="profile" value="r"></div>'
+        box = '<div class="info-box none"><p><strong>&#9888; Read-only key</strong></p><p class="info-muted">' + fullname + ' &mdash; only browsing allowed</p><input type="hidden" name="profile" value="r" data-preset="r"></div>'
         btn = "Generate MCP URL"
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>elabFTW MCP Registration</title>
@@ -308,19 +310,61 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
 </label>
 </div>
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_connection_info" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Connection info</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_experiments" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List experiments</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Get experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_items" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List items</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_experiment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Create experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="update_experiment_body" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Update experiment</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="apply_tag_suggestions" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Apply tags</span></label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="add_ai_review_comment" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">AI comment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_connection_info" data-cat="read" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Connection info</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_experiments" data-cat="read" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List experiments</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="get_experiment" data-cat="read" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Get experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="list_items" data-cat="read" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">List items</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="create_experiment" data-cat="write" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Create experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="update_experiment_body" data-cat="write" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Update experiment</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="apply_tag_suggestions" data-cat="ai" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">Apply tags</span></label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border:1px solid var(--brd);border-radius:6px;cursor:pointer;font-size:0.75rem"><input type="checkbox" name="tools" value="add_ai_review_comment" data-cat="ai" checked style="accent-color:var(--acc)"><span style="color:var(--fg)">AI comment</span></label>
 </div>
 </div>
 <button type="submit">{btn}</button>
 </form>
-</div></body></html>"""
+</div>
+<script>
+function toggleAllTools(cb) {{
+  document.querySelectorAll('input[name="tools"]').forEach(function(t) {{
+    if (t.value !== 'all') t.checked = cb.checked;
+  }});
+}}
+function applyPreset(preset) {{
+  var readTools = document.querySelectorAll('input[name="tools"][data-cat="read"]');
+  var writeTools = document.querySelectorAll('input[name="tools"][data-cat="write"]');
+  var aiTools = document.querySelectorAll('input[name="tools"][data-cat="ai"]');
+  var allCb = document.querySelector('input[name="tools"][value="all"]');
+  
+  if (preset === 'r') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = false; }});
+    aiTools.forEach(function(t) {{ t.checked = false; }});
+  }} else if (preset === 'h') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = false; }});
+    aiTools.forEach(function(t) {{ t.checked = true; }});
+  }} else if (preset === 'f') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = true; }});
+    aiTools.forEach(function(t) {{ t.checked = true; }});
+  }}
+  // Update "All" checkbox
+  var allTools = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  var allChecked = Array.from(allTools).every(function(t) {{ return t.checked; }});
+  if (allCb) allCb.checked = allChecked;
+}}
+// Listen for profile radio changes
+document.querySelectorAll('input[name="profile"][data-preset]').forEach(function(radio) {{
+  radio.addEventListener('change', function() {{
+    applyPreset(this.value);
+  }});
+}});
+// Initialize with hybrid preset
+document.addEventListener('DOMContentLoaded', function() {{
+  applyPreset('h');
+}});
+</script>
+</body></html>"""
 
 def _success_page(personal_url, profile, prefix="/el"):
     pname = PROFILE_NAMES.get(profile, "Read-only")
@@ -344,7 +388,49 @@ def _success_page(personal_url, profile, prefix="/el"):
 <p class="footer">Token expires in 30 days. To change profile, re-register.</p>
 {buttons}
 <a href="{prefix}/register">&larr; Register another key</a>
-</div></body></html>"""
+</div>
+<script>
+function toggleAllTools(cb) {{
+  document.querySelectorAll('input[name="tools"]').forEach(function(t) {{
+    if (t.value !== 'all') t.checked = cb.checked;
+  }});
+}}
+function applyPreset(preset) {{
+  var readTools = document.querySelectorAll('input[name="tools"][data-cat="read"]');
+  var writeTools = document.querySelectorAll('input[name="tools"][data-cat="write"]');
+  var aiTools = document.querySelectorAll('input[name="tools"][data-cat="ai"]');
+  var allCb = document.querySelector('input[name="tools"][value="all"]');
+  
+  if (preset === 'r') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = false; }});
+    aiTools.forEach(function(t) {{ t.checked = false; }});
+  }} else if (preset === 'h') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = false; }});
+    aiTools.forEach(function(t) {{ t.checked = true; }});
+  }} else if (preset === 'f') {{
+    readTools.forEach(function(t) {{ t.checked = true; }});
+    writeTools.forEach(function(t) {{ t.checked = true; }});
+    aiTools.forEach(function(t) {{ t.checked = true; }});
+  }}
+  // Update "All" checkbox
+  var allTools = document.querySelectorAll('input[name="tools"]:not([value="all"])');
+  var allChecked = Array.from(allTools).every(function(t) {{ return t.checked; }});
+  if (allCb) allCb.checked = allChecked;
+}}
+// Listen for profile radio changes
+document.querySelectorAll('input[name="profile"][data-preset]').forEach(function(radio) {{
+  radio.addEventListener('change', function() {{
+    applyPreset(this.value);
+  }});
+}});
+// Initialize with hybrid preset
+document.addEventListener('DOMContentLoaded', function() {{
+  applyPreset('h');
+}});
+</script>
+</body></html>"""
 
 
 async def register_page(request: Request):
