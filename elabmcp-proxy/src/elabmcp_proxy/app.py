@@ -53,15 +53,16 @@ def _audit(event: str, **kwargs):
 
 # ── Auth helper ──
 
-def _get_creds_and_profile_from_jwt(token: str) -> tuple[str, str, str] | None:
-    """Decode JWT and return (api_key, base_url, profile) or None."""
+def _get_creds_and_profile_from_jwt(token: str) -> tuple[str, str, str, list | None] | None:
+    """Decode JWT and return (api_key, base_url, profile, enabled_tools) or None."""
     payload = decode_token(token)
     if payload is None:
         return None
     profile = payload.get("p", "r")
+    enabled_tools = payload.get("t")
     if profile not in ("r", "h", "f"):
         profile = "r"
-    return payload["k"], payload["u"], profile
+    return payload["k"], payload["u"], profile, enabled_tools
 _shared_http = None
 
 
