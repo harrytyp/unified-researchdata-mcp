@@ -4,3 +4,6 @@
 [submodule "econversion"]
 	path = econversion
 	url = git@github.com:alexburg14/MCP_eConversion.git
+[submodule "elabR"]
+	path = elabR
+	url = git@github.com:MarvinLuepke/elabR.git
