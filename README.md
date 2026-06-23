@@ -305,6 +305,41 @@ DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
 
 ---
 
+
+
+---
+
+## Updating
+
+### Update the main repo
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+This rebuilds all images with the latest code and restarts containers.
+
+### Update a single submodule
+
+```bash
+git pull                          # new submodule pointer
+git submodule update --init <name>  # fetch the new code
+docker compose up -d --build <name> # rebuild + restart that one container
+```
+
+Example for elabR:
+```bash
+git pull
+git submodule update --init elabR
+docker compose up -d --build elabmcp-proxy
+```
+
+Registered submodules live in [`.gitmodules`](.gitmodules):
+- `datatagger-mcp` → `harrytyp/datatagger-mcp`
+- `elabR` → `MarvinLuepke/elabR`
+- `econversion` → `alexburg14/MCP_eConversion`
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE). The dependency repos ([elabR](https://github.com/MarvinLuepke/elabR), [datatagger-mcp](https://github.com/harrytyp/datatagger-mcp)) are governed by their respective licenses.
