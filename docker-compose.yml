@@ -16,9 +16,6 @@ services:
       - PYTHONUNBUFFERED=1
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
-      - MCP_JWT_SECRET=***      - MCP_TOKEN_EXPIRY_DAYS=***
-      - MCP_JWT_SECRET=***
-      - MCP_TOKEN_EXPIRY_DAYS=30
     mem_limit: 256m
 
   # ── elabFTW MCP (shared R worker, one process for all users) ──
