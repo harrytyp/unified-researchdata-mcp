@@ -207,7 +207,7 @@ async def register_route(request: Request):
         forwarded = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("host", "localhost:8000")
         prefix = os.environ.get("URL_PREFIX", "/dt").rstrip("/") or "/dt"
-        personal = f"{forwarded}://{host}{prefix}/mcp/?token={token}"
+        personal = f"{forwarded}://{host}{prefix}/mcp?token={token}"
         register = f"{prefix}/register"
         buttons = '''<div style="display:flex;gap:10px;margin-top:18px;flex-direction:column">
   <div style="display:flex;gap:10px">
@@ -401,6 +401,7 @@ function toggleAllTools(checkbox) {{
 </div></body></html>""")
 
 @app.api_route("/mcp", methods=["GET", "POST"])
+@app.api_route("/mcp/", methods=["GET", "POST"], include_in_schema=False)
 async def mcp_handler(request: Request):
     if request.method == "GET":
         return Response(status_code=204)
