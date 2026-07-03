@@ -292,6 +292,20 @@ class TgaElabApp:
                     if r.status_code == 200:
                         dest = import_dir / f"exp{item_id}.tprc"
                         dest.write_bytes(r.content)
+                        # Also attach to elabFTW experiment
+                        try:
+                            with open(dest, 'rb') as f:
+                                rr = requests.post(
+                                    f"{self.client.url}/experiments/{item_id}/uploads",
+                                    files={'file': (f"exp{item_id}.tprc", f, 'application/octet-stream')},
+                                    headers=self.client.headers,
+                                    verify=False, timeout=30)
+                            if rr.status_code in (200, 201):
+                                self._log(f"  ✅ Attached to experiment {item_id}")
+                            else:
+                                self._log(f"  ⚠️ Could not attach (HTTP {rr.status_code})")
+                        except Exception as e:
+                            self._log(f"  ⚠️ Upload to elabFTW failed: {e}")
                         messagebox.showinfo("Done", f".tprc downloaded from server:\n{dest}")
                         return
                 except Exception as e:
