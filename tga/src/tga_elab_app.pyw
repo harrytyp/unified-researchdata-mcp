@@ -259,17 +259,19 @@ class TgaElabApp:
         """Download .tprc from selected experiment → TRIOS import folder."""
         sel = self.exp_tree.selection()
         if not sel:
-            self._log("⚠️ Select an experiment first")
+            messagebox.showwarning("No Selection", "Click an experiment in the list first, then try again.")
             return
         
         item_id = self.exp_tree.item(sel[0], 'values')[0]
         import_dir = Path(self.config.get('trios_import_dir', ''))
         if not import_dir.exists():
-            self._log(f"❌ Import folder not found: {import_dir}")
+            messagebox.showerror("Folder Not Found",
+                f"TRIOS import folder not found:\n{import_dir}\n\n"
+                "Configure it in the Configuration tab.")
             return
         
         if not self.client:
-            self._log("❌ No API key configured")
+            messagebox.showerror("Not Connected", "Enter your elabFTW API key in the Configuration tab.")
             return
         
         self._log(f"→ Looking for .tprc in item {item_id}...")
@@ -278,11 +280,15 @@ class TgaElabApp:
                        (u.get('real_name', '') or u.get('filename', '')).endswith('.tprc')]
         
         if not tprc_uploads:
-            self._log("⚠️ No .tprc found. Is the server watcher running?")
-            # Fallback: check extra_fields and generate URL for server to generate
-            self._log("   Set status to 'Running' and wait for server watcher")
+            msg = ("No .tprc file attached to this experiment yet.\n\n"
+                   "Make sure:\n"
+                   "1. The experiment status is set to 'Running'\n"
+                   "2. The server watcher has run (up to 1 min)\n"
+                   "3. Then try Download again")
+            messagebox.showinfo("No .tprc", msg)
             return
         
+        saved = []
         for up in tprc_uploads:
             fid = up.get('id', up.get('upload_id', ''))
             fname = up.get('real_name', up.get('filename', 'tga.tprc'))
@@ -293,8 +299,12 @@ class TgaElabApp:
             if r.status_code == 200:
                 dest.write_bytes(r.content)
                 self._log(f"✅ Saved: {dest}")
+                saved.append(str(dest))
             else:
                 self._log(f"❌ Download failed: HTTP {r.status_code}")
+        
+        if saved:
+            messagebox.showinfo("Done", f".tprc saved to:\n" + "\n".join(saved))
     
     def _upload_tri(self):
         """Upload a .tri file to the selected experiment."""
@@ -438,8 +448,16 @@ class TgaElabApp:
     
     def _open_folder(self):
         path = self.config.get('trios_export_dir', '')
-        if path:
-            os.startfile(path)
+        if not path:
+            messagebox.showwarning("Not Configured",
+                "No TRIOS export folder configured.\n\nSet it in the Configuration tab.")
+            return
+        if not Path(path).exists():
+            messagebox.showerror("Folder Not Found",
+                f"The configured export folder does not exist:\n{path}\n\n"
+                "Check the path in the Configuration tab.")
+            return
+        os.startfile(path)
     
     def _on_close(self):
         self.watcher_active = False
