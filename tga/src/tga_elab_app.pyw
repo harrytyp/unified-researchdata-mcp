@@ -355,6 +355,10 @@ class TgaElabApp:
             self.watch_btn.config(text="Start Watcher")
             self._log("Watcher stopped")
         else:
+            if not self.client:
+                messagebox.showerror("Not Connected",
+                    "Enter your elabFTW API key first in the Configuration tab.")
+                return
             self.watcher_active = True
             self.watch_status.set("Running")
             self.watch_btn.config(text="Stop Watcher")
