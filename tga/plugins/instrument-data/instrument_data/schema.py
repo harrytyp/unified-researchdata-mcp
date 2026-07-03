@@ -206,7 +206,7 @@ class TgaMeasurement(EntryData):
         type=bool,
         default=False,
         description="Toggle to True and save to trigger CSV processing",
-        a_eln=ELNAnnotation(component="ButtonEditQuantity"),
+        a_eln=ELNAnnotation(component="ActionEditQuantity"),
     )
 
     def normalize(self, archive, logger):
