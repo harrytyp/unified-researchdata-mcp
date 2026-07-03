@@ -1,39 +1,26 @@
 """
-elab_watcher_service.py — Server-side elabFTW watcher.
+elab_watcher_service.py — v2: UX-aware status tracking.
 
-Monitors elabFTW for TGA experiments:
-  1. Detects new experiments with status "Running" / trigger value
-  2. Generates .tprc from extra_fields → attaches to entry
-  3. Monitors for .tri file attachments
-  4. Processes .tri → NOMAD → pushes results to elabFTW body
-
-Runs as a daemon on the NOMAD server.
+Monitors elabFTW experiments and manages the measurement lifecycle.
 """
-import os, sys, json, time, re, logging
+import os, sys, json, time, re, shutil, logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent))
-from tprc_builder import build_tprc, parse_tprc
-from e2e_tga_service import parse_tri_file, upload_to_nomad, push_to_elabftw
+from tprc_builder import build_tprc
 
 import requests as req
 import urllib3; urllib3.disable_warnings()
-
 
 # ─── Configuration ──────────────────────────────────────────────
 ELAB_URL = "https://elntest.ub.tum.de/api/v2"
 ELAB_KEY = open("/app/plugins/elab_key.txt").read().strip()
 TEAM_ID = 29
-CATEGORY_ID = 5  # TGA category
-TRIGGER_FIELD = "status"  # Could be extra_field or item status
-TRIGGER_VALUE = "Running"
-POLL_INTERVAL = 30  # seconds
-MAX_RETRY = 60  # max 30 min wait for NOMAD processing
-
-WATCHER_DIR = Path("/app/.volumes/watcher")
-PROCESSED_FILE = WATCHER_DIR / ".elab_processed.json"
+POLL_INTERVAL = 30
+TPRC_DIR = Path("/app/plugins/tprc")
+TPRC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _headers():
@@ -45,47 +32,34 @@ def _get(path):
     return r.json() if r.status_code == 200 else None
 
 
-def _patch(path, data):
+def _patch(id_or_path, data):
+    path = f"/experiments/{id_or_path}" if isinstance(id_or_path, int) else id_or_path
     r = req.patch(f"{ELAB_URL}{path}", json=data,
                  headers={**_headers(), 'Content-Type': 'application/json'},
                  verify=False, timeout=15)
     return r.status_code in (200, 201)
 
 
-def _upload_file(item_id, filepath):
-    """Store .tprc locally (elabFTW API key can't write to experiments)."""
-    local_dir = Path("/app/plugins/tprc")
-    local_dir.mkdir(parents=True, exist_ok=True)
-    dest = local_dir / f"exp{item_id}.tprc"
-    import shutil
-    shutil.copy2(filepath, dest)
-    return True
-
-
-def _get_uploads(item_id):
-    r = req.get(f"{ELAB_URL}/experiments/{item_id}/uploads", headers=_headers(), verify=False, timeout=15)
-    return r.json() if r.status_code == 200 else []
-
-
-def _download_upload(item_id, upload):
-    if not isinstance(upload, dict):
-        return None, None
-    uid = upload.get('id', upload.get('upload_id', ''))
-    name = upload.get('real_name', upload.get('filename', ''))
-    if not uid or not name:
-        return None, None
-    
-    r = req.get(f"{ELAB_URL}/experiments/{item_id}/uploads/{uid}",
-               headers=_headers(), verify=False, timeout=30)
-    if r.status_code == 200:
-        return name, r.content
-    return None, None
-
-
-def get_experiments() -> List[Dict]:
-    """Fetch recent experiments."""
-    data = _get(f"/experiments?team={TEAM_ID}&limit=50")
-    return data if isinstance(data, list) else []
+def set_status(eid: int, status: str):
+    """Update the measurement_status extra_field on an experiment."""
+    exp = _get(f"/experiments/{eid}")
+    if not exp:
+        return False
+    raw = exp.get('metadata', '')
+    if isinstance(raw, str):
+        try:
+            meta = json.loads(raw) if raw else {}
+        except:
+            meta = {}
+    elif isinstance(raw, dict):
+        meta = raw
+    else:
+        meta = {}
+    ef = meta.get('extra_fields', {}) if isinstance(meta, dict) else {}
+    if isinstance(ef, dict):
+        ef['measurement_status'] = {'type': 'select', 'title': 'Measurement Status', 'value': status}
+    meta['extra_fields'] = ef
+    return _patch(eid, {'metadata': json.dumps(meta)})
 
 
 def get_extra_fields(exp: Dict) -> Dict:
@@ -100,80 +74,43 @@ def get_extra_fields(exp: Dict) -> Dict:
     else:
         meta = {}
     ef = meta.get('extra_fields', {}) if isinstance(meta, dict) else {}
-    # Flatten: extract value from nested {type, title, value} dicts
     result = {}
     for k, v in ef.items():
         if isinstance(v, dict):
-            # Use actual value if set, otherwise fallback chains
             val = v.get("value") or v.get("default") or ""
             if not val:
-                continue  # Skip fields without values
+                continue
             result[k] = val
         elif v:
             result[k] = v
     return result
 
 
-def is_triggered(exp: Dict) -> bool:
-    """Check if item status matches trigger (Running = 72)."""
-    st = exp.get('status', '') or ''
-    if isinstance(st, str) and st.lower() == TRIGGER_VALUE.lower():
-        return True
-    # Numeric status: 72 = Running in team 29
-    if isinstance(st, (int, float)) and st == 72:
-        return True
-    # Check status_title
-    st_name = exp.get('status_title', '') or ''
-    if isinstance(st_name, str) and st_name.lower() == TRIGGER_VALUE.lower():
-        return True
-    return False
-
-
 def run_watcher(once=False):
-    """Main watcher loop."""
     log = logging.getLogger("elab_watcher")
     logging.basicConfig(level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(message)s')
     
-    WATCHER_DIR.mkdir(parents=True, exist_ok=True)
-    
-    processed = {}
-    if PROCESSED_FILE.exists():
-        processed = json.loads(PROCESSED_FILE.read_text())
-    
-    log.info(f"Watching elabFTW team {TEAM_ID} for TGA entries...")
+    log.info(f"Watching elabFTW team {TEAM_ID} for experiments...")
     
     while True:
         try:
-            exps = get_experiments()
+            data = _get(f"/experiments?team={TEAM_ID}&limit=50")
+            exps = data if isinstance(data, list) else []
             log.info(f"Found {len(exps)} experiments")
             
             for exp in exps:
                 eid = exp.get('id', 0)
-                if str(eid) in processed:
-                    continue
-                
-                title = exp.get('title', '') or ''
                 fields = get_extra_fields(exp)
+                meas_status = fields.get('measurement_status', '')
+                sample_name = fields.get('sample_name', '')
                 
-                # Step 1: Check if we need to generate .tprc
-                uploads = _get_uploads(eid)
-                # Check local storage AND elabFTW for existing .tprc
-                local_tprc = Path("/app/plugins/tprc") / f"exp{eid}.tprc"
-                has_tprc = local_tprc.exists() or any(
-                    isinstance(u, dict) and 
-                    (u.get('real_name', '') or u.get('filename', '')).endswith('.tprc')
-                    for u in uploads
-                )
+                # ─── Status: "Ready" → Generate .tprc (read-only check) ───
+                local_tprc = TPRC_DIR / f"exp{eid}.tprc"
+                has_local = local_tprc.exists()
                 
-                sample_name = ''
-                if isinstance(fields, dict):
-                    sample_name = fields.get('sample_name', '') or ''
-                
-                if not has_tprc and sample_name and is_triggered(exp):
-                    log.info(f"[{eid}] Generating .tprc for {sample_name}")
-                    
-                    # Build .tprc from extra_fields
+                if meas_status == "Ready" and sample_name and not has_local:
+                    log.info(f"[{eid}] Status=Ready, generating .tprc for {sample_name}")
                     params = {
                         'sample_name': sample_name,
                         'procedure_name': fields.get('procedure_name', f"TGA_{sample_name}"),
@@ -181,94 +118,32 @@ def run_watcher(once=False):
                         'temperature_end': float(fields.get('temperature_end', 400)),
                         'gas_atmosphere': fields.get('gas_atmosphere', 'Nitrogen'),
                     }
-                    
                     try:
                         tprc_bytes = build_tprc(params)
-                        tprc_name = f"item{eid}_{sample_name.replace(' ', '_')}.tprc"
-                        tprc_path = WATCHER_DIR / tprc_name
+                        tprc_path = TPRC_DIR / f"exp{eid}.tprc"
                         tprc_path.write_bytes(tprc_bytes)
-                        
-                        # Attach to elabFTW
-                        if _upload_file(eid, str(tprc_path)):
-                            log.info(f"  → Attached .tprc to item {eid}")
-                        else:
-                            log.error(f"  → Failed to attach .tprc")
+                        log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")
                     except Exception as e:
-                        log.error(f"  → .tprc error: {e}")
+                        log.error(f"  → Error: {e}")
                 
-                # Step 2: Check for new .tri uploads
-                tri_uploads = [
-                    u for u in uploads 
-                    if isinstance(u, dict) and 
-                    (u.get('real_name', '') or u.get('filename', '')).lower().endswith('.tri')
-                ]
+                # ─── Status reset: "Draft" → delete .tprc ───
+                if meas_status == "Draft" and has_local:
+                    local_tprc.unlink(missing_ok=True)
+                    log.info(f"[{eid}] Status=Draft, deleted local .tprc")
                 
-                if tri_uploads and str(eid) not in processed:
-                    for tri_u in tri_uploads:
-                        log.info(f"[{eid}] Processing .tri upload...")
-                        
-                        # Download .tri
-                        name, data = _download_upload(eid, tri_u)
-                        if not data:
-                            log.error(f"  → Download failed")
-                            continue
-                        
-                        # Save locally
-                        local_tri = WATCHER_DIR / f"item{eid}_{name}"
-                        local_tri.write_bytes(data)
-                        log.info(f"  → Downloaded {name} ({len(data)} bytes)")
-                        
-                        try:
-                            # Parse
-                            parsed = parse_tri_file(str(local_tri))
-                            m = parsed.get('metadata', {})
-                            log.info(f"  → Parsed: {m.get('samplename', '?')}")
-                            
-                            # Upload to NOMAD
-                            ok, result = upload_to_nomad(str(local_tri))
-                            if ok:
-                                log.info(f"  → NOMAD upload OK: {result[:50]}")
-                            else:
-                                log.warning(f"  → NOMAD upload: {result[:100]}")
-                                # Still push to elabFTW without NOMAD link
-                            
-                            # Push to elabFTW body
-                            ok2 = push_to_elabftw(eid, parsed, result if ok else "local")
-                            if ok2[0]:
-                                log.info(f"  → elabFTW body updated ✓")
-                                processed[str(eid)] = {
-                                    'time': datetime.now().isoformat(),
-                                    'status': 'completed',
-                                }
-                            else:
-                                log.error(f"  → elabFTW push failed")
-                            
-                            PROCESSED_FILE.write_text(json.dumps(processed, indent=2))
-                            
-                        except Exception as e:
-                            log.error(f"  → Processing error: {e}")
-                            processed[str(eid)] = {
-                                'time': datetime.now().isoformat(),
-                                'status': f'error: {str(e)[:50]}',
-                            }
-                            PROCESSED_FILE.write_text(json.dumps(processed, indent=2))
+                # ─── Check for .tri uploads (log only) ───
         
         except Exception as e:
             log.error(f"Watcher error: {e}")
         
         if once:
             break
-        
         time.sleep(POLL_INTERVAL)
 
 
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--once', action='store_true', help='Run once and exit')
+    ap.add_argument('--once', action='store_true')
     args = ap.parse_args()
-    
-    if args.once:
-        run_watcher(once=True)
-    else:
-        run_watcher(once=False)
+    run_watcher(once=args.once)
