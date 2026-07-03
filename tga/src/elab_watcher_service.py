@@ -54,14 +54,14 @@ def _patch(path, data):
 
 def _upload_file(item_id, filepath):
     with open(filepath, 'rb') as f:
-        r = req.post(f"{ELAB_URL}/experiments/{item_id}/uploads",
+        r = req.post(f"{ELAB_URL}/items/{item_id}/uploads",
                     files={'file': (Path(filepath).name, f, 'application/octet-stream')},
                     headers=_headers(), verify=False, timeout=60)
     return r.status_code in (200, 201)
 
 
 def _get_uploads(item_id):
-    r = req.get(f"{ELAB_URL}/experiments/{item_id}/uploads", headers=_headers(), verify=False, timeout=15)
+    r = req.get(f"{ELAB_URL}/items/{item_id}/uploads", headers=_headers(), verify=False, timeout=15)
     return r.json() if r.status_code == 200 else []
 
 
@@ -81,13 +81,16 @@ def _download_upload(item_id, upload):
 
 
 def get_experiments() -> List[Dict]:
-    """Fetch recent TGA experiments."""
-    data = _get(f"/experiments?team={TEAM_ID}&limit=30")
-    return data if isinstance(data, list) else []
+    """Fetch recent Items (Resources) in TGA category."""
+    data = _get(f"/items?team={TEAM_ID}&limit=50")
+    # Filter for TGA category (5 = Chemicals/TGA)
+    if isinstance(data, list):
+        return [i for i in data if i.get('category') in (5, 128)]
+    return []
 
 
 def get_extra_fields(exp: Dict) -> Dict:
-    raw = exp.get('metadata', '{}')
+    raw = exp.get('metadata', '')
     if isinstance(raw, str):
         try:
             meta = json.loads(raw) if raw else {}
@@ -97,24 +100,33 @@ def get_extra_fields(exp: Dict) -> Dict:
         meta = raw
     else:
         meta = {}
-    ef = meta.get('extra_fields', {})
-    # Flatten: values are nested in {type, title, value} dicts
+    ef = meta.get('extra_fields', {}) if isinstance(meta, dict) else {}
+    # Flatten: extract value from nested {type, title, value} dicts
     result = {}
     for k, v in ef.items():
         if isinstance(v, dict):
-            result[k] = v.get("value", v.get("title", ""))
-        else:
+            # Use actual value if set, otherwise fallback chains
+            val = v.get("value") or v.get("default") or ""
+            if not val:
+                continue  # Skip fields without values
+            result[k] = val
+        elif v:
             result[k] = v
     return result
 
 
 def is_triggered(exp: Dict) -> bool:
-    """Check if experiment status matches trigger."""
-    # Check status_title (human-readable, e.g. "Running")
-    st = exp.get('status_title', '') or ''
+    """Check if item status matches trigger (Running = 72)."""
+    st = exp.get('status', '') or ''
     if isinstance(st, str) and st.lower() == TRIGGER_VALUE.lower():
         return True
-    # Check timestamped status (numeric 122 = Running)
+    # Numeric status: 72 = Running in team 29
+    if isinstance(st, (int, float)) and st == 72:
+        return True
+    # Check status_title
+    st_name = exp.get('status_title', '') or ''
+    if isinstance(st_name, str) and st_name.lower() == TRIGGER_VALUE.lower():
+        return True
     return False
 
 

@@ -66,13 +66,13 @@ class ElabClient:
     
     def upload_file(self, item_id, filepath):
         with open(filepath, 'rb') as f:
-            r = requests.post(f"{self.url}/experiments/{item_id}/uploads",
+            r = requests.post(f"{self.url}/items/{item_id}/uploads",
                             files={'file': (Path(filepath).name, f, 'application/octet-stream')},
                             headers=self.headers, verify=False, timeout=60)
         return r.status_code in (200, 201)
     
     def download_file(self, item_id, upload_id, dest_path):
-        r = requests.get(f"{self.url}/experiments/{item_id}/uploads/{upload_id}",
+        r = requests.get(f"{self.url}/items/{item_id}/uploads/{upload_id}",
                         headers=self.headers, verify=False, timeout=30)
         if r.status_code == 200:
             Path(dest_path).write_bytes(r.content)
@@ -80,13 +80,13 @@ class ElabClient:
         return False
     
     def get_uploads(self, item_id):
-        r = requests.get(f"{self.url}/experiments/{item_id}/uploads",
+        r = requests.get(f"{self.url}/items/{item_id}/uploads",
                         headers=self.headers, verify=False, timeout=15)
         return r.json() if r.status_code == 200 else []
     
     def list_experiments(self, team_id, category=5, limit=20):
-        """List recent experiments with category 5 (TGA)."""
-        r = requests.get(f"{self.url}/experiments?team={team_id}&limit={limit}",
+        """List recent TGA items."""
+        r = requests.get(f"{self.url}/items?team={team_id}&limit={limit}",
                         headers=self.headers, verify=False, timeout=15)
         return r.json() if r.status_code == 200 else []
 
@@ -294,7 +294,7 @@ class TgaElabApp:
             fname = up.get('real_name', up.get('filename', 'tga.tprc'))
             dest = import_dir / fname
             
-            r = requests.get(f"{self.client.url}/experiments/{item_id}/uploads/{fid}",
+            r = requests.get(f"{self.client.url}/items/{item_id}/uploads/{fid}",
                            headers=self.client.headers, verify=False, timeout=30)
             if r.status_code == 200:
                 dest.write_bytes(r.content)
