@@ -1,0 +1,8 @@
+# Server dependencies
+flask>=3.0
+requests>=2.28
+
+# Windows app (for building .exe)
+# pyinstaller>=6.0
+# pystray>=0.19
+# pillow>=10.0

@@ -2,10 +2,10 @@
 __pycache__/
 *.pyc
 .DS_Store
+
 # TGA build artifacts
 tga/build/
 tga/build2/
 tga/build_fixed/
-tga/dist/
 tga/dist_fixed/
 tga/*.spec
