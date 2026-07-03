@@ -53,15 +53,17 @@ def _patch(path, data):
 
 
 def _upload_file(item_id, filepath):
-    with open(filepath, 'rb') as f:
-        r = req.post(f"{ELAB_URL}/items/{item_id}/uploads",
-                    files={'file': (Path(filepath).name, f, 'application/octet-stream')},
-                    headers=_headers(), verify=False, timeout=60)
-    return r.status_code in (200, 201)
+    """Store .tprc locally (elabFTW API key can't write to experiments)."""
+    local_dir = Path("/app/plugins/tprc")
+    local_dir.mkdir(parents=True, exist_ok=True)
+    dest = local_dir / f"exp{item_id}.tprc"
+    import shutil
+    shutil.copy2(filepath, dest)
+    return True
 
 
 def _get_uploads(item_id):
-    r = req.get(f"{ELAB_URL}/items/{item_id}/uploads", headers=_headers(), verify=False, timeout=15)
+    r = req.get(f"{ELAB_URL}/experiments/{item_id}/uploads", headers=_headers(), verify=False, timeout=15)
     return r.json() if r.status_code == 200 else []
 
 
@@ -81,12 +83,9 @@ def _download_upload(item_id, upload):
 
 
 def get_experiments() -> List[Dict]:
-    """Fetch recent Items (Resources) in TGA category."""
-    data = _get(f"/items?team={TEAM_ID}&limit=50")
-    # Filter for TGA category (5 = Chemicals/TGA)
-    if isinstance(data, list):
-        return [i for i in data if i.get('category') in (5, 128)]
-    return []
+    """Fetch recent experiments."""
+    data = _get(f"/experiments?team={TEAM_ID}&limit=50")
+    return data if isinstance(data, list) else []
 
 
 def get_extra_fields(exp: Dict) -> Dict:
@@ -159,7 +158,9 @@ def run_watcher(once=False):
                 
                 # Step 1: Check if we need to generate .tprc
                 uploads = _get_uploads(eid)
-                has_tprc = any(
+                # Check local storage AND elabFTW for existing .tprc
+                local_tprc = Path("/app/plugins/tprc") / f"exp{eid}.tprc"
+                has_tprc = local_tprc.exists() or any(
                     isinstance(u, dict) and 
                     (u.get('real_name', '') or u.get('filename', '')).endswith('.tprc')
                     for u in uploads

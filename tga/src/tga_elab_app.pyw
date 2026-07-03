@@ -21,6 +21,7 @@ import urllib3; urllib3.disable_warnings()
 CONFIG_FILE = Path.home() / '.tga_elab_config.json'
 DEFAULT_CONFIG = {
     'elabftw_url': 'https://elntest.ub.tum.de/api/v2',
+    'server_url': 'https://researchmcp.duckdns.org',
     'api_key': '',
     'team_id': 29,
     'trigger_field': 'Status',
@@ -66,13 +67,13 @@ class ElabClient:
     
     def upload_file(self, item_id, filepath):
         with open(filepath, 'rb') as f:
-            r = requests.post(f"{self.url}/items/{item_id}/uploads",
+            r = requests.post(f"{self.url}/experiments/{item_id}/uploads",
                             files={'file': (Path(filepath).name, f, 'application/octet-stream')},
                             headers=self.headers, verify=False, timeout=60)
         return r.status_code in (200, 201)
     
     def download_file(self, item_id, upload_id, dest_path):
-        r = requests.get(f"{self.url}/items/{item_id}/uploads/{upload_id}",
+        r = requests.get(f"{self.url}/experiments/{item_id}/uploads/{upload_id}",
                         headers=self.headers, verify=False, timeout=30)
         if r.status_code == 200:
             Path(dest_path).write_bytes(r.content)
@@ -80,13 +81,13 @@ class ElabClient:
         return False
     
     def get_uploads(self, item_id):
-        r = requests.get(f"{self.url}/items/{item_id}/uploads",
+        r = requests.get(f"{self.url}/experiments/{item_id}/uploads",
                         headers=self.headers, verify=False, timeout=15)
         return r.json() if r.status_code == 200 else []
     
     def list_experiments(self, team_id, category=5, limit=20):
-        """List recent TGA items."""
-        r = requests.get(f"{self.url}/items?team={team_id}&limit={limit}",
+        """List recent experiments with TGA-related titles."""
+        r = requests.get(f"{self.url}/experiments?team={team_id}&limit={limit}",
                         headers=self.headers, verify=False, timeout=15)
         return r.json() if r.status_code == 200 else []
 
@@ -187,6 +188,7 @@ class TgaElabApp:
         
         fields = [
             ('elabFTW URL:', 'elabftw_url'),
+            ('Server URL:', 'server_url'),
             ('API Key:', 'api_key'),
             ('Team ID:', 'team_id'),
             ('Trigger Field:', 'trigger_field'),
@@ -280,11 +282,27 @@ class TgaElabApp:
                        (u.get('real_name', '') or u.get('filename', '')).endswith('.tprc')]
         
         if not tprc_uploads:
+            # Fallback: try server's HTTP endpoint
+            server_url = self.config.get('server_url', '')
+            if server_url:
+                http_url = f"{server_url}/tprc/exp{item_id}.tprc"
+                self._log(f"→ Trying HTTP: {http_url}")
+                try:
+                    r = requests.get(http_url, verify=False, timeout=15)
+                    if r.status_code == 200:
+                        dest = import_dir / f"exp{item_id}.tprc"
+                        dest.write_bytes(r.content)
+                        messagebox.showinfo("Done", f".tprc downloaded from server:\n{dest}")
+                        return
+                except Exception as e:
+                    self._log(f"  HTTP fallback failed: {e}")
+            
             msg = ("No .tprc file attached to this experiment yet.\n\n"
                    "Make sure:\n"
-                   "1. The experiment status is set to 'Running'\n"
-                   "2. The server watcher has run (up to 1 min)\n"
-                   "3. Then try Download again")
+                   "1. The experiment has sample_name and parameters filled in\n"
+                   "2. The experiment status is set to 'Running'\n"
+                   "3. The server watcher has run (up to 1 min)\n"
+                   "4. Then try Download again")
             messagebox.showinfo("No .tprc", msg)
             return
         
@@ -294,7 +312,7 @@ class TgaElabApp:
             fname = up.get('real_name', up.get('filename', 'tga.tprc'))
             dest = import_dir / fname
             
-            r = requests.get(f"{self.client.url}/items/{item_id}/uploads/{fid}",
+            r = requests.get(f"{self.client.url}/experiments/{item_id}/uploads/{fid}",
                            headers=self.client.headers, verify=False, timeout=30)
             if r.status_code == 200:
                 dest.write_bytes(r.content)
