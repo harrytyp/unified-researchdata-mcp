@@ -123,17 +123,23 @@ def run_watcher(once=False):
                         tprc_path = TPRC_DIR / f"exp{eid}.tprc"
                         tprc_path.write_bytes(tprc_bytes)
                         log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")
-                        # Sync to researchmcp server
+                        # ─── Upload .tprc to NOMAD (authenticated) ───
                         try:
-                            import subprocess
-                            subprocess.run([
-                                "ssh", "-o", "StrictHostKeyChecking=accept-new",
-                                "debian@researchmcp.duckdns.org",
-                                "cat > /home/debian/unified-researchdata-mcp/web/tprc/exp{0}.tprc".format(eid)
-                            ], input=tprc_bytes, timeout=15, check=True)
-                            log.info(f"  → Synced to researchmcp.duckdns.org/tprc/exp{eid}.tprc")
-                        except Exception as sync_err:
-                            log.warning(f"  → Sync failed: {sync_err}")
+                            PAT = open("/app/.nomad_pat").read().strip()
+                            NOMAD_URL = "https://econversion.duckdns.org/nomad-oasis"
+                            with open(tprc_path, "rb") as f:
+                                nr = req.post(
+                                    f"{NOMAD_URL}/api/v1/uploads",
+                                    files={"file": (f"exp{eid}.tprc", f, "application/octet-stream")},
+                                    headers={"Authorization": f"Bearer {PAT}"},
+                                    verify=False, timeout=60
+                                )
+                            if nr.status_code == 200:
+                                log.info(f"  → Uploaded to NOMAD (exp{eid}.tprc)")
+                            else:
+                                log.warning(f"  → NOMAD upload: HTTP {nr.status_code}")
+                        except Exception as nomad_err:
+                            log.warning(f"  → NOMAD upload error: {nomad_err}")
                     except Exception as e:
                         log.error(f"  → Error: {e}")
                 

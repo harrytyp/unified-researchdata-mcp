@@ -21,7 +21,8 @@ import urllib3; urllib3.disable_warnings()
 CONFIG_FILE = Path.home() / '.tga_elab_config.json'
 DEFAULT_CONFIG = {
     'elabftw_url': 'https://elntest.ub.tum.de/api/v2',
-    'server_url': 'https://researchmcp.duckdns.org',
+    'nomad_url': 'https://econversion.duckdns.org/nomad-oasis',
+    'nomad_pat': '',
     'api_key': '',
     'team_id': 29,
     'trigger_field': 'Status',
@@ -188,7 +189,8 @@ class TgaElabApp:
         
         fields = [
             ('elabFTW URL:', 'elabftw_url'),
-            ('Server URL:', 'server_url'),
+            ('NOMAD URL:', 'nomad_url'),
+            ('NOMAD PAT:', 'nomad_pat'),
             ('API Key:', 'api_key'),
             ('Team ID:', 'team_id'),
             ('Trigger Field:', 'trigger_field'),
@@ -282,40 +284,40 @@ class TgaElabApp:
                        (u.get('real_name', '') or u.get('filename', '')).endswith('.tprc')]
         
         if not tprc_uploads:
-            # Fallback: try server's HTTP endpoint
-            server_url = self.config.get('server_url', '')
-            if server_url:
-                http_url = f"{server_url}/tprc/exp{item_id}.tprc"
-                self._log(f"→ Trying HTTP: {http_url}")
+            # Fallback: download from NOMAD (authenticated)
+            nomad_url = self.config.get('nomad_url', '')
+            nomad_pat = self.config.get('nomad_pat', '')
+            if nomad_url and nomad_pat:
                 try:
-                    r = requests.get(http_url, verify=False, timeout=15)
+                    # Search NOMAD for the .tprc upload
+                    search_url = f"{nomad_url}/api/v1/uploads?search=exp{item_id}"
+                    h = {"Authorization": f"Bearer {nomad_pat}"}
+                    r = requests.get(search_url, headers=h, verify=False, timeout=15)
                     if r.status_code == 200:
-                        dest = import_dir / f"exp{item_id}.tprc"
-                        dest.write_bytes(r.content)
-                        # Also attach to elabFTW experiment
-                        try:
-                            with open(dest, 'rb') as f:
-                                rr = requests.post(
-                                    f"{self.client.url}/experiments/{item_id}/uploads",
-                                    files={'file': (f"exp{item_id}.tprc", f, 'application/octet-stream')},
-                                    headers=self.client.headers,
-                                    verify=False, timeout=30)
-                            if rr.status_code in (200, 201):
-                                self._log(f"  ✅ Attached to experiment {item_id}")
-                            else:
-                                self._log(f"  ⚠️ Could not attach (HTTP {rr.status_code})")
-                        except Exception as e:
-                            self._log(f"  ⚠️ Upload to elabFTW failed: {e}")
-                        messagebox.showinfo("Done", f".tprc downloaded from server:\n{dest}")
-                        return
+                        data = r.json()
+                        # Find the upload by filename
+                        uploads_data = data if isinstance(data, list) else data.get('data', [])
+                        for up in uploads_data:
+                            fname = up.get('filename', up.get('title', ''))
+                            if 'tprc' in fname and str(item_id) in fname:
+                                up_id = up.get('upload_id', up.get('id', ''))
+                                dl_url = f"{nomad_url}/api/v1/uploads/{up_id}/raw"
+                                r2 = requests.get(dl_url, headers=h, verify=False, timeout=30)
+                                if r2.status_code == 200:
+                                    dest = import_dir / f"exp{item_id}.tprc"
+                                    dest.write_bytes(r2.content)
+                                    # Upload to elabFTW
+                                    self._upload_to_elab(item_id, dest)
+                                    messagebox.showinfo("Done", f".tprc from NOMAD:\n{dest}")
+                                    return
                 except Exception as e:
-                    self._log(f"  HTTP fallback failed: {e}")
+                    self._log(f"NOMAD download failed: {e}")
             
-            msg = ("No .tprc file attached to this experiment yet.\n\n"
+            msg = ("No .tprc file found.\n\n"
                    "Make sure:\n"
-                   "1. The experiment has sample_name and parameters filled in\n"
-                   "2. The experiment status is set to 'Running'\n"
-                   "3. The server watcher has run (up to 1 min)\n"
+                   "1. Experiment has measurement_status = 'Ready'\n"
+                   "2. Server watcher has run (up to 1 min)\n"
+                   "3. NOMAD URL + PAT set in Configuration tab\n"
                    "4. Then try Download again")
             messagebox.showinfo("No .tprc", msg)
             return
@@ -338,6 +340,26 @@ class TgaElabApp:
         if saved:
             messagebox.showinfo("Done", f".tprc saved to:\n" + "\n".join(saved))
     
+    def _upload_to_elab(self, item_id, filepath):
+        """Upload a file as attachment to an elabFTW experiment."""
+        if not self.client:
+            return False
+        try:
+            with open(filepath, 'rb') as f:
+                r = requests.post(
+                    f"{self.client.url}/experiments/{item_id}/uploads",
+                    files={'file': (filepath.name, f, 'application/octet-stream')},
+                    headers=self.client.headers, verify=False, timeout=30)
+            if r.status_code in (200, 201):
+                self._log(f"  ✅ Attached to experiment {item_id}")
+                return True
+            else:
+                self._log(f"  ⚠️ Attach failed: HTTP {r.status_code}")
+                return False
+        except Exception as e:
+            self._log(f"  ⚠️ Attach error: {e}")
+            return False
+
     def _upload_tri(self):
         """Upload a .tri file to the selected experiment."""
         sel = self.exp_tree.selection()
