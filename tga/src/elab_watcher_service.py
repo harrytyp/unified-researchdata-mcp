@@ -123,6 +123,17 @@ def run_watcher(once=False):
                         tprc_path = TPRC_DIR / f"exp{eid}.tprc"
                         tprc_path.write_bytes(tprc_bytes)
                         log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")
+                        # Sync to researchmcp server
+                        try:
+                            import subprocess
+                            subprocess.run([
+                                "ssh", "-o", "StrictHostKeyChecking=accept-new",
+                                "debian@researchmcp.duckdns.org",
+                                "cat > /home/debian/unified-researchdata-mcp/web/tprc/exp{0}.tprc".format(eid)
+                            ], input=tprc_bytes, timeout=15, check=True)
+                            log.info(f"  → Synced to researchmcp.duckdns.org/tprc/exp{eid}.tprc")
+                        except Exception as sync_err:
+                            log.warning(f"  → Sync failed: {sync_err}")
                     except Exception as e:
                         log.error(f"  → Error: {e}")
                 
@@ -131,7 +142,45 @@ def run_watcher(once=False):
                     local_tprc.unlink(missing_ok=True)
                     log.info(f"[{eid}] Status=Draft, deleted local .tprc")
                 
-                # ─── Check for .tri uploads (log only) ───
+                # ─── Check for .tri uploads ───
+                if has_local and meas_status in ("Ready", "Running"):
+                    uploads_r = req.get(f"{ELAB_URL}/experiments/{eid}/uploads",
+                                       headers=_headers(), verify=False, timeout=15)
+                    if uploads_r.status_code == 200:
+                        uploads = uploads_r.json()
+                        for u in uploads:
+                            if not isinstance(u, dict):
+                                continue
+                            fname = u.get('real_name', '') or u.get('filename', '')
+                            if not fname.lower().endswith('.tri'):
+                                continue
+                            # Download .tri
+                            fid = u.get('id', u.get('upload_id', ''))
+                            dl = req.get(f"{ELAB_URL}/experiments/{eid}/uploads/{fid}",
+                                        headers=_headers(), verify=False, timeout=30)
+                            if dl.status_code != 200:
+                                continue
+                            tri_path = TPRC_DIR / f"exp{eid}.tri"
+                            tri_path.write_bytes(dl.content)
+                            log.info(f"[{eid}] Downloaded .tri ({len(dl.content)} bytes)")
+                            
+                            # Parse and upload to NOMAD
+                            try:
+                                from e2e_tga_service import parse_tri_file, upload_to_nomad
+                                parsed = parse_tri_file(str(tri_path))
+                                sn = parsed.get('metadata', {}).get('samplename', '?')
+                                log.info(f"  → Parsed: {sn}, signals: {list(parsed.get('signals', {}).keys())}")
+                                
+                                ok, result = upload_to_nomad(str(tri_path))
+                                if ok:
+                                    log.info(f"  → NOMAD upload OK")
+                                else:
+                                    log.warning(f"  → NOMAD upload: {result[:100]}")
+                                
+                                # Clean up
+                                tri_path.unlink(missing_ok=True)
+                            except Exception as pe:
+                                log.error(f"  → Processing error: {pe}")
         
         except Exception as e:
             log.error(f"Watcher error: {e}")
