@@ -111,12 +111,15 @@ def run_watcher(once=False):
                 
                 if meas_status == "Ready" and sample_name and not has_local:
                     log.info(f"[{eid}] Status=Ready, generating .tprc for {sample_name}")
+                    iso = fields.get('isothermal_duration', '0')
                     params = {
                         'sample_name': sample_name,
                         'procedure_name': fields.get('procedure_name', f"TGA_{sample_name}"),
                         'heating_rate': float(fields.get('heating_rate', 10)),
                         'temperature_end': float(fields.get('temperature_end', 400)),
+                        'temperature_start': float(fields.get('temperature_start', 50)),
                         'gas_atmosphere': fields.get('gas_atmosphere', 'Nitrogen'),
+                        'isothermal_duration': float(iso) if str(iso).strip() else 0,
                     }
                     try:
                         tprc_bytes = build_tprc(params)
@@ -134,6 +137,26 @@ def run_watcher(once=False):
                                 )
                             if _ef.status_code in (200, 201):
                                 log.info(f"  → Attached to experiment {eid}")
+                                # Write procedure to experiment body
+                                iso_str = f", isothermal {int(iso)} min" if float(str(iso).strip() or 0) > 0 else ""
+                                proc = (f"<h3>Procedure Executed</h3>"
+                                        f"<table class=\"border\">"
+                                        f"<tr><td>Sample</td><td>{sample_name}</td></tr>"
+                                        f"<tr><td>Ramp</td><td>{params['heating_rate']} K/min → {params['temperature_end']}°C{iso_str}</td></tr>"
+                                        f"<tr><td>Gas</td><td>{params['gas_atmosphere']}</td></tr>"
+                                        f"<tr><td>Mass Flow</td><td>50 mL/min (fixed)</td></tr>"
+                                        f"</table>")
+                                try:
+                                    _b = req.patch(
+                                        f"https://elntest.ub.tum.de/api/v2/experiments/{eid}",
+                                        json={"body": proc},
+                                        headers={"Authorization": ELAB_KEY, "Content-Type": "application/json"},
+                                        verify=False, timeout=15
+                                    )
+                                    if _b.status_code in (200, 201):
+                                        log.info(f"  → Body updated with procedure")
+                                except Exception as be:
+                                    log.warning(f"  → Body update: {be}")
                             else:
                                 log.warning(f"  → elabFTW upload: HTTP {_ef.status_code}")
                         except Exception as _ef_err:
