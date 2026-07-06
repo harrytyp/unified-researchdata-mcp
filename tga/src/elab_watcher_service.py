@@ -123,23 +123,21 @@ def run_watcher(once=False):
                         tprc_path = TPRC_DIR / f"exp{eid}.tprc"
                         tprc_path.write_bytes(tprc_bytes)
                         log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")
-                        # ─── Upload .tprc to NOMAD (authenticated) ───
+                        # ─── Upload .tprc as attachment to elabFTW experiment ───
                         try:
-                            PAT = open("/app/plugins/.nomad_pat").read().strip()
-                            NOMAD_URL = "http://app:8000/nomad-oasis"
-                            with open(tprc_path, "rb") as f:
-                                nr = req.post(
-                                    f"{NOMAD_URL}/api/v1/uploads",
-                                    files={"file": (f"exp{eid}.tprc", f, "application/octet-stream")},
-                                    headers={"Authorization": f"Bearer {PAT}"},
+                            with open(tprc_path, "rb") as _f:
+                                _ef = req.post(
+                                    f"https://elntest.ub.tum.de/api/v2/experiments/{eid}/uploads",
+                                    files={"file": (f"exp{eid}.tprc", _f, "application/octet-stream")},
+                                    headers={"Authorization": ELAB_KEY},
                                     verify=False, timeout=60
                                 )
-                            if nr.status_code == 200:
-                                log.info(f"  → Uploaded to NOMAD (exp{eid}.tprc)")
+                            if _ef.status_code in (200, 201):
+                                log.info(f"  → Attached to experiment {eid}")
                             else:
-                                log.warning(f"  → NOMAD upload: HTTP {nr.status_code}")
-                        except Exception as nomad_err:
-                            log.warning(f"  → NOMAD upload error: {nomad_err}")
+                                log.warning(f"  → elabFTW upload: HTTP {_ef.status_code}")
+                        except Exception as _ef_err:
+                            log.warning(f"  → elabFTW upload error: {_ef_err}")
                     except Exception as e:
                         log.error(f"  → Error: {e}")
                 
