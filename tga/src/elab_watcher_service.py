@@ -125,8 +125,8 @@ def run_watcher(once=False):
                         log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")
                         # ─── Upload .tprc to NOMAD (authenticated) ───
                         try:
-                            PAT = open("/app/.nomad_pat").read().strip()
-                            NOMAD_URL = "https://econversion.duckdns.org/nomad-oasis"
+                            PAT = open("/app/plugins/.nomad_pat").read().strip()
+                            NOMAD_URL = "http://app:8000/nomad-oasis"
                             with open(tprc_path, "rb") as f:
                                 nr = req.post(
                                     f"{NOMAD_URL}/api/v1/uploads",
