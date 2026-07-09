@@ -101,7 +101,11 @@ def run_watcher(once=False):
             
             for exp in exps:
                 eid = exp.get('id', 0)
-                fields = get_extra_fields(exp)
+                # Fetch individual experiment to get metadata with extra_fields
+                detail = _get(f"/experiments/{eid}")
+                if not detail:
+                    continue
+                fields = get_extra_fields(detail)
                 meas_status = fields.get('measurement_status', '')
                 sample_name = fields.get('sample_name', '')
                 
