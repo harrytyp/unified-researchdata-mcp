@@ -35,7 +35,7 @@ class TgaParserEntryPoint(ParserEntryPoint):
                     from instrument_data.schema import TgaMeasurement
                     archive.data = TgaMeasurement(**data)
 
-            def is_mainfile(self, filename, logger):
+            def is_mainfile(self, filename, mime, buffer, decoded_buffer, compression=None):
                 return filename.endswith((".tri", ".xlsx", ".txt", ".csv"))
 
         return TgaParser()
