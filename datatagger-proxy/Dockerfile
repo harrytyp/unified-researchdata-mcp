@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Copy and install the datatagger-mcp library (pure MCP, no hosting)
 COPY datatagger-mcp/ /app/datatagger-mcp/
-RUN pip install /app/datatagger-mcp/ --no-deps && pip install "mcp[cli]>=1.2.0" httpx>=0.28.0
+RUN pip install /app/datatagger-mcp/ --no-deps && pip install "mcp[cli]>=1.2.0,<2.0" httpx>=0.28.0
 
 # Copy and install the proxy
 COPY datatagger-proxy/ /app/datatagger-proxy/
