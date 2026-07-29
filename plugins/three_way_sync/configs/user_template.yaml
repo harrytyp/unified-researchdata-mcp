@@ -1,0 +1,9 @@
+# Per-user elabFTW API configuration
+# Place in configs/{username}.yaml on the NOMAD server.
+# The normalizer reads this so you don't paste your key every time.
+
+elabftw:
+  # Your personal elabFTW API token
+  api_key: "74-your-token-here"
+  # Optional: override API URL
+  api_url: "https://elntest.ub.tum.de/api/v2"

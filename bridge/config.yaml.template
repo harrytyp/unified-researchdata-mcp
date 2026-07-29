@@ -1,0 +1,20 @@
+# Shared credentials for elabFTW ↔ NOMAD ↔ DataTagger bridge
+# Copy this to config.yaml and fill in your API keys.
+
+elabftw:
+  # Your elabFTW instance API URL
+  api_url: "https://elntest.ub.tum.de/api/v2"
+  # API key from My Account → API tokens
+  api_key: "72-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+nomad:
+  # NOMAD API URL (local to the container)
+  api_url: "http://localhost:8000/api/v1"
+  # API key from your NOMAD profile
+  api_key: ""
+
+datatagger:
+  # DataTagger API URL
+  api_url: "https://datatagger.ub.tum.de/api/v1"
+  # API key from your DataTagger account
+  api_key: ""
