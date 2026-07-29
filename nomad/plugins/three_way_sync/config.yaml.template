@@ -1,0 +1,9 @@
+# Per-user elabFTW API configuration
+# Copy this file to configs/{username}.yaml with your personal API key.
+# The normalizer reads this so you don't have to paste your key every time.
+
+elabftw:
+  # Your personal API key from elabFTW (My Account → API tokens)
+  api_key: "74-your-token-here"
+  # Optional: override API URL
+  api_url: "https://elntest.ub.tum.de/api/v2"
