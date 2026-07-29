@@ -22,7 +22,9 @@ m_package = SchemaPackage(
 
 from nomad.datamodel.data import EntryData, ElnIntegrationCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation
-from nomad.metainfo import JSON, Datetime, Quantity, Section, SubSection, MSection
+from nomad.metainfo import JSON, Datetime, MEnum, Quantity, Section, SubSection, MSection
+from nomad.datamodel.metainfo.plot import PlotSection, PlotlyFigure
+import plotly.express as px
 
 
 # ── Shared sub-sections ──────────────────────────────────────────────────────
@@ -65,7 +67,8 @@ class InstrumentSample(MSection):
         description="Unit for sample mass")
     operator = Quantity(
         type=str,
-        description="Name of the person who ran the measurement")
+        description="Name of the person who ran the measurement",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
     run_date = Quantity(
         type=Datetime,
         description="Date and time of the measurement run")
@@ -79,6 +82,27 @@ class TemperatureRamp(MSection):
     rate = Quantity(type=float, description="Heating/cooling rate")
     target_temperature = Quantity(type=float, description="Target temp")
     duration = Quantity(type=float, unit="min", description="Hold time if isothermal")
+
+
+class TemperatureSegment(MSection):
+    """A single segment (ramp or isothermal) in the temperature program,
+    entered directly by the user in the NOMAD ELN interface."""
+    segment_type = Quantity(
+        type=str,
+        description="ramp | isothermal",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
+    end_temp = Quantity(
+        type=float, unit="°C",
+        description="Target temperature (for ramp segments)",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+    rate = Quantity(
+        type=float, unit="°C/minute",
+        description="Heating/cooling rate (for ramp segments)",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+    duration_min = Quantity(
+        type=float, unit="minute",
+        description="Hold duration (for isothermal segments)",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
 
 
 # ── TGA ──────────────────────────────────────────────────────────────────────
@@ -120,7 +144,7 @@ class TgaResults(MSection):
         description="Individual mass loss steps")
 
 
-class TgaMeasurement(EntryData):
+class TgaMeasurement(PlotSection, EntryData):
     """TGA measurement with parsed signal data and computed results.
 
     Create this entry by importing a TRIOS-exported CSV/TXT file,
@@ -136,7 +160,9 @@ class TgaMeasurement(EntryData):
         type=str,
         description="Alumina | Platinum | Aluminum",
         a_eln=ELNAnnotation(component="StringEditQuantity"))
-    pan_number = Quantity(type=str, description="Pan / crucible identifier")
+    pan_number = Quantity(
+        type=str, description="Pan / crucible identifier",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
 
     # ── Method ──
     procedure_name = Quantity(
@@ -147,15 +173,22 @@ class TgaMeasurement(EntryData):
         type=str,
         description="Full method description (heating profile)",
         a_eln=ELNAnnotation(component="RichTextEditQuantity"))
+    temperature_segments = SubSection(
+        sub_section=TemperatureSegment,
+        repeats=True,
+        description="Ordered list of temperature program segments (ramp/isothermal), entered by the user")
     gas_atmosphere = Quantity(
-        type=str,
-        description="N2 | Air | Ar | Synthetic Air | O2")
+        type=MEnum(["N2", "Air", "Ar", "Synthetic Air", "O2"]),
+        description="Purge gas atmosphere",
+        a_eln=ELNAnnotation(component="EnumEditQuantity"))
     gas_flow_rate = Quantity(
         type=float, unit="mL/min",
-        description="Sample purge gas flow rate")
+        description="Sample purge gas flow rate",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
     balance_flow_rate = Quantity(
         type=float, unit="mL/min",
-        description="Balance purge gas flow rate")
+        description="Balance purge gas flow rate",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
 
     # ── Raw instrument metadata ──
     instrument_name = Quantity(type=str, description="Instrument serial/name")
@@ -211,11 +244,21 @@ class TgaMeasurement(EntryData):
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
-        if not self.process_now:
-            return
-        self.process_now = False
-        from instrument_data.processor import normalize_tga_entry
-        normalize_tga_entry(self, archive, logger)
+        self.figures = []
+        if self.process_now:
+            self.process_now = False
+            from instrument_data.processor import normalize_tga_entry
+            normalize_tga_entry(self, archive, logger)
+
+        if self.temperature_signal and self.weight_signal and \
+                len(self.temperature_signal) == len(self.weight_signal):
+            fig = px.scatter(
+                x=self.temperature_signal,
+                y=self.weight_signal,
+                labels={'x': 'Temperature (°C)', 'y': 'Mass (mg)'},
+                title='TGA — Mass vs Temperature',
+            )
+            self.figures.append(PlotlyFigure(label='TGA curve', figure=fig.to_plotly_json()))
 
 
 # ── DMA ──────────────────────────────────────────────────────────────────────
