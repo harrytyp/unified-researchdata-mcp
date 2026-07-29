@@ -1,6 +1,6 @@
 econversion.researchmcp.duckdns.org {
     basicauth {
-        econversion $2a$14$ir6TRfyEnlEgFUwXdKhrcO7IyODmuGbNJkixxz3uVcPJhaaN7XF4y
+        econversion {$ECONVERSION_BCRYPT_HASH}
     }
 
     reverse_proxy econversion:8501 {

@@ -7,15 +7,15 @@ services:
     restart: unless-stopped
 
     expose:
-      - "8000"
+      - 8000
     environment:
-      - FDM_BASE_URL=${FDM_BASE_URL:-https://datatagger.ub.tum.de}
+      - FDM_BASE_URL=https://datatagger.ub.tum.de
       - URL_PREFIX=/dt
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
-      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
-      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+      - MCP_JWT_SECRET=
+      - MCP_TOKEN_EXPIRY_DAYS=30
     mem_limit: 256m
 
   # ── elabFTW MCP (shared R worker, one process for all users) ──
@@ -25,13 +25,13 @@ services:
       dockerfile: elabmcp-proxy/Dockerfile
     restart: unless-stopped
     expose:
-      - "8081"
+      - 8081
     environment:
       - ELABMCP_PROXY_HOST=0.0.0.0
       - ELABMCP_PROXY_PORT=8081
       - URL_PREFIX=/el
-      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
-      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+      - MCP_JWT_SECRET=
+      - MCP_TOKEN_EXPIRY_DAYS=30
       - ELABMCP_RATE_LIMIT=10/minute
       - ELABMCP_R_PORT=18080
       - MCP_CONFIG_PATH=/elabmcp-proxy/config.dynamic.yml
@@ -46,24 +46,48 @@ services:
       dockerfile: ./econversion.Dockerfile
     restart: unless-stopped
     expose:
-      - "8501"
+      - 8501
     environment:
       - PYTHONUNBUFFERED=1
-      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
-      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
-      - API_KEY=${ECONVERSION_API_KEY:-}
+      - MCP_JWT_SECRET=
+      - MCP_TOKEN_EXPIRY_DAYS=30
+      - API_KEY=
     volumes:
       - ./econversion/data:/app/data
     mem_limit: 2g
     stop_grace_period: 30s
 
-  # ── Caddy reverse proxy ────────────────────────────────────────────────────
+  # ── elab-app (Streamlit-Frontend für elabFTW) ────────────────────────────
+  elab-app:
+    build:
+      context: ./elab-app
+    restart: unless-stopped
+    expose:
+      - 8501
+    mem_limit: 256m
+    stop_grace_period: 10s
+    volumes:
+      - elab_app_data:/root/.config/elab_app
+
+  # ── proespm (wissenschaftliche Datenverarbeitung) ────────────────────────
+  proespm-app:
+    build:
+      context: ./proespm-app
+    restart: unless-stopped
+    expose:
+      - 8501
+    mem_limit: 512m
+    stop_grace_period: 30s
+
+  # ── Caddy reverse proxy ──────────────────────────────────────────────────
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - 80:80
+      - 443:443
+    environment:
+      - ECONVERSION_BCRYPT_HASH=${ECONVERSION_BCRYPT_HASH}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv/http:ro
@@ -73,11 +97,14 @@ services:
       - datatagger-proxy
       - elabmcp-proxy
       - econversion
+      - elab-app
+      - proespm-app
     mem_limit: 128m
 
 volumes:
   caddy_data:
   caddy_config:
+  elab_app_data: {}
 
 networks:
   internal:
