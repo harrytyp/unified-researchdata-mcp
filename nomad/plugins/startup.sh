@@ -14,6 +14,9 @@ fi
 
 echo "/app/plugins" > /opt/venv/lib/python3.12/site-packages/_bridge_plugins.pth 2>/dev/null
 
+echo "[startup] Installing instrument_data plugin..."
+python3 -m pip install --quiet --no-cache-dir -e /app/plugins/instrument_data/ 2>&1 | grep -v "^$" || true
+
 echo "[startup] Initializing instrument data schemas..."
 python3 << "INNER"
 import sys; sys.path.insert(0, "/app/plugins")

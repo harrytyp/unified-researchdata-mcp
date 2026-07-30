@@ -15,9 +15,6 @@ plugins:
       nomad_north_jupyter.north_tools:jupyter:
         north_tool:
           image: ghcr.io/harrytyp/econversion-nomad/jupyter:main
-      instrument_data.entrypoint:instrument_schema:
-        plugin_type: schema
-        plugin_type: parser
 
 meta:
   deployment: "oasis"
