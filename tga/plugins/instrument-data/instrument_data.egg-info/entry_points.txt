@@ -1,0 +1,3 @@
+[nomad.plugin]
+instrument-schema = instrument_data.entrypoint:instrument_schema
+tga_parser = instrument_data.entrypoint:tga_parser_entry_point
