@@ -3,7 +3,7 @@
 
 import os, sys, yaml
 
-DISTRO = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("NOMAD_DISTRO_DIR", os.path.expanduser("~/nomad-distro-template"))
+DISTRO = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("NOMAD_DISTRO_DIR", os.path.expanduser("~/unified-researchdata-mcp/nomad"))
 changes = []
 
 # 1. Patch docker-compose.yaml — use official image + startup command
