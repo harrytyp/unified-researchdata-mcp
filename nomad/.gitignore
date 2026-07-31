@@ -164,7 +164,7 @@ cython_debug/
 tls/
 
 # Secrets
-plugins/.nomad_pat
+.nomad_pat
 plugins/elab_key.txt
 plugins/.volumes/
 *.tar.gz
