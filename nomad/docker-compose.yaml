@@ -46,7 +46,6 @@ services:
     volumes:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
-    - /home/debian/unified-researchdata-mcp/nomad/.nomad_pat:/app/.nomad_pat:ro
     - /home/debian/unified-researchdata-mcp/nomad/configs/nomad.yaml:/app/nomad.yaml
   elastic:
     container_name: nomad_oasis_elastic
@@ -99,7 +98,6 @@ services:
     volumes:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
-    - /home/debian/unified-researchdata-mcp/nomad/.nomad_pat:/app/.nomad_pat:ro
   mongo:
     command: mongod --logpath=/dev/null
     container_name: nomad_oasis_mongo
@@ -156,7 +154,6 @@ services:
     volumes:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
-    - /home/debian/unified-researchdata-mcp/nomad/.nomad_pat:/app/.nomad_pat:ro
     - /var/run/docker.sock:/var/run/docker.sock
   postgresql:
     container_name: nomad_oasis_postgresql
@@ -300,7 +297,6 @@ services:
     volumes:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
-    - /home/debian/unified-researchdata-mcp/nomad/.nomad_pat:/app/.nomad_pat:ro
 volumes:
   elastic:
     name: nomad_oasis_elastic
