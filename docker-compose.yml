@@ -5,7 +5,6 @@ services:
       context: .
       dockerfile: datatagger-proxy/Dockerfile
     restart: unless-stopped
-
     expose:
       - "8000"
     environment:
@@ -57,13 +56,37 @@ services:
     mem_limit: 2g
     stop_grace_period: 30s
 
-  # ── Caddy reverse proxy ────────────────────────────────────────────────────
+  # ── elab-app (Streamlit-Frontend fuer elabFTW) ────────────────────────────
+  elab-app:
+    build:
+      context: ./elab-app
+    restart: unless-stopped
+    expose:
+      - "8501"
+    mem_limit: 256m
+    stop_grace_period: 10s
+    volumes:
+      - elab_app_data:/root/.config/elab_app
+
+  # ── proespm (wissenschaftliche Datenverarbeitung) ────────────────────────
+  proespm-app:
+    build:
+      context: ./proespm-app
+    restart: unless-stopped
+    expose:
+      - "8501"
+    mem_limit: 512m
+    stop_grace_period: 30s
+
+  # ── Caddy reverse proxy ──────────────────────────────────────────────────
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - ECONVERSION_BCRYPT_HASH=${ECONVERSION_BCRYPT_HASH}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv/http:ro
@@ -73,11 +96,19 @@ services:
       - datatagger-proxy
       - elabmcp-proxy
       - econversion
+      - elab-app
+      - proespm-app
+    networks:
+      - default
+      - nomad_oasis_network
     mem_limit: 128m
 
 volumes:
   caddy_data:
   caddy_config:
+  elab_app_data: {}
 
 networks:
   internal:
+  nomad_oasis_network:
+    external: true

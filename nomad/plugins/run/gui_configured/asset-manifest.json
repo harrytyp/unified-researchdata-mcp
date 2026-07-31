@@ -1,0 +1,29 @@
+{
+  "files": {
+    "main.css": "/nomad-oasis/gui/static/css/main.ab3bb326.chunk.css",
+    "main.js": "/nomad-oasis/gui/static/js/main.d7847511.chunk.js",
+    "main.js.map": "/nomad-oasis/gui/static/js/main.d7847511.chunk.js.map",
+    "runtime-main.js": "/nomad-oasis/gui/static/js/runtime-main.e044e71c.js",
+    "runtime-main.js.map": "/nomad-oasis/gui/static/js/runtime-main.e044e71c.js.map",
+    "static/css/2.20d8b936.chunk.css": "/nomad-oasis/gui/static/css/2.20d8b936.chunk.css",
+    "static/js/2.af3a7d5b.chunk.js": "/nomad-oasis/gui/static/js/2.af3a7d5b.chunk.js",
+    "static/js/2.af3a7d5b.chunk.js.map": "/nomad-oasis/gui/static/js/2.af3a7d5b.chunk.js.map",
+    "index.html": "/nomad-oasis/gui/index.html",
+    "service-worker.js": "/nomad-oasis/gui/service-worker.js",
+    "service-worker.js.map": "/nomad-oasis/gui/service-worker.js.map",
+    "static/css/2.20d8b936.chunk.css.map": "/nomad-oasis/gui/static/css/2.20d8b936.chunk.css.map",
+    "static/css/main.ab3bb326.chunk.css.map": "/nomad-oasis/gui/static/css/main.ab3bb326.chunk.css.map",
+    "static/js/2.af3a7d5b.chunk.js.LICENSE.txt": "/nomad-oasis/gui/static/js/2.af3a7d5b.chunk.js.LICENSE.txt",
+    "static/media/about.a4d06242.svg": "/nomad-oasis/gui/static/media/about.a4d06242.svg",
+    "static/media/index.css": "/nomad-oasis/gui/static/media/material-icons-base-400-normal.fbec7347.woff2",
+    "static/media/400.css": "/nomad-oasis/gui/static/media/titillium-web-latin-ext-400-normal.fc46e868.woff2",
+    "static/media/600.css": "/nomad-oasis/gui/static/media/titillium-web-latin-ext-600-normal.1fd10332.woff2"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.e044e71c.js",
+    "static/css/2.20d8b936.chunk.css",
+    "static/js/2.af3a7d5b.chunk.js",
+    "static/css/main.ab3bb326.chunk.css",
+    "static/js/main.d7847511.chunk.js"
+  ]
+}

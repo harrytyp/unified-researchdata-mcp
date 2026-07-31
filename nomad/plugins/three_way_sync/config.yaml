@@ -1,0 +1,11 @@
+elabftw:
+  api_url: "https://elntest.ub.tum.de/api/v2"
+  api_key: "74-3af5b6584f6d78d4a9a7f2c92d92652bbdd874a6307cc951ccd6ed3db0e7f22a7bd7fcb1eaead5872ce574"
+
+nomad:
+  api_url: "http://localhost:8000/api/v1"
+  api_key: ""
+
+datatagger:
+  api_url: "https://datatagger.ub.tum.de/api/v1"
+  api_key: ""

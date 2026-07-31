@@ -9,3 +9,9 @@ tga/build2/
 tga/build_fixed/
 tga/dist_fixed/
 tga/*.spec
+
+# NOMAD secrets
+nomad/plugins/elab_key.txt
+nomad/plugins/.nomad_pat
+nomad/plugins/.volumes/
+nomad/plugins/*.tar.gz

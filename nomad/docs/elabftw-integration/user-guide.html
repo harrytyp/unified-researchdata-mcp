@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>elabFTW-NOMAD User Guide</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
+h1 { border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+h2 { color: #2c3e50; margin-top: 30px; }
+h3 { color: #34495e; }
+code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+th { background: #2c3e50; color: white; }
+tr:nth-child(even) { background: #f9f9f9; }
+.note { background: #e8f4fd; border-left: 4px solid #2980b9; padding: 12px; margin: 15px 0; border-radius: 3px; }
+.warn { background: #fef3cd; border-left: 4px solid #f0ad4e; padding: 12px; margin: 15px 0; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>elabFTW-NOMAD User Guide</h1>
+<p>Link elabFTW experiments and items to NOMAD entries — with automatic bidirectional cross-referencing.</p>
+
+<div class="note"><strong>Quick start:</strong> Create <strong>"elabFTW Settings"</strong> once with your API key. Then create <strong>"elabFTW Linked Entry"</strong> with an experiment ID. The normalizer links them automatically. Your key stays in your private settings entry.</div>
+
+<h2>Step 0: Prerequisites</h2>
+<ol>
+<li>Log into <strong>elabFTW</strong> at <code>https://elntest.ub.tum.de</code></li>
+<li>Go to <strong>My Account → API tokens</strong> and generate a token</li>
+<li>Log into <strong>NOMAD</strong> at <code>https://researchmcp.duckdns.org/nomad-oasis/gui/</code></li>
+</ol>
+
+<h2>Step 1: One-time Setup — Create your Settings</h2>
+<ol>
+<li><strong>PUBLISH → Uploads → CREATE A NEW UPLOAD → CREATE FROM SCHEMA</strong></li>
+<li>Select <strong>"elabFTW Settings"</strong></li>
+<li>Name it exactly <strong>"elabFTW Settings"</strong> (the normalizer finds it by name)</li>
+<li>Fill in:</li>
+</ol>
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td><code>api_key</code></td><td>Your personal elabFTW token from My Account → API tokens</td></tr>
+<tr><td><code>api_base_url</code></td><td><code>https://elntest.ub.tum.de/api/v2</code></td></tr>
+</table>
+<ol start="5"><li>Save</li></ol>
+
+<h2>Step 2: Upload Data and Link to elabFTW</h2>
+<p>Two ways to do this:</p>
+
+<h3>Method A: Upload files, then link (GUI)</h3>
+<ol>
+<li><strong>PUBLISH → Uploads → CREATE A NEW UPLOAD</strong></li>
+<li>Upload your file(s) by drag-and-drop into the upload area</li>
+<li>Click <strong>CREATE FROM SCHEMA</strong></li>
+<li>Select <strong>"elabFTW Linked Entry"</strong></li>
+<li>Give it a descriptive name</li>
+</ol>
+<table>
+<tr><th>Field (under config)</th><th>Value</th></tr>
+<tr><td><code>entity_type</code></td><td><code>experiment</code> (default) or <code>item</code> for database resources</td></tr>
+<tr><td><code>sync_now</code></td><td>Toggle to <strong>true</strong></td></tr>
+<tr><td><code>write_link_back</code></td><td>Keep <strong>true</strong></td></tr>
+</table>
+<table>
+<tr><th>Field (under experiments)</th><th>Value</th></tr>
+<tr><td><code>elabftw_id</code></td><td>The elabFTW experiment ID (e.g. <code>2339</code>) or item ID (e.g. <code>1354</code>)</td></tr>
+</table>
+<ol start="6"><li>Save</li></ol>
+
+<h3>Method B: Create a new elabFTW experiment from NOMAD</h3>
+<ol>
+<li>Same as above, but instead of filling in <code>elabftw_id</code>:</li>
+<li>Toggle <strong><code>create_elabftw_experiment</code></strong> to <code>true</code></li>
+<li>Save — the normalizer creates a new experiment in elabFTW and links back</li>
+</ol>
+
+<h2>What the Normalizer Does</h2>
+<ul>
+<li>Reads your API key from your <strong>"elabFTW Settings"</strong> entry</li>
+<li>Fetches the experiment/item title from elabFTW</li>
+<li>Writes a <code>nomad_url</code> into the elabFTW experiment's metadata (not extra_fields — works with any category)</li>
+<li>Clears any API key from the entry data (your key stays in your Settings entry)</li>
+</ul>
+
+|<h2>Verify the Link</h2>
+<p>In elabFTW, open the linked experiment. Go to the <strong>Metadata</strong> section — you should see:</p>
+<pre>{
+  "nomad_url": "https://researchmcp.duckdns.org/...",
+  "nomad_synced": "2026-05-22T..."
+}</pre>
+<p>Click the nomad_url to jump directly to your uploaded data in NOMAD.</p>
+
+<h2>Automated Uploads (API)</h2>
+<p>For scripts and machines uploading data automatically:</p>
+<pre># 1. Get your NOMAD API token from Profile → API tokens
+# 2. Upload your file(s) and create a linked entry in one call:
+
+curl -X POST http://localhost:8000/nomad-oasis/api/v1/uploads \
+  -H "Authorization: Bearer YOUR_NOMAD_TOKEN" \
+  -F "upload_name=Sensor Data" \
+  -F "file=@data.csv"
+
+curl -X POST http://localhost:8000/nomad-oasis/api/v1/uploads/{upload_id}/archive \
+  -H "Authorization: Bearer YOUR_NOMAD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entry_name": "Sensor Data May 22",
+    "data": {
+      "m_def": "three_way_sync.schema:ElabftwLinkedEntry",
+      "config": {
+        "entity_type": "experiment",
+        "sync_now": true,
+        "write_link_back": true
+      },
+      "experiments": [{"elabftw_id": "2339"}]
+    }
+  }'</pre>
+<p>The normalizer picks up your API key from your <strong>"elabFTW Settings"</strong> entry. No need to paste your key in the API call.</p>
+
+<h2>Using a Resource (database item) instead of an Experiment</h2>
+<p>Set <code>entity_type: item</code> in the entry config. The normalizer uses <code>/api/v2/items/</code> instead of <code>/api/v2/experiments/</code>.</p>
+
+<h2>Creating a new elabFTW Experiment from Uploaded Data</h2>
+<p>If you want to create an elabFTW experiment <strong>automatically</strong> when you upload data to NOMAD, use the <strong>"elabFTW Machine Upload"</strong> schema instead. Set <code>create_elabftw_experiment: true</code> and the normalizer creates a new experiment in elabFTW with a link back to the NOMAD entry.</p>
+
+<div class="note"><strong>Security:</strong> Your API key is stored in your own private upload. Only you can see it. The normalizer reads it from your Settings entry and never stores it in linked entries. Other users cannot see your key even if they open your entries.</div>
+
+<div class="warn"><strong>Permissions:</strong> The write-back of NOMAD URLs requires write permissions in elabFTW. If you get a 403 error, ask your elabFTW admin to grant you write access on the team.</div>
+
+<h2>Troubleshooting</h2>
+<table>
+<tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+<tr><td>"No API key" warning</td><td>No Settings entry found</td><td>Create <strong>"elabFTW Settings"</strong> entry with your token</td></tr>
+<tr><td>Link not written</td><td>API key lacks write permissions</td><td>Check your elabFTW team permissions</td></tr>
+<tr><td>Wrong entity type</td><td>Using experiment for items</td><td>Set <code>entity_type: item</code></td></tr>
+<tr><td>Schema not visible</td><td>Not logged in / plugin not loaded</td><td>Log in, check About page for <code>three_way_sync</code></td></tr>
+<tr><td>404 on elabFTW</td><td>Wrong entity ID</td><td>Verify the ID exists in elabFTW</td></tr>
+</table>
+
+<p style="margin-top: 40px; color: #888; font-size: 0.9em;">
+Full documentation: <a href="https://github.com/harrytyp/econversion-nomad">github.com/harrytyp/econversion-nomad</a>
+</p>
+</body>
+</html>

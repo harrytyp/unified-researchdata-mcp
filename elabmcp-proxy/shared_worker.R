@@ -11,7 +11,16 @@ Sys.setenv(ELABFTW_API_KEY = Sys.getenv("ELABFTW_API_KEY", "placeholder"))
 library(elabrmcp)
 library(mcptools)
 
-# ── Patch mcptools: inject per-request credentials + write scope into live config ──
+# Patch 1: make_elab_client reads from LIVE config, not captured closure
+# Tool handlers capture cfg at build time. We override to read fresh creds.
+assignInNamespace("make_elab_client", function(cfg) {
+  live_cfg <- elabrmcp:::get_server_config()
+  base_url <- elabrmcp:::get_config_value(live_cfg, "elabftw", "base_url")
+  api_key <- elabrmcp:::get_config_value(live_cfg, "elabftw", "api_key")
+  elabR::elab_client(base_url = base_url, api_key = api_key)
+}, "elabrmcp")
+
+# Patch 2: inject per-request credentials + write scope into live config
 .handle_http_post_original <- mcptools:::handle_http_post
 
 .handle_http_post_patched <- function(req) {
@@ -46,6 +55,7 @@ library(mcptools)
         cfg$runtime$effective_write_compounds  <- f
       }
 
+      cfg$api_key <- api_key
       env$config <- cfg
     }
     Sys.setenv(ELABFTW_BASE_URL = base_url)
@@ -56,7 +66,7 @@ library(mcptools)
 
 assignInNamespace("handle_http_post", .handle_http_post_patched, "mcptools")
 
-# ── Start MCP server ──
+# Start MCP server
 port <- as.integer(Sys.getenv("ELABMCP_R_PORT", "18080"))
 host <- Sys.getenv("ELABMCP_R_HOST", "127.0.0.1")
 elabrmcp::elabr_mcp_server(type = "http", host = host, port = port)
