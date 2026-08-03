@@ -91,9 +91,9 @@ class TemperatureSegment(MSection):
         a_eln=ELNAnnotation(),
         description="One temperature program segment: ramp (end_temp + rate) or isothermal (duration_min)")
     segment_type = Quantity(
-        type=str,
-        description="ramp | isothermal",
-        a_eln=ELNAnnotation(component="StringEditQuantity"))
+        type=MEnum(["ramp", "isothermal"]),
+        description="Type of temperature program segment",
+        a_eln=ELNAnnotation(component="EnumEditQuantity"))
     end_temp = Quantity(
         type=float, unit="°C",
         description="Target temperature (for ramp segments)",
@@ -160,9 +160,9 @@ class TgaMeasurement(PlotSection, EntryData):
     # ── Sample info ──
     sample = SubSection(sub_section=InstrumentSample)
     crucible_type = Quantity(
-        type=str,
-        description="Alumina | Platinum | Aluminum",
-        a_eln=ELNAnnotation(component="StringEditQuantity"))
+        type=MEnum(["Alumina", "Platinum", "Aluminum"]),
+        description="Crucible material",
+        a_eln=ELNAnnotation(component="EnumEditQuantity"))
     pan_number = Quantity(
         type=str, description="Pan / crucible identifier",
         a_eln=ELNAnnotation(component="StringEditQuantity"))

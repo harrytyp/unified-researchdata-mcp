@@ -609,6 +609,19 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
             tmp_path.unlink()
 
 
+def _to_float(value: Any) -> float | None:
+    """Convert a value to float, handling pint Quantities (unit-aware)."""
+    if value is None:
+        return None
+    try:
+        # pint Quantity -> magnitude (drop unit); scalar -> float
+        if hasattr(value, "magnitude"):
+            return float(value.magnitude)
+        return float(value)
+    except Exception:
+        return None
+
+
 def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     """Build a .tprc procedure file from the TgaMeasurement ELN parameters.
 
@@ -645,9 +658,9 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         if seg is None:
             continue
         if getattr(seg, "rate", None) is not None and heating_rate is None:
-            heating_rate = float(seg.rate)
+            heating_rate = _to_float(seg.rate)
         if getattr(seg, "end_temp", None) is not None:
-            temperature_end = float(seg.end_temp)
+            temperature_end = _to_float(seg.end_temp)
         if heating_rate is not None and temperature_end is not None:
             break
 
@@ -674,12 +687,12 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         for seg in segments:
             stype = getattr(seg, "segment_type", None) or "ramp"
             if stype == "isothermal":
-                dur = getattr(seg, "duration_min", None)
+                dur = _to_float(getattr(seg, "duration_min", None))
                 hold = " for %s min" % dur if dur is not None else ""
                 desc_parts.append("Isothermal%s" % hold)
             else:
-                rate = getattr(seg, "rate", None)
-                end = getattr(seg, "end_temp", None)
+                rate = _to_float(getattr(seg, "rate", None))
+                end = _to_float(getattr(seg, "end_temp", None))
                 if rate is not None and end is not None:
                     desc_parts.append("%s K/min to %s C" % (rate, end))
                 elif end is not None:
