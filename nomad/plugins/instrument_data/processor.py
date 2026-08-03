@@ -425,7 +425,10 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
 
     upload_id = getattr(entry, "source_upload_id", None)
     if not upload_id:
-        logger.warning("No source_upload_id set on entry")
+        # No upload reference -> generate .tprc from the ELN parameters.
+        # The elabFTW link / source upload is optional; the procedure file
+        # is built purely from the values entered in the form.
+        _generate_tprc_from_entry(entry, logger)
         return
 
     logger.info(f"Processing upload {upload_id} for TGA entry")
@@ -604,3 +607,73 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
+
+
+def _generate_tprc_from_entry(entry: Any, logger: Any) -> None:
+    """Build a .tprc procedure file from the TgaMeasurement ELN parameters.
+
+    This is the no-upload path of the normalizer: the user fills in the
+    form fields (sample, procedure, temperature program, gas atmosphere)
+    and toggles process_now. The .tprc is generated and stored base64-encoded
+    on the entry, independent of any NOMAD upload or elabFTW item.
+    """
+    import base64
+    try:
+        from tprc_builder import build_tprc
+    except ImportError:
+        logger.warning("tprc_builder not importable, cannot generate .tprc")
+        return
+
+    # Map NOMAD enum values to the TRIOS gas names used in the template
+    gas_map = {
+        "N2": "Nitrogen", "Air": "Air", "Ar": "Argon",
+        "Synthetic Air": "Air", "O2": "Oxygen",
+    }
+
+    # Pull values from the entry (all optional)
+    sample_name = None
+    if getattr(entry, "sample", None) is not None:
+        sample_name = getattr(entry.sample, "sample_name", None)
+    procedure_name = getattr(entry, "procedure_name", None)
+    gas = getattr(entry, "gas_atmosphere", None)
+
+    # Temperature program: use the first temperature_segments entry if present
+    heating_rate = None
+    temperature_end = None
+    segments = getattr(entry, "temperature_segments", None) or []
+    for seg in segments:
+        if seg is None:
+            continue
+        if getattr(seg, "rate", None) is not None and heating_rate is None:
+            heating_rate = float(seg.rate)
+        if getattr(seg, "end_temp", None) is not None:
+            temperature_end = float(seg.end_temp)
+        if heating_rate is not None and temperature_end is not None:
+            break
+
+    if heating_rate is None and temperature_end is None:
+        logger.warning(
+            "Neither temperature_segments nor source_upload_id set - "
+            "nothing to generate. Fill in the temperature program or link an upload."
+        )
+        return
+
+    params = {
+        "sample_name": sample_name or "Sample",
+        "procedure_name": procedure_name or "TGA procedure",
+        "heating_rate": heating_rate if heating_rate is not None else 10.0,
+        "temperature_end": temperature_end if temperature_end is not None else 400.0,
+        "gas_atmosphere": gas_map.get(gas, gas) if gas else "Nitrogen",
+    }
+    logger.info("Generating .tprc from ELN parameters: %s" % params)
+
+    try:
+        tprc_bytes = build_tprc(params)
+    except Exception as e:
+        logger.warning("build_tprc failed: %s" % e)
+        return
+
+    entry.generated_tprc = base64.b64encode(tprc_bytes).decode("ascii")
+    safe_sample = "".join(c for c in (sample_name or "Sample") if c.isalnum() or c in "-_ ").strip() or "Sample"
+    entry.tprc_filename = "%s.tprc" % safe_sample
+    logger.info("Generated .tprc (%d bytes) -> %s" % (len(tprc_bytes), entry.tprc_filename))

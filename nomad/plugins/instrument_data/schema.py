@@ -230,6 +230,16 @@ class TgaMeasurement(PlotSection, EntryData):
         type=str,
         description="Base64-encoded SVG summary plot")
 
+    # ── Generated .tprc (from ELN parameters, no upload needed) ──
+    generated_tprc = Quantity(
+        type=str,
+        description="Base64-encoded .tprc procedure file generated from the entered parameters",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
+    tprc_filename = Quantity(
+        type=str,
+        description="Filename of the generated .tprc file",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
+
     # ── Normalizer trigger ──
     source_upload_id = Quantity(
         type=str,
