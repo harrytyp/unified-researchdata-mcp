@@ -610,13 +610,39 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
 
 
 def _to_float(value: Any) -> float | None:
-    """Convert a value to float, handling pint Quantities (unit-aware)."""
+    """Convert a value to float, handling pint Quantities (unit-aware).
+
+    For pint quantities the stored unit is preserved (no conversion), so the
+    raw magnitude is returned. Use _to_unit() when a specific target unit is
+    required (e.g. the TPRC format expects degC and degC/min).
+    """
     if value is None:
         return None
     try:
-        # pint Quantity -> magnitude (drop unit); scalar -> float
+        # pint Quantity -> magnitude (keep stored unit); scalar -> float
         if hasattr(value, "magnitude"):
             return float(value.magnitude)
+        return float(value)
+    except Exception:
+        return None
+
+
+def _to_unit(value: Any, target_unit: str) -> float | None:
+    """Convert a value to a target unit, handling pint Quantities.
+
+    If the value is a pint Quantity, it is converted to ``target_unit``
+    (e.g. "delta_degree_Celsius" or "delta_degree_Celsius / minute") and the
+    magnitude returned. Scalars pass through unchanged.
+    """
+    if value is None:
+        return None
+    try:
+        if hasattr(value, "to") and hasattr(value, "magnitude"):
+            try:
+                return float(value.to(target_unit).magnitude)
+            except Exception:
+                # conversion failed -> fall back to raw magnitude
+                return float(value.magnitude)
         return float(value)
     except Exception:
         return None
@@ -658,9 +684,13 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         if seg is None:
             continue
         if getattr(seg, "rate", None) is not None and heating_rate is None:
-            heating_rate = _to_float(seg.rate)
+            # TPRC stores the rate in degC/minute
+            heating_rate = _to_unit(seg.rate, "delta_degree_Celsius / minute")
         if getattr(seg, "end_temp", None) is not None:
-            temperature_end = _to_float(seg.end_temp)
+            # TPRC stores absolute temperatures in degC. NOMAD stores degC
+            # quantities as absolute degree_Celsius, so convert to that unit
+            # (100 K -> -173.15 degC, 400 degC -> 400.0).
+            temperature_end = _to_unit(seg.end_temp, "degree_Celsius")
         if heating_rate is not None and temperature_end is not None:
             break
 
@@ -687,12 +717,12 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         for seg in segments:
             stype = getattr(seg, "segment_type", None) or "ramp"
             if stype == "isothermal":
-                dur = _to_float(getattr(seg, "duration_min", None))
+                dur = _to_unit(getattr(seg, "duration_min", None), "minute")
                 hold = " for %s min" % dur if dur is not None else ""
                 desc_parts.append("Isothermal%s" % hold)
             else:
-                rate = _to_float(getattr(seg, "rate", None))
-                end = _to_float(getattr(seg, "end_temp", None))
+                rate = _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute")
+                end = _to_unit(getattr(seg, "end_temp", None), "degree_Celsius")
                 if rate is not None and end is not None:
                     desc_parts.append("%s K/min to %s C" % (rate, end))
                 elif end is not None:
