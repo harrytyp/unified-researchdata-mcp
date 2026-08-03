@@ -13,7 +13,7 @@ export NOMAD_CONFIG=/app/nomad.yaml
 if [ -f /app/plugins/nomad_processor.py ]; then
     nohup bash -c "
         while true; do
-            NOMAD_PAT="$NOMAD_PAT" ELABFTW_API_KEY=78-ddda64df7e061243946e6055c68667bff8ee35fdce3ed00832f421d54d8cd0cbcc5f9dfbb959132df6cd78 ELABFTW_TEAM=29 python3 /app/plugins/nomad_processor.py watch 2>&1
+            NOMAD_PAT="$NOMAD_PAT" ELABFTW_API_KEY="$ELABFTW_API_KEY" ELABFTW_TEAM="$ELABFTW_TEAM" python3 /app/plugins/nomad_processor.py watch 2>&1
             sleep 30
         done
     " > /tmp/tga-nomad-processor.log 2>&1 &
