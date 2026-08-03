@@ -87,6 +87,9 @@ class TemperatureRamp(MSection):
 class TemperatureSegment(MSection):
     """A single segment (ramp or isothermal) in the temperature program,
     entered directly by the user in the NOMAD ELN interface."""
+    m_def = Section(
+        a_eln=ELNAnnotation(),
+        description="One temperature program segment: ramp (end_temp + rate) or isothermal (duration_min)")
     segment_type = Quantity(
         type=str,
         description="ramp | isothermal",
@@ -176,7 +179,8 @@ class TgaMeasurement(PlotSection, EntryData):
     temperature_segments = SubSection(
         sub_section=TemperatureSegment,
         repeats=True,
-        description="Ordered list of temperature program segments (ramp/isothermal), entered by the user")
+        description="Ordered list of temperature program segments (ramp/isothermal), entered by the user",
+        a_eln=ELNAnnotation())
     gas_atmosphere = Quantity(
         type=MEnum(["N2", "Air", "Ar", "Synthetic Air", "O2"]),
         description="Purge gas atmosphere",
