@@ -168,3 +168,10 @@ tls/
 plugins/elab_key.txt
 plugins/.volumes/
 *.tar.gz
+
+# Backup files (never commit these)
+*.bak
+*.bak.*
+*.save
+*.orig
+*~

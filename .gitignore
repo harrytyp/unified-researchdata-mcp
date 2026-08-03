@@ -15,3 +15,10 @@ nomad/plugins/elab_key.txt
 nomad/plugins/.nomad_pat
 nomad/plugins/.volumes/
 nomad/plugins/*.tar.gz
+
+# Backup files (never commit these)
+*.bak
+*.bak.*
+*.save
+*.orig
+*~
