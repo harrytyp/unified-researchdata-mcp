@@ -667,6 +667,29 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     }
     logger.info("Generating .tprc from ELN parameters: %s" % params)
 
+    # Derive the procedure description from the structured segments, so the
+    # data entered in the form also lands in the derived fields.
+    if segments and not getattr(entry, "procedure_segments", None):
+        desc_parts = []
+        for seg in segments:
+            stype = getattr(seg, "segment_type", None) or "ramp"
+            if stype == "isothermal":
+                dur = getattr(seg, "duration_min", None)
+                hold = " for %s min" % dur if dur is not None else ""
+                desc_parts.append("Isothermal%s" % hold)
+            else:
+                rate = getattr(seg, "rate", None)
+                end = getattr(seg, "end_temp", None)
+                if rate is not None and end is not None:
+                    desc_parts.append("%s K/min to %s C" % (rate, end))
+                elif end is not None:
+                    desc_parts.append("to %s C" % end)
+        if desc_parts:
+            try:
+                entry.procedure_segments = "; ".join(desc_parts)
+            except Exception:
+                pass
+
     try:
         tprc_bytes = build_tprc(params)
     except Exception as e:

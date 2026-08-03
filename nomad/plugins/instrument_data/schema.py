@@ -174,13 +174,16 @@ class TgaMeasurement(PlotSection, EntryData):
         a_eln=ELNAnnotation(component="StringEditQuantity"))
     procedure_segments = Quantity(
         type=str,
-        description="Full method description (heating profile)",
-        a_eln=ELNAnnotation(component="RichTextEditQuantity"))
+        description="Full method description (heating profile); derived from temperature_segments when set")
     temperature_segments = SubSection(
         sub_section=TemperatureSegment,
         repeats=True,
         description="Ordered list of temperature program segments (ramp/isothermal), entered by the user",
         a_eln=ELNAnnotation())
+    comments = Quantity(
+        type=str,
+        description="Free-text comments / notes (not rendered into the .tprc)",
+        a_eln=ELNAnnotation(component="RichTextEditQuantity"))
     gas_atmosphere = Quantity(
         type=MEnum(["N2", "Air", "Ar", "Synthetic Air", "O2"]),
         description="Purge gas atmosphere",
