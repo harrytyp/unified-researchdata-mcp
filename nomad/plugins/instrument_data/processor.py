@@ -428,7 +428,7 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
         # No upload reference -> generate .tprc from the ELN parameters.
         # The elabFTW link / source upload is optional; the procedure file
         # is built purely from the values entered in the form.
-        _generate_tprc_from_entry(entry, logger)
+        _generate_tprc_from_entry(entry, archive, logger)
         return
 
     logger.info(f"Processing upload {upload_id} for TGA entry")
@@ -609,7 +609,7 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
             tmp_path.unlink()
 
 
-def _generate_tprc_from_entry(entry: Any, logger: Any) -> None:
+def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     """Build a .tprc procedure file from the TgaMeasurement ELN parameters.
 
     This is the no-upload path of the normalizer: the user fills in the
@@ -673,7 +673,37 @@ def _generate_tprc_from_entry(entry: Any, logger: Any) -> None:
         logger.warning("build_tprc failed: %s" % e)
         return
 
-    entry.generated_tprc = base64.b64encode(tprc_bytes).decode("ascii")
     safe_sample = "".join(c for c in (sample_name or "Sample") if c.isalnum() or c in "-_ ").strip() or "Sample"
     entry.tprc_filename = "%s.tprc" % safe_sample
-    logger.info("Generated .tprc (%d bytes) -> %s" % (len(tprc_bytes), entry.tprc_filename))
+
+    # Store base64 copy on the entry (visible in the ELN form)
+    entry.generated_tprc = base64.b64encode(tprc_bytes).decode("ascii")
+
+    # Also add the .tprc as a real file under "Upload Files"
+    added = False
+    try:
+        upload_files = archive.m_context.upload_files
+        if upload_files is not None and hasattr(upload_files, "add_rawfiles") and not upload_files.is_frozen:
+            tmp_path = None
+            try:
+                import tempfile, os, shutil
+                # Use the target filename so add_rawfiles keeps the correct name
+                tmp_dir = tempfile.mkdtemp(prefix="tprc_gen_")
+                tmp_path = os.path.join(tmp_dir, entry.tprc_filename)
+                with open(tmp_path, "wb") as tf:
+                    tf.write(tprc_bytes)
+                upload_files.add_rawfiles(tmp_path, target_dir="")
+                added = True
+            finally:
+                if tmp_path is not None:
+                    try:
+                        shutil.rmtree(os.path.dirname(tmp_path), ignore_errors=True)
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning("Could not add .tprc to upload files: %s" % e)
+
+    logger.info(
+        "Generated .tprc (%d bytes) -> %s (upload_files=%s)"
+        % (len(tprc_bytes), entry.tprc_filename, added)
+    )
