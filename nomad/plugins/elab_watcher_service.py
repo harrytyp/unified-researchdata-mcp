@@ -116,17 +116,23 @@ def run_watcher(once=False):
                 if meas_status == "Ready" and sample_name and not has_local:
                     log.info(f"[{eid}] Status=Ready, generating .tprc for {sample_name}")
                     iso = fields.get('isothermal_duration', '0')
+                    iso_val = float(iso) if str(iso).strip() else 0
+                    heating_rate = float(fields.get('heating_rate', 10))
+                    temperature_end = float(fields.get('temperature_end', 400))
                     params = {
                         'sample_name': sample_name,
                         'procedure_name': fields.get('procedure_name', f"TGA_{sample_name}"),
-                        'heating_rate': float(fields.get('heating_rate', 10)),
-                        'temperature_end': float(fields.get('temperature_end', 400)),
-                        'temperature_start': float(fields.get('temperature_start', 50)),
                         'gas_atmosphere': fields.get('gas_atmosphere', 'Nitrogen'),
-                        'isothermal_duration': float(iso) if str(iso).strip() else 0,
                     }
+                    segments = [{'type': 'Ramp', 'end_temp': temperature_end, 'rate': heating_rate}]
+                    if iso_val > 0:
+                        segments.append({'type': 'Isothermal', 'end_temp': temperature_end, 'duration_min': iso_val})
+                    # Keep these on params for the elabFTW body text below
+                    params['heating_rate'] = heating_rate
+                    params['temperature_end'] = temperature_end
+                    params['isothermal_duration'] = iso_val
                     try:
-                        tprc_bytes = build_tprc(params)
+                        tprc_bytes = build_tprc(params, segments, logger=log)
                         tprc_path = TPRC_DIR / f"exp{eid}.tprc"
                         tprc_path.write_bytes(tprc_bytes)
                         log.info(f"  → Generated .tprc ({len(tprc_bytes)} bytes)")

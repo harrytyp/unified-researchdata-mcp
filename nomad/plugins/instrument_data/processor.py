@@ -637,49 +637,50 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     procedure_name = getattr(entry, "procedure_name", None)
     gas = getattr(entry, "gas_atmosphere", None)
 
-    # Temperature program: use the first temperature_segments entry if present
-    heating_rate = None
-    temperature_end = None
-    segments = getattr(entry, "temperature_segments", None) or []
-    for seg in segments:
+    # Temperature program: build the full ordered segment list (not just
+    # one representative rate/temperature) so every segment the user entered
+    # ends up in the generated .tprc.
+    raw_segments = getattr(entry, "temperature_segments", None) or []
+    segment_dicts = []
+    for seg in raw_segments:
         if seg is None:
             continue
-        if getattr(seg, "rate", None) is not None and heating_rate is None:
-            heating_rate = float(seg.rate)
-        if getattr(seg, "end_temp", None) is not None:
-            temperature_end = float(seg.end_temp)
-        if heating_rate is not None and temperature_end is not None:
-            break
+        segment_dicts.append({
+            "type": getattr(seg, "segment_type", None) or "Ramp",
+            "end_temp": getattr(seg, "end_temp", None),
+            "rate": getattr(seg, "rate", None),
+            "duration_min": getattr(seg, "duration_min", None),
+        })
 
-    if heating_rate is None and temperature_end is None:
+    if not segment_dicts:
         logger.warning(
-            "Neither temperature_segments nor source_upload_id set - "
-            "nothing to generate. Fill in the temperature program or link an upload."
+            "No temperature_segments set - nothing to generate. "
+            "Fill in at least one temperature program segment or link an upload."
         )
         return
 
     params = {
         "sample_name": sample_name or "Sample",
         "procedure_name": procedure_name or "TGA procedure",
-        "heating_rate": heating_rate if heating_rate is not None else 10.0,
-        "temperature_end": temperature_end if temperature_end is not None else 400.0,
         "gas_atmosphere": gas_map.get(gas, gas) if gas else "Nitrogen",
     }
-    logger.info("Generating .tprc from ELN parameters: %s" % params)
+    logger.info(
+        "Generating .tprc from ELN parameters: %s, %d segment(s)"
+        % (params, len(segment_dicts))
+    )
 
     # Derive the procedure description from the structured segments, so the
     # data entered in the form also lands in the derived fields.
-    if segments and not getattr(entry, "procedure_segments", None):
+    if not getattr(entry, "procedure_segments", None):
         desc_parts = []
-        for seg in segments:
-            stype = getattr(seg, "segment_type", None) or "ramp"
-            if stype == "isothermal":
-                dur = getattr(seg, "duration_min", None)
+        for sd in segment_dicts:
+            if (sd["type"] or "").lower() == "isothermal":
+                dur = sd.get("duration_min")
                 hold = " for %s min" % dur if dur is not None else ""
                 desc_parts.append("Isothermal%s" % hold)
             else:
-                rate = getattr(seg, "rate", None)
-                end = getattr(seg, "end_temp", None)
+                rate = sd.get("rate")
+                end = sd.get("end_temp")
                 if rate is not None and end is not None:
                     desc_parts.append("%s K/min to %s C" % (rate, end))
                 elif end is not None:
@@ -691,7 +692,10 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
                 pass
 
     try:
-        tprc_bytes = build_tprc(params)
+        tprc_bytes = build_tprc(params, segment_dicts, logger=logger)
+    except ValueError as e:
+        logger.warning("Cannot generate .tprc, fix the temperature segments: %s" % e)
+        return
     except Exception as e:
         logger.warning("build_tprc failed: %s" % e)
         return
