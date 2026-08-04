@@ -609,6 +609,45 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
             tmp_path.unlink()
 
 
+def _to_float(value: Any) -> float | None:
+    """Convert a value to float, handling pint Quantities (unit-aware).
+
+    For pint quantities the stored unit is preserved (no conversion), so the
+    raw magnitude is returned. Use _to_unit() when a specific target unit is
+    required (e.g. the TPRC format expects degC and degC/min).
+    """
+    if value is None:
+        return None
+    try:
+        # pint Quantity -> magnitude (keep stored unit); scalar -> float
+        if hasattr(value, "magnitude"):
+            return float(value.magnitude)
+        return float(value)
+    except Exception:
+        return None
+
+
+def _to_unit(value: Any, target_unit: str) -> float | None:
+    """Convert a value to a target unit, handling pint Quantities.
+
+    If the value is a pint Quantity, it is converted to ``target_unit``
+    (e.g. "delta_degree_Celsius" or "delta_degree_Celsius / minute") and the
+    magnitude returned. Scalars pass through unchanged.
+    """
+    if value is None:
+        return None
+    try:
+        if hasattr(value, "to") and hasattr(value, "magnitude"):
+            try:
+                return float(value.to(target_unit).magnitude)
+            except Exception:
+                # conversion failed -> fall back to raw magnitude
+                return float(value.magnitude)
+        return float(value)
+    except Exception:
+        return None
+
+
 def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     """Build a .tprc procedure file from the TgaMeasurement ELN parameters.
 
@@ -646,10 +685,14 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         if seg is None:
             continue
         segment_dicts.append({
-            "type": getattr(seg, "segment_type", None) or "Ramp",
-            "end_temp": getattr(seg, "end_temp", None),
-            "rate": getattr(seg, "rate", None),
-            "duration_min": getattr(seg, "duration_min", None),
+            "type": getattr(seg, "segment_type", None) or "ramp",
+            # TPRC stores absolute temperatures in degC. NOMAD stores degC
+            # quantities as absolute degree_Celsius, so convert to that unit
+            # (100 K -> -173.15 degC, 400 degC -> 400.0).
+            "end_temp": _to_unit(getattr(seg, "end_temp", None), "degree_Celsius"),
+            # TPRC stores the rate in degC/minute
+            "rate": _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute"),
+            "duration_min": _to_unit(getattr(seg, "duration_min", None), "minute"),
         })
 
     if not segment_dicts:
