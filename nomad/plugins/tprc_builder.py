@@ -25,6 +25,16 @@ def _patch_be_f32(data: bytearray, offset: int, value: float):
             data[offset + i] = packed[i]
 
 
+def _patch_le_f32(data: bytearray, offset: int, value: float):
+    """Same as _patch_be_f32 but little-endian — the isothermal duration
+    field uses the opposite byte order from every other field we've found
+    in this format, confirmed by comparing real TRIOS-exported files."""
+    packed = struct.pack('<f', float(value))
+    for i in range(4):
+        if offset + i < len(data):
+            data[offset + i] = packed[i]
+
+
 def _patch_tlv_string(data: bytearray, marker: bytes, new_value: str):
     """Find a TLV string starting with marker and replace it."""
     idx = data.find(marker)
@@ -88,9 +98,14 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
     """Check each segment has the fields it needs. Returns a list of
     human-readable problem descriptions (empty list = all valid).
 
-    A Ramp needs both end_temp and rate; a value of 0 is accepted (a
-    user may genuinely want a 0 rate isn't physical, but a *missing*
-    field is not the same as an intentional 0 — only None is rejected).
+    A Ramp needs both end_temp and rate. An Isothermal needs duration_min —
+    it does NOT need end_temp, since an isothermal segment holds at
+    whatever temperature the previous segment ended at; the .tprc format
+    has no target-temperature field for this segment type (confirmed by
+    inspecting real TRIOS-exported files, see build_tprc's docstring).
+    A value of 0 is accepted (a user may genuinely want a 0 rate isn't
+    physical, but a *missing* field is not the same as an intentional 0 —
+    only None is rejected).
     """
     problems = []
     for i, seg in enumerate(segments):
@@ -102,8 +117,8 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
             if seg.get('rate') is None:
                 problems.append(f"{label} is missing rate")
         elif seg_type == 'isothermal':
-            if seg.get('end_temp') is None:
-                problems.append(f"{label} is missing end_temp (hold temperature)")
+            if seg.get('duration_min') is None:
+                problems.append(f"{label} is missing duration_min")
         else:
             problems.append(f"{label} has unknown type {seg.get('type')!r}")
     return problems
@@ -125,21 +140,28 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
       instead of only the server's own log file).
 
     Every segment is validated before anything is written: a Ramp needs
-    both end_temp and rate, an Isothermal needs end_temp. If any segment
-    is incomplete, this raises ValueError instead of silently patching a
-    default of 0 — a half-filled segment must not produce a "successful"
-    but physically meaningless procedure file.
+    both end_temp and rate, an Isothermal needs duration_min. If any
+    segment is incomplete, this raises ValueError instead of silently
+    patching a default of 0 — a half-filled segment must not produce a
+    "successful" but physically meaningless procedure file.
 
     Each valid segment is then patched into the nth SGMT block of its
     matching type in the template (Ramp -> type 0x06, Isothermal -> type
-    0x05), in the order the segments were entered. The template only has
+    0x04), in the order the segments were entered. The template only has
     a fixed number of SGMT blocks of each type, so segments beyond that
     count cannot be written and are skipped with a logged warning.
 
-    Note: `duration_min` (isothermal hold time) is not currently patched —
-    the byte offset for hold duration inside the SGMT block hasn't been
-    identified in this template format yet. If a segment sets it, a
-    warning is logged so the user isn't misled into thinking it was applied.
+    Isothermal encoding (confirmed by comparing real TRIOS-exported .tprc
+    files that differed only in one segment's duration, across 3 separate
+    files / 5 independent segments):
+      - segment type byte is 0x04, not 0x05 as earlier code assumed
+      - duration_min lives at offset +12 from the block's "SGMT" marker,
+        encoded as a LITTLE-endian float — every other numeric field in
+        this format (Ramp's end_temp/rate) is big-endian, so this is the
+        one exception
+      - there is no target-temperature field in this block type; an
+        isothermal segment holds at whatever temperature the preceding
+        segment ended at, so end_temp is not written for Isothermal
     """
     log = logger or globals()['logger']
 
@@ -167,7 +189,7 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
 
     # ── 3. Patch each segment into its matching SGMT block, in order ──
     max_ramp = _count_sgmt_blocks(data, 0x06)
-    max_iso = _count_sgmt_blocks(data, 0x05)
+    max_iso = _count_sgmt_blocks(data, 0x04)
     ramp_count = 0
     iso_count = 0
     for i, seg in enumerate(segments):
@@ -183,18 +205,13 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
                     max_ramp, i + 1, seg.get('end_temp'))
             ramp_count += 1
         elif seg_type == 'isothermal':
-            idx = _find_sgmt_block(data, 0x05, iso_count)
+            idx = _find_sgmt_block(data, 0x04, iso_count)
             if idx >= 0:
-                _patch_be_f32(data, idx + 8, float(seg['end_temp']))  # Hold temperature
+                _patch_le_f32(data, idx + 12, float(seg['duration_min']))  # Hold duration (minutes)
             else:
                 log.warning(
-                    "Template only has %d Isothermal slot(s); segment %d not written",
-                    max_iso, i + 1)
-            if seg.get('duration_min') is not None:
-                log.warning(
-                    "Segment %d: duration_min=%s was entered but is not written to the "
-                    ".tprc file (hold-duration byte offset is not yet known)",
-                    i + 1, seg.get('duration_min'))
+                    "Template only has %d Isothermal slot(s); segment %d (Isothermal, %s min) not written",
+                    max_iso, i + 1, seg.get('duration_min'))
             iso_count += 1
 
     # ── 4. Patch gas atmosphere in TLV strings ──
