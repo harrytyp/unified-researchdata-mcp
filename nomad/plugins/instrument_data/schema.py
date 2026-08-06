@@ -263,6 +263,18 @@ class TgaMeasurement(PlotSection, EntryData):
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
         self.figures = []
+
+        # A SubSection only renders as an editable card on the Overview page
+        # once it actually exists in the archive (even empty). New entries
+        # have no `sample` and no `temperature_segments` yet, so the user
+        # has no visible way to start filling them in from Overview - they
+        # end up needing the raw Data tab instead. Creating them here, once,
+        # makes the cards appear immediately for a brand-new entry.
+        if self.sample is None:
+            self.sample = InstrumentSample()
+        if not self.temperature_segments:
+            self.temperature_segments.append(TemperatureSegment())
+
         if self.process_now:
             self.process_now = False
             from instrument_data.processor import normalize_tga_entry
