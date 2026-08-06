@@ -148,6 +148,49 @@ class TgaResults(MSection):
         description="Individual mass loss steps")
 
 
+def _build_procedure_preview_figure(segments):
+    """Build a temperature-vs-time preview plot from the procedure segments,
+    so the user can see the planned heating profile before any real
+    measurement has been run.
+
+    Ramp segments contribute a sloped line (duration = |end_temp - current| /
+    rate); Isothermal segments contribute a flat line for duration_min.
+    Starts from an assumed room-temperature ambient (25 degC) since the
+    schema has no explicit starting-temperature field.
+    """
+    from instrument_data.processor import _to_unit
+
+    times = [0.0]
+    temps = [25.0]
+    for seg in segments:
+        seg_type = (getattr(seg, "segment_type", None) or "ramp").lower()
+        t_now, temp_now = times[-1], temps[-1]
+        if seg_type == "ramp":
+            end_temp = _to_unit(getattr(seg, "end_temp", None), "degree_Celsius")
+            rate = _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute")
+            if end_temp is None or not rate:
+                continue
+            duration = abs(end_temp - temp_now) / abs(rate)
+            times.append(t_now + duration)
+            temps.append(end_temp)
+        elif seg_type == "isothermal":
+            duration = _to_unit(getattr(seg, "duration_min", None), "minute")
+            if duration is None:
+                continue
+            times.append(t_now + duration)
+            temps.append(temp_now)
+
+    if len(times) < 2:
+        return None
+
+    fig = px.line(
+        x=times, y=temps,
+        labels={'x': 'Time (min)', 'y': 'Temperature (°C)'},
+        title='Planned Temperature Profile',
+    )
+    return PlotlyFigure(label='Procedure preview', figure=fig.to_plotly_json())
+
+
 class TgaMeasurement(PlotSection, EntryData):
     """TGA measurement with parsed signal data and computed results.
 
@@ -279,6 +322,12 @@ class TgaMeasurement(PlotSection, EntryData):
             self.process_now = False
             from instrument_data.processor import normalize_tga_entry
             normalize_tga_entry(self, archive, logger)
+
+        # Preview of the planned heating profile, built from the segments
+        # themselves - available even before any real measurement exists.
+        preview_fig = _build_procedure_preview_figure(self.temperature_segments)
+        if preview_fig is not None:
+            self.figures.append(preview_fig)
 
         if self.temperature_signal and self.weight_signal and \
                 len(self.temperature_signal) == len(self.weight_signal):
