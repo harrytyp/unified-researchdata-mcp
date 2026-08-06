@@ -52,6 +52,7 @@ class ElabftwRef(MSection):
 
 class InstrumentSample(MSection):
     """Physical sample information."""
+    m_def = Section(a_eln=ELNAnnotation(overview=True))
     sample_name = Quantity(
         type=str,
         description="Sample identifier / name",
@@ -88,7 +89,7 @@ class TemperatureSegment(MSection):
     """A single segment (ramp or isothermal) in the temperature program,
     entered directly by the user in the NOMAD ELN interface."""
     m_def = Section(
-        a_eln=ELNAnnotation(),
+        a_eln=ELNAnnotation(overview=True),
         description="One temperature program segment: ramp (end_temp + rate) or isothermal (duration_min)")
     segment_type = Quantity(
         type=MEnum(["ramp", "isothermal"]),
