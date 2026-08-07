@@ -151,17 +151,20 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
     a fixed number of SGMT blocks of each type, so segments beyond that
     count cannot be written and are skipped with a logged warning.
 
-    Isothermal encoding (confirmed by comparing real TRIOS-exported .tprc
-    files that differed only in one segment's duration, across 3 separate
-    files / 5 independent segments):
-      - segment type byte is 0x04, not 0x05 as earlier code assumed
-      - duration_min lives at offset +12 from the block's "SGMT" marker,
-        encoded as a LITTLE-endian float — every other numeric field in
-        this format (Ramp's end_temp/rate) is big-endian, so this is the
-        one exception
-      - there is no target-temperature field in this block type; an
-        isothermal segment holds at whatever temperature the preceding
-        segment ended at, so end_temp is not written for Isothermal
+    Encoding (all confirmed by comparing real TRIOS-exported .tprc files
+    that differed only in one changed value, isolating each field):
+      - Isothermal segment type byte is 0x04, not 0x05 as earlier code
+        assumed; duration_min lives at +12 from the block's "SGMT" marker,
+        little-endian. There is no target-temperature field in this block
+        type — an isothermal segment holds at whatever temperature the
+        preceding segment ended at, so end_temp is not written for it.
+      - Ramp: end_temp lives at +12 and rate at +16, both little-endian —
+        not +8/+12 big-endian as earlier code assumed. Confirmed both with
+        isolated single-Ramp test files (only temp changed, only rate
+        changed) and by re-reading a real multi-segment template file,
+        where the corrected offsets produced sensible values matching the
+        file's own name (e.g. "1Cmin 1000C" -> rate=1.0, end_temp=1000.0)
+        while the old offsets produced garbage.
     """
     log = logger or globals()['logger']
 
@@ -197,8 +200,12 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
         if seg_type == 'ramp':
             idx = _find_sgmt_block(data, 0x06, ramp_count)
             if idx >= 0:
-                _patch_be_f32(data, idx + 8, float(seg['end_temp']))   # Target temperature
-                _patch_be_f32(data, idx + 12, float(seg['rate']))     # Heating rate
+                # Confirmed against real TRIOS-exported files (isolated
+                # single-Ramp segments, only one variable changed at a time):
+                # target temperature lives at +12 and rate at +16, both
+                # little-endian - not +8/+12 big-endian as previously assumed.
+                _patch_le_f32(data, idx + 12, float(seg['end_temp']))  # Target temperature
+                _patch_le_f32(data, idx + 16, float(seg['rate']))      # Heating rate
             else:
                 log.warning(
                     "Template only has %d Ramp slot(s); segment %d (Ramp to %s) not written",
