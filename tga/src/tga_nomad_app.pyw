@@ -34,6 +34,8 @@ DEFAULT_CONFIG = {
     'auto_upload': True,
     'poll_interval': 15,
     'verify_ssl': False,
+    'sample_status': {},           # upload_id -> {'status': 'pending'|'received'|'measured', 'ts': iso}
+    'auto_mark_measured': True,    # .tri present -> status automatically 'measured'
 }
 
 
@@ -230,6 +232,15 @@ def apply_theme(root):
     style.configure('Horizontal.TProgressbar', troughcolor='#e2e8f0', background=ACCENT)
 
 
+# ─── Sample status model ────────────────────────────────────────
+
+STATUS_META = {
+    'pending':  {'label': '○ pending',  'tag': 'st_pending',  'fg': MUTED, 'bg': SURFACE},
+    'received': {'label': '● received', 'tag': 'st_received', 'fg': OK,    'bg': '#f0fdf4'},
+    'measured': {'label': '◉ measured', 'tag': 'st_measured', 'fg': '#2563eb', 'bg': '#eff6ff'},
+}
+
+
 # ─── Main Application ───────────────────────────────────────────
 
 class TgaNomadApp:
@@ -361,23 +372,41 @@ class TgaNomadApp:
         # Uploads table
         lf = ttk.LabelFrame(frame, text='NOMAD Uploads (TgaMeasurement)', padding=6)
         lf.pack(fill='both', expand=True)
-        cols = ('name', 'sample', 'tprc', 'tri', 'entries', 'created')
+        cols = ('status', 'name', 'sample', 'tprc', 'tri', 'entries', 'created')
         self.upload_tree = ttk.Treeview(lf, columns=cols, show='headings', height=12)
-        widths = {'name': 220, 'sample': 150, 'tprc': 70, 'tri': 70, 'entries': 70, 'created': 100}
+        widths = {'status': 95, 'name': 205, 'sample': 145, 'tprc': 60,
+                  'tri': 60, 'entries': 60, 'created': 95}
         for c in cols:
-            self.upload_tree.heading(c, text=c.capitalize())
-            self.upload_tree.column(c, width=widths[c], anchor='w' if c in ('name', 'sample') else 'center')
+            self.upload_tree.heading(c, text='Status' if c == 'status' else c.capitalize())
+            self.upload_tree.column(c, width=widths[c],
+                                    anchor='w' if c in ('status', 'name', 'sample') else 'center')
         vsb = ttk.Scrollbar(lf, orient='vertical', command=self.upload_tree.yview)
         self.upload_tree.configure(yscrollcommand=vsb.set)
         self.upload_tree.pack(side='left', fill='both', expand=True)
         vsb.pack(side='right', fill='y')
 
+        # Status interactions: double-click to toggle, right-click menu
+        self.upload_tree.bind('<Double-1>', self._on_status_click)
+        self.upload_tree.bind('<Button-3>', self._on_context_menu)
+        self.status_menu = tk.Menu(self.root, tearoff=0)
+        self.status_menu.add_command(label='● Mark as received',
+                                     command=lambda: self._set_status_for(self._selected_upload_id(), 'received'))
+        self.status_menu.add_command(label='○ Mark as pending',
+                                     command=lambda: self._set_status_for(self._selected_upload_id(), 'pending'))
+        self.status_menu.add_separator()
+        self.status_menu.add_command(label='⟲ Reset to auto status',
+                                     command=lambda: self._clear_status(self._selected_upload_id()))
+
         # Legend + watcher status
         foot = ttk.Frame(frame, padding=(0, 6))
         foot.pack(fill='x')
         ttk.Label(foot, text='●', foreground=OK, background=BG).pack(side='left')
+        ttk.Label(foot, text='received   ', background=BG, foreground=MUTED).pack(side='left')
+        ttk.Label(foot, text='◉', foreground='#2563eb', background=BG).pack(side='left')
+        ttk.Label(foot, text='measured   ', background=BG, foreground=MUTED).pack(side='left')
+        ttk.Label(foot, text='✓', foreground=OK, background=BG).pack(side='left')
         ttk.Label(foot, text='.tprc ready   ', background=BG, foreground=MUTED).pack(side='left')
-        ttk.Label(foot, text='●', foreground=WARN, background=BG).pack(side='left')
+        ttk.Label(foot, text='✓', foreground=WARN, background=BG).pack(side='left')
         ttk.Label(foot, text='.tri uploaded   ', background=BG, foreground=MUTED).pack(side='left')
         self.watch_status = tk.StringVar(value='Watcher: stopped')
         ttk.Label(foot, textvariable=self.watch_status, background=BG,
@@ -425,6 +454,76 @@ class TgaNomadApp:
                            ('warn', '#fbbf24'), ('err', '#f87171')):
             self.log_area.tag_config(tag, foreground=color)
 
+    # ── Sample status helpers ──────────────────────────────────
+
+    def _manual_status(self, uid):
+        """Manually set status or None."""
+        st = (self.config.get('sample_status') or {}).get(uid)
+        if isinstance(st, dict):
+            return st.get('status') if st.get('status') in STATUS_META else None
+        return st if st in STATUS_META else None
+
+    def _display_status(self, uid, has_tri=False):
+        """Effective status: manual wins, otherwise auto-derive."""
+        manual = self._manual_status(uid)
+        if manual:
+            return manual
+        return 'measured' if (has_tri and self.config.get('auto_mark_measured', True)) else 'pending'
+
+    def _set_status_for(self, uid, status):
+        """Set status + persist immediately."""
+        if not uid:
+            return
+        statuses = self.config.setdefault('sample_status', {})
+        statuses[uid] = {'status': status, 'ts': datetime.now().isoformat(timespec='seconds')}
+        try:
+            save_config(self.config)
+        except Exception as e:
+            self._log(f'Could not save status: {e}', 'err')
+        self._update_row_status(uid)
+
+    def _clear_status(self, uid):
+        """Remove manual status (back to auto)."""
+        if uid and uid in self.config.get('sample_status', {}):
+            del self.config['sample_status'][uid]
+            try:
+                save_config(self.config)
+            except Exception as e:
+                self._log(f'Could not save status: {e}', 'err')
+            self._update_row_status(uid)
+
+    def _update_row_status(self, uid):
+        """Re-render a single row without a full refresh."""
+        if not self.upload_tree.exists(uid):
+            return
+        r = getattr(self, '_last_rows', {}).get(uid)
+        if not r:
+            return
+        meta = STATUS_META[self._display_status(uid, r['has_tri'])]
+        self.upload_tree.item(uid, tags=(meta['tag'],),
+                              values=(meta['label'], r['name'], r['sample'],
+                                      '✓' if r['has_tprc'] else '—',
+                                      '✓' if r['has_tri'] else '—',
+                                      r['entries'], r['created']))
+
+    def _on_status_click(self, event):
+        """Double-click on the Status cell toggles pending <-> received."""
+        if self.upload_tree.identify('region', event.x, event.y) != 'cell':
+            return
+        if self.upload_tree.identify_column(event.x) != '#1':
+            return
+        uid = self.upload_tree.identify_row(event.y)
+        if not uid:
+            return
+        cur = self._manual_status(uid) or 'pending'
+        self._set_status_for(uid, 'received' if cur != 'received' else 'pending')
+
+    def _on_context_menu(self, event):
+        row = self.upload_tree.identify_row(event.y)
+        if row:
+            self.upload_tree.selection_set(row)
+            self.status_menu.tk_popup(event.x_root, event.y_root)
+
     # ── Data: Refresh uploads ───────────────────────────────────
 
     def _refresh_uploads(self):
@@ -471,6 +570,10 @@ class TgaNomadApp:
                         fnames.append(str(f))
                 has_tprc = any(str(f).lower().endswith('.tprc') for f in fnames)
                 has_tri = any(str(f).lower().endswith(('.tri', '.xlsx')) for f in fnames)
+                # Auto-mark 'measured' if a .tri exists and no manual status set
+                if has_tri and self._manual_status(uid) is None and self.config.get('auto_mark_measured', True):
+                    self.config.setdefault('sample_status', {})[uid] = \
+                        {'status': 'measured', 'ts': datetime.now().isoformat(timespec='seconds')}
                 sample = ''
                 if tga_entries:
                     ed = tga_entries[0].get('data') or {}
@@ -498,17 +601,20 @@ class TgaNomadApp:
             self._busy(False)
 
     def _render_rows(self, rows):
+        self._last_rows = {r['upload_id']: r for r in rows}
         self.upload_tree.delete(*self.upload_tree.get_children())
         for r in rows:
-            tag = 'tprc_ok' if r['has_tprc'] else ('tri_up' if r['has_tri'] else 'plain')
-            self.upload_tree.insert('', tk.END, iid=r['upload_id'], tags=(tag,),
-                                    values=(r['name'], r['sample'],
+            uid = r['upload_id']
+            status = self._display_status(uid, r['has_tri'])
+            meta = STATUS_META[status]
+            self.upload_tree.insert('', tk.END, iid=uid, tags=(meta['tag'],),
+                                    values=(meta['label'], r['name'], r['sample'],
                                             '✓' if r['has_tprc'] else '—',
                                             '✓' if r['has_tri'] else '—',
                                             r['entries'], r['created']))
-        self.upload_tree.tag_configure('tprc_ok', foreground=OK)
-        self.upload_tree.tag_configure('tri_up', foreground=WARN)
-        self.upload_tree.tag_configure('plain', foreground=INK)
+        for status, meta in STATUS_META.items():
+            self.upload_tree.tag_configure(meta['tag'],
+                                           foreground=meta['fg'], background=meta['bg'])
 
 
     # ── Download .tprc ──────────────────────────────────────────
@@ -659,6 +765,9 @@ class TgaNomadApp:
             try:
                 self.client.upload_raw(uid, fname, str(fpath))
                 self._log(f'  Uploaded {fname} → {uid}', 'ok')
+                # Auto-mark 'measured' after a successful .tri upload
+                if self._manual_status(uid) is None and self.config.get('auto_mark_measured', True):
+                    self._set_status_for(uid, 'measured')
                 try:
                     self.client.trigger_process(uid)
                     self._log('  Processing triggered', 'ok')
