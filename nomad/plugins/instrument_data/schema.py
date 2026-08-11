@@ -86,37 +86,56 @@ class TemperatureRamp(MSection):
     duration = Quantity(type=float, unit="min", description="Hold time if isothermal")
 
 
-class TemperatureSegment(MSection):
-    """A single segment (ramp or isothermal) in the temperature program,
-    entered directly by the user in the NOMAD ELN interface."""
-    m_def = Section(
-        a_eln=ELNAnnotation(overview=True),
-        description="One temperature program segment: ramp (end_temp + rate) or isothermal (duration_min)")
-    segment_type = Quantity(
-        # "ramp"/"isothermal" are the canonical, GUI dropdown-facing values.
-        # "Ramp"/"Isothermal" are accepted in addition because entries created
-        # outside the ELN dropdown (direct archive.json uploads, scripts,
-        # imports from tprc_builder.py's own examples, which use Title Case)
-        # would otherwise fail with "X is not a value of this enumeration" at
-        # parse time -- before normalize() ever runs, so no downstream code
-        # can normalize the case for them. Everything that reads this value
-        # (processor.py, tprc_builder.py) already lower()s it before
-        # comparing, so accepting both casings here is safe and does not
-        # change any existing behavior for values already in canonical case.
-        type=MEnum(["ramp", "isothermal", "Ramp", "Isothermal"]),
-        description="Type of temperature program segment",
-        a_eln=ELNAnnotation(component="EnumEditQuantity"))
+class TemperatureSegmentBase(MSection):
+    """Common base for every procedure segment type. A repeating list of
+    these (mixing types freely, in order) makes up the full procedure -
+    temperature ramps, isothermal holds, and gas flow steps - matching how
+    TRIOS lets a user build up a sequence of Ramp/Isothermal/Mass Flow/
+    Balance Flow steps. Which concrete type a given list item is (and
+    therefore which fields it has) is chosen per-item in the ELN GUI, not
+    via a separate "segment_type" field - see RampSegment, IsothermalSegment,
+    MassFlowSegment, BalanceFlowSegment below."""
+    m_def = Section(a_eln=ELNAnnotation(overview=True))
+
+
+class RampSegment(TemperatureSegmentBase):
+    """Heat or cool at a fixed rate to a target temperature."""
+    m_def = Section(a_eln=ELNAnnotation())
     end_temp = Quantity(
         type=float, unit="°C",
-        description="Target temperature (for ramp segments)",
+        description="Target temperature",
         a_eln=ELNAnnotation(component="NumberEditQuantity"))
     rate = Quantity(
         type=float, unit="°C/minute",
-        description="Heating/cooling rate (for ramp segments)",
+        description="Heating/cooling rate",
         a_eln=ELNAnnotation(component="NumberEditQuantity"))
+
+
+class IsothermalSegment(TemperatureSegmentBase):
+    """Hold at whatever temperature the previous segment ended at, for a
+    fixed duration."""
+    m_def = Section(a_eln=ELNAnnotation())
     duration_min = Quantity(
         type=float, unit="minute",
-        description="Hold duration (for isothermal segments)",
+        description="Hold duration",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+
+
+class MassFlowSegment(TemperatureSegmentBase):
+    """Set the sample purge gas flow rate."""
+    m_def = Section(a_eln=ELNAnnotation())
+    flow_rate = Quantity(
+        type=float, unit="mL/minute",
+        description="Sample purge gas flow rate",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+
+
+class BalanceFlowSegment(TemperatureSegmentBase):
+    """Set the balance purge gas flow rate."""
+    m_def = Section(a_eln=ELNAnnotation())
+    flow_rate = Quantity(
+        type=float, unit="mL/minute",
+        description="Balance purge gas flow rate",
         a_eln=ELNAnnotation(component="NumberEditQuantity"))
 
 
@@ -166,17 +185,19 @@ def _build_procedure_preview_figure(segments):
 
     Ramp segments contribute a sloped line (duration = |end_temp - current| /
     rate); Isothermal segments contribute a flat line for duration_min.
-    Starts from an assumed room-temperature ambient (25 degC) since the
-    schema has no explicit starting-temperature field.
+    Mass Flow / Balance Flow segments don't affect temperature, so they're
+    skipped here (they still get written to the .tprc file, just not shown
+    on this particular plot). Starts from an assumed room-temperature
+    ambient (25 degC) since the schema has no explicit starting-temperature
+    field.
     """
     from instrument_data.processor import _to_unit
 
     times = [0.0]
     temps = [25.0]
     for seg in segments:
-        seg_type = (getattr(seg, "segment_type", None) or "ramp").lower()
         t_now, temp_now = times[-1], temps[-1]
-        if seg_type == "ramp":
+        if isinstance(seg, RampSegment):
             end_temp = _to_unit(getattr(seg, "end_temp", None), "degree_Celsius")
             rate = _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute")
             if end_temp is None or not rate:
@@ -184,7 +205,7 @@ def _build_procedure_preview_figure(segments):
             duration = abs(end_temp - temp_now) / abs(rate)
             times.append(t_now + duration)
             temps.append(end_temp)
-        elif seg_type == "isothermal":
+        elif isinstance(seg, IsothermalSegment):
             duration = _to_unit(getattr(seg, "duration_min", None), "minute")
             if duration is None:
                 continue
@@ -216,9 +237,8 @@ class TgaMeasurement(PlotSection, EntryData):
     sample = SubSection(sub_section=InstrumentSample)
     crucible_type = Quantity(
         # Lowercase variants are accepted alongside the canonical Title Case
-        # values for the same reason as TemperatureSegment.segment_type
-        # above: entries written by scripts/imports rather than the ELN
-        # dropdown can arrive in a different case and must not fail parsing
+        # values because entries written by scripts/imports rather than the
+        # ELN dropdown can arrive in a different case and must not fail parsing
         # with "X is not a value of this enumeration". crucible_type is only
         # ever stored/displayed, never string-compared for branching logic,
         # so accepting extra casings here changes no downstream behavior.
@@ -238,9 +258,12 @@ class TgaMeasurement(PlotSection, EntryData):
         type=str,
         description="Full method description (heating profile); derived from temperature_segments when set")
     temperature_segments = SubSection(
-        sub_section=TemperatureSegment,
+        sub_section=TemperatureSegmentBase,
         repeats=True,
-        description="Ordered list of temperature program segments (ramp/isothermal), entered by the user",
+        description="Ordered list of procedure segments (Ramp/Isothermal/Mass "
+                     "Flow/Balance Flow), entered by the user. When adding a "
+                     "new item, the ELN form asks which specific type to "
+                     "create and then shows only that type's own fields.",
         a_eln=ELNAnnotation())
     comments = Quantity(
         type=str,
@@ -334,7 +357,11 @@ class TgaMeasurement(PlotSection, EntryData):
         if self.sample is None:
             self.sample = InstrumentSample()
         if not self.temperature_segments:
-            self.temperature_segments.append(TemperatureSegment())
+            # RampSegment as the default placeholder type - it's the most
+            # common first step in a real procedure. The user can delete it
+            # and/or add a different type via the ELN's own type-selection
+            # dropdown for this list.
+            self.temperature_segments.append(RampSegment())
 
         if self.process_now:
             self.process_now = False

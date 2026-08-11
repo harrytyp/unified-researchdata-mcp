@@ -102,7 +102,8 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
     it does NOT need end_temp, since an isothermal segment holds at
     whatever temperature the previous segment ended at; the .tprc format
     has no target-temperature field for this segment type (confirmed by
-    inspecting real TRIOS-exported files, see build_tprc's docstring).
+    inspecting real TRIOS-exported files, see build_tprc's docstring). A
+    Mass Flow or Balance Flow segment needs flow_rate.
     A value of 0 is accepted (a user may genuinely want a 0 rate isn't
     physical, but a *missing* field is not the same as an intentional 0 —
     only None is rejected).
@@ -119,6 +120,9 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
         elif seg_type == 'isothermal':
             if seg.get('duration_min') is None:
                 problems.append(f"{label} is missing duration_min")
+        elif seg_type in ('mass_flow', 'balance_flow'):
+            if seg.get('flow_rate') is None:
+                problems.append(f"{label} is missing flow_rate")
         else:
             problems.append(f"{label} has unknown type {seg.get('type')!r}")
     return problems
@@ -132,24 +136,28 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
     params keys:
       sample_name, procedure_name (strings)
       gas_atmosphere: 'Nitrogen' | 'Air' | etc.
-    segments: ordered list of dicts, one per temperature program step:
+    segments: ordered list of dicts, one per procedure step:
       {'type': 'Ramp', 'end_temp': <float>, 'rate': <float>}
-      {'type': 'Isothermal', 'end_temp': <float>, 'duration_min': <float>}
+      {'type': 'Isothermal', 'duration_min': <float>}
+      {'type': 'Mass Flow', 'flow_rate': <float>}
+      {'type': 'Balance Flow', 'flow_rate': <float>}
     logger: optional logger to report warnings through (e.g. NOMAD's entry
       logger, so warnings show up in the entry's processing log in the GUI
       instead of only the server's own log file).
 
     Every segment is validated before anything is written: a Ramp needs
-    both end_temp and rate, an Isothermal needs duration_min. If any
-    segment is incomplete, this raises ValueError instead of silently
-    patching a default of 0 — a half-filled segment must not produce a
-    "successful" but physically meaningless procedure file.
+    both end_temp and rate, an Isothermal needs duration_min, a Mass Flow
+    or Balance Flow needs flow_rate. If any segment is incomplete, this
+    raises ValueError instead of silently patching a default of 0 — a
+    half-filled segment must not produce a "successful" but physically
+    meaningless procedure file.
 
     Each valid segment is then patched into the nth SGMT block of its
-    matching type in the template (Ramp -> type 0x06, Isothermal -> type
-    0x04), in the order the segments were entered. The template only has
-    a fixed number of SGMT blocks of each type, so segments beyond that
-    count cannot be written and are skipped with a logged warning.
+    matching type in the template (Ramp -> 0x06, Isothermal -> 0x04,
+    Mass Flow -> 0x0E, Balance Flow -> 0x13), in the order the segments
+    were entered. The template only has a fixed number of SGMT blocks of
+    each type, so segments beyond that count cannot be written and are
+    skipped with a logged warning.
 
     Encoding (all confirmed by comparing real TRIOS-exported .tprc files
     that differed only in one changed value, isolating each field):
@@ -165,6 +173,10 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
         where the corrected offsets produced sensible values matching the
         file's own name (e.g. "1Cmin 1000C" -> rate=1.0, end_temp=1000.0)
         while the old offsets produced garbage.
+      - Mass Flow (0x0E) and Balance Flow (0x13): flow_rate lives at +12,
+        little-endian — same "+12, little-endian" pattern as the other
+        segment types' primary value. Confirmed against a real multi-segment
+        operator file (matched TRIOS's displayed "200.00 mL/min" exactly).
     """
     log = logger or globals()['logger']
 
@@ -193,8 +205,12 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
     # ── 3. Patch each segment into its matching SGMT block, in order ──
     max_ramp = _count_sgmt_blocks(data, 0x06)
     max_iso = _count_sgmt_blocks(data, 0x04)
+    max_mass_flow = _count_sgmt_blocks(data, 0x0E)
+    max_balance_flow = _count_sgmt_blocks(data, 0x13)
     ramp_count = 0
     iso_count = 0
+    mass_flow_count = 0
+    balance_flow_count = 0
     for i, seg in enumerate(segments):
         seg_type = (seg.get('type') or 'Ramp').lower()
         if seg_type == 'ramp':
@@ -220,6 +236,24 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
                     "Template only has %d Isothermal slot(s); segment %d (Isothermal, %s min) not written",
                     max_iso, i + 1, seg.get('duration_min'))
             iso_count += 1
+        elif seg_type == 'mass_flow':
+            idx = _find_sgmt_block(data, 0x0E, mass_flow_count)
+            if idx >= 0:
+                _patch_le_f32(data, idx + 12, float(seg['flow_rate']))  # Sample purge flow (mL/min)
+            else:
+                log.warning(
+                    "Template only has %d Mass Flow slot(s); segment %d (Mass Flow, %s mL/min) not written",
+                    max_mass_flow, i + 1, seg.get('flow_rate'))
+            mass_flow_count += 1
+        elif seg_type == 'balance_flow':
+            idx = _find_sgmt_block(data, 0x13, balance_flow_count)
+            if idx >= 0:
+                _patch_le_f32(data, idx + 12, float(seg['flow_rate']))  # Balance purge flow (mL/min)
+            else:
+                log.warning(
+                    "Template only has %d Balance Flow slot(s); segment %d (Balance Flow, %s mL/min) not written",
+                    max_balance_flow, i + 1, seg.get('flow_rate'))
+            balance_flow_count += 1
 
     # ── 4. Patch gas atmosphere in TLV strings ──
     gas = params.get('gas_atmosphere', 'Nitrogen')

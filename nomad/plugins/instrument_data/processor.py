@@ -662,6 +662,9 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     except ImportError:
         logger.warning("tprc_builder not importable, cannot generate .tprc")
         return
+    from instrument_data.schema import (
+        RampSegment, IsothermalSegment, MassFlowSegment, BalanceFlowSegment,
+    )
 
     # Map NOMAD enum values to the TRIOS gas names used in the template
     gas_map = {
@@ -684,16 +687,34 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     for seg in raw_segments:
         if seg is None:
             continue
-        segment_dicts.append({
-            "type": getattr(seg, "segment_type", None) or "ramp",
-            # TPRC stores absolute temperatures in degC. NOMAD stores degC
-            # quantities as absolute degree_Celsius, so convert to that unit
-            # (100 K -> -173.15 degC, 400 degC -> 400.0).
-            "end_temp": _to_unit(getattr(seg, "end_temp", None), "degree_Celsius"),
-            # TPRC stores the rate in degC/minute
-            "rate": _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute"),
-            "duration_min": _to_unit(getattr(seg, "duration_min", None), "minute"),
-        })
+        # Which concrete type a segment is - and therefore which fields it
+        # has and what it means - is now decided by which class it's an
+        # instance of (chosen by the user in the ELN's type-selection
+        # dropdown), not by a separate "segment_type" string field.
+        if isinstance(seg, RampSegment):
+            segment_dicts.append({
+                "type": "ramp",
+                # TPRC stores absolute temperatures in degC. NOMAD stores
+                # degC quantities as absolute degree_Celsius, so convert to
+                # that unit (100 K -> -173.15 degC, 400 degC -> 400.0).
+                "end_temp": _to_unit(getattr(seg, "end_temp", None), "degree_Celsius"),
+                "rate": _to_unit(getattr(seg, "rate", None), "delta_degree_Celsius / minute"),
+            })
+        elif isinstance(seg, IsothermalSegment):
+            segment_dicts.append({
+                "type": "isothermal",
+                "duration_min": _to_unit(getattr(seg, "duration_min", None), "minute"),
+            })
+        elif isinstance(seg, MassFlowSegment):
+            segment_dicts.append({
+                "type": "mass_flow",
+                "flow_rate": _to_unit(getattr(seg, "flow_rate", None), "mL / minute"),
+            })
+        elif isinstance(seg, BalanceFlowSegment):
+            segment_dicts.append({
+                "type": "balance_flow",
+                "flow_rate": _to_unit(getattr(seg, "flow_rate", None), "mL / minute"),
+            })
 
     if not segment_dicts:
         logger.warning(
@@ -717,17 +738,22 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     if not getattr(entry, "procedure_segments", None):
         desc_parts = []
         for sd in segment_dicts:
-            if (sd["type"] or "").lower() == "isothermal":
+            sd_type = sd["type"]
+            if sd_type == "isothermal":
                 dur = sd.get("duration_min")
                 hold = " for %s min" % dur if dur is not None else ""
                 desc_parts.append("Isothermal%s" % hold)
-            else:
+            elif sd_type == "ramp":
                 rate = sd.get("rate")
                 end = sd.get("end_temp")
                 if rate is not None and end is not None:
                     desc_parts.append("%s K/min to %s C" % (rate, end))
                 elif end is not None:
                     desc_parts.append("to %s C" % end)
+            elif sd_type == "mass_flow":
+                desc_parts.append("Mass Flow %s mL/min" % sd.get("flow_rate"))
+            elif sd_type == "balance_flow":
+                desc_parts.append("Balance Flow %s mL/min" % sd.get("flow_rate"))
         if desc_parts:
             try:
                 entry.procedure_segments = "; ".join(desc_parts)
