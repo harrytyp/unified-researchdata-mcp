@@ -17,6 +17,7 @@ m_package = SchemaPackage(
         "instrument_data.schema:MsMeasurement",
         "instrument_data.schema:MockInstrumentRun",
         "instrument_data.schema:PipelineConfigEntry",
+        "instrument_data.schema:PolymorphismTest",
     ]
 )
 
@@ -92,7 +93,17 @@ class TemperatureSegment(MSection):
         a_eln=ELNAnnotation(overview=True),
         description="One temperature program segment: ramp (end_temp + rate) or isothermal (duration_min)")
     segment_type = Quantity(
-        type=MEnum(["ramp", "isothermal"]),
+        # "ramp"/"isothermal" are the canonical, GUI dropdown-facing values.
+        # "Ramp"/"Isothermal" are accepted in addition because entries created
+        # outside the ELN dropdown (direct archive.json uploads, scripts,
+        # imports from tprc_builder.py's own examples, which use Title Case)
+        # would otherwise fail with "X is not a value of this enumeration" at
+        # parse time -- before normalize() ever runs, so no downstream code
+        # can normalize the case for them. Everything that reads this value
+        # (processor.py, tprc_builder.py) already lower()s it before
+        # comparing, so accepting both casings here is safe and does not
+        # change any existing behavior for values already in canonical case.
+        type=MEnum(["ramp", "isothermal", "Ramp", "Isothermal"]),
         description="Type of temperature program segment",
         a_eln=ELNAnnotation(component="EnumEditQuantity"))
     end_temp = Quantity(
@@ -204,7 +215,14 @@ class TgaMeasurement(PlotSection, EntryData):
     # ── Sample info ──
     sample = SubSection(sub_section=InstrumentSample)
     crucible_type = Quantity(
-        type=MEnum(["Alumina", "Platinum", "Aluminum"]),
+        # Lowercase variants are accepted alongside the canonical Title Case
+        # values for the same reason as TemperatureSegment.segment_type
+        # above: entries written by scripts/imports rather than the ELN
+        # dropdown can arrive in a different case and must not fail parsing
+        # with "X is not a value of this enumeration". crucible_type is only
+        # ever stored/displayed, never string-compared for branching logic,
+        # so accepting extra casings here changes no downstream behavior.
+        type=MEnum(["Alumina", "Platinum", "Aluminum", "alumina", "platinum", "aluminum"]),
         description="Crucible material",
         a_eln=ELNAnnotation(component="EnumEditQuantity"))
     pan_number = Quantity(
@@ -676,6 +694,45 @@ class PipelineConfigEntry(EntryData):
             logger.info("Pipeline: manual scan triggered")
             self.trigger_scan = False
             # Scan will be handled by the background service
+
+
+# ── Polymorphism proof-of-concept (temporary, safe to remove later) ────────
+# Question we're testing: when a repeating SubSection is typed to a common
+# base class, does NOMAD's ELN GUI let the user pick a specific subclass when
+# adding a new item, and does the resulting form then only show that
+# subclass's own fields? This does not touch TgaMeasurement or any existing
+# entry type - it's a fully separate, disposable entry type.
+
+class TestStepBase(MSection):
+    """Common base class - has no fields of its own."""
+    m_def = Section(a_eln=ELNAnnotation())
+
+
+class TestTypeA(TestStepBase):
+    """Subtype A - only exists here, not on TestTypeB."""
+    m_def = Section(a_eln=ELNAnnotation())
+    value_a = Quantity(
+        type=float,
+        description="Only exists on TestTypeA",
+        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+
+
+class TestTypeB(TestStepBase):
+    """Subtype B - only exists here, not on TestTypeA."""
+    m_def = Section(a_eln=ELNAnnotation())
+    value_b = Quantity(
+        type=str,
+        description="Only exists on TestTypeB",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
+
+
+class PolymorphismTest(EntryData):
+    """Temporary proof-of-concept entry, not part of the real TGA workflow."""
+    m_def = Section(
+        label="Polymorphism Test",
+        categories=[ElnIntegrationCategory],
+        a_eln=ELNAnnotation(overview=True))
+    steps = SubSection(sub_section=TestStepBase, repeats=True, a_eln=ELNAnnotation())
 
 
 m_package.init_metainfo()
