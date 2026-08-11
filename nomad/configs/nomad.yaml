@@ -2,6 +2,7 @@ services:
   api_host: "localhost"
   api_base_path: "/nomad-oasis"
   upload_limit: 100
+  admin_user_id: "41875c3d-785d-4c2f-a7f5-1c81e6290276"
 
 oasis:
   is_oasis: true
