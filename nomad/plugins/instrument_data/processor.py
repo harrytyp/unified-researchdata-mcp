@@ -715,6 +715,15 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
                 "type": "balance_flow",
                 "flow_rate": _to_unit(getattr(seg, "flow_rate", None), "mL / minute"),
             })
+        else:
+            # A list item was added but never given a concrete type (e.g.
+            # the user clicked "+" but never picked Ramp/Isothermal/Mass
+            # Flow/Balance Flow from the type-selection dropdown). Record it
+            # with an unrecognized "type" instead of silently dropping it -
+            # tprc_builder's existing validation already rejects unknown
+            # types with a clear message, so this reuses that path rather
+            # than adding a second, separate error-reporting mechanism.
+            segment_dicts.append({"type": "(no type selected)"})
 
     if not segment_dicts:
         logger.warning(

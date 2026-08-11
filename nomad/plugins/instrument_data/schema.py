@@ -358,12 +358,11 @@ class TgaMeasurement(PlotSection, EntryData):
         # makes the cards appear immediately for a brand-new entry.
         if self.sample is None:
             self.sample = InstrumentSample()
-        if not self.temperature_segments:
-            # RampSegment as the default placeholder type - it's the most
-            # common first step in a real procedure. The user can delete it
-            # and/or add a different type via the ELN's own type-selection
-            # dropdown for this list.
-            self.temperature_segments.append(RampSegment())
+        # Note: temperature_segments is intentionally left as an empty list
+        # here rather than auto-filled with a placeholder segment - an empty
+        # (but present) list is enough for it to render as a card with its
+        # own "add" button on Overview (confirmed earlier), and a real
+        # procedure has no natural "default" first segment type to guess.
 
         if self.process_now:
             self.process_now = False

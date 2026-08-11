@@ -106,8 +106,16 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
     Mass Flow or Balance Flow segment needs flow_rate.
     A value of 0 is accepted (a user may genuinely want a 0 rate isn't
     physical, but a *missing* field is not the same as an intentional 0 —
-    only None is rejected).
+    only None is rejected). A *negative* rate/flow_rate/duration is always
+    rejected, regardless of segment type - this format always records these
+    as positive magnitudes (direction/effect is implied by the segment type
+    and its target, not by the sign of the number), so a negative value can
+    only be a data-entry mistake, never an intentional value.
     """
+    def _negative(seg, field):
+        value = seg.get(field)
+        return value is not None and value < 0
+
     problems = []
     for i, seg in enumerate(segments):
         seg_type = (seg.get('type') or 'Ramp').lower()
@@ -117,12 +125,18 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
                 problems.append(f"{label} is missing end_temp")
             if seg.get('rate') is None:
                 problems.append(f"{label} is missing rate")
+            elif _negative(seg, 'rate'):
+                problems.append(f"{label} has a negative rate ({seg['rate']}) - enter it as a positive magnitude")
         elif seg_type == 'isothermal':
             if seg.get('duration_min') is None:
                 problems.append(f"{label} is missing duration_min")
+            elif _negative(seg, 'duration_min'):
+                problems.append(f"{label} has a negative duration_min ({seg['duration_min']})")
         elif seg_type in ('mass_flow', 'balance_flow'):
             if seg.get('flow_rate') is None:
                 problems.append(f"{label} is missing flow_rate")
+            elif _negative(seg, 'flow_rate'):
+                problems.append(f"{label} has a negative flow_rate ({seg['flow_rate']})")
         else:
             problems.append(f"{label} has unknown type {seg.get('type')!r}")
     return problems
