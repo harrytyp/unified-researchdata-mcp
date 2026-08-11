@@ -497,6 +497,71 @@ class TgaNomadApp:
         finally:
             self._busy(False)
 
+    def _render_rows(self, rows):
+        self.upload_tree.delete(*self.upload_tree.get_children())
+        for r in rows:
+            tag = 'tprc_ok' if r['has_tprc'] else ('tri_up' if r['has_tri'] else 'plain')
+            self.upload_tree.insert('', tk.END, iid=r['upload_id'], tags=(tag,),
+                                    values=(r['name'], r['sample'],
+                                            '✓' if r['has_tprc'] else '—',
+                                            '✓' if r['has_tri'] else '—',
+                                            r['entries'], r['created']))
+        self.upload_tree.tag_configure('tprc_ok', foreground=OK)
+        self.upload_tree.tag_configure('tri_up', foreground=WARN)
+        self.upload_tree.tag_configure('plain', foreground=INK)
+
+
+    # ── Download .tprc ──────────────────────────────────────────
+
+    def _selected_upload_id(self):
+        sel = self.upload_tree.selection()
+        return sel[0] if sel else None
+
+    def _download_tprc(self):
+        uid = self._selected_upload_id()
+        if not uid:
+            messagebox.showwarning('No Selection',
+                                   'Select an upload in the list first, then try again.')
+            return
+        import_dir = Path(self.config.get('trios_import_dir', ''))
+        if not import_dir.exists():
+            messagebox.showerror('Folder Not Found',
+                                 f'TRIOS import folder does not exist:\n{import_dir}\n\n'
+                                 'Set it in the Configuration tab.')
+            return
+        self._busy(True)
+        threading.Thread(target=self._download_worker, args=(uid, import_dir), daemon=True).start()
+
+    def _download_worker(self, uid, import_dir):
+        try:
+            files = self.client.list_raw_files(uid) or []
+            tprc_files = []
+            for f in files:
+                fname = f.get('path', f.get('name', '')) if isinstance(f, dict) else str(f)
+                if str(fname).lower().endswith('.tprc'):
+                    tprc_files.append(fname)
+            if not tprc_files:
+                self._log('No .tprc file in this upload', 'warn')
+                self._set_status('No .tprc in upload', ok=False)
+                return
+            saved = []
+            for rel in tprc_files:
+                dest = import_dir / Path(rel).name
+                n = self.client.download_raw(uid, rel, str(dest))
+                self._file_owner[dest.name] = uid
+                self._log(f'Downloaded {Path(rel).name} ({n} B) → {dest}', 'ok')
+                saved.append(str(dest))
+            self._set_status(f'Saved {len(saved)} .tprc', ok=True)
+            messagebox.showinfo('Done', '.tprc saved to:\n' + '\n'.join(saved))
+        except NomadApiError as e:
+            self._log(f'Download failed: {e}', 'err')
+            self._set_status('Download failed', ok=False)
+        except Exception as e:
+            self._log(f'Download error: {e}', 'err')
+            self._set_status('Download error', ok=False)
+        finally:
+            self._busy(False)
+
     # ── Upload .tri result ──────────────────────────────────────
 
     def _upload_tri(self):
