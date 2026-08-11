@@ -497,6 +497,20 @@ class TgaNomadApp:
         finally:
             self._busy(False)
 
+    def _render_rows(self, rows):
+        self.upload_tree.delete(*self.upload_tree.get_children())
+        for r in rows:
+            tag = 'tprc_ok' if r['has_tprc'] else ('tri_up' if r['has_tri'] else 'plain')
+            self.upload_tree.insert('', tk.END, iid=r['upload_id'], tags=(tag,),
+                                    values=(r['name'], r['sample'],
+                                            '✓' if r['has_tprc'] else '—',
+                                            '✓' if r['has_tri'] else '—',
+                                            r['entries'], r['created']))
+        self.upload_tree.tag_configure('tprc_ok', foreground=OK)
+        self.upload_tree.tag_configure('tri_up', foreground=WARN)
+        self.upload_tree.tag_configure('plain', foreground=INK)
+
+
     # ── Download .tprc ──────────────────────────────────────────
 
     def _selected_upload_id(self):
