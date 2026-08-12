@@ -851,7 +851,6 @@ class TgaNomadApp:
                 uid = up.get('upload_id', up.get('id', ''))
                 if not uid:
                     continue
-                name = up.get('upload_name') or f'Upload {uid[:8]}'
                 created = (up.get('upload_create_time', '') or '')[:10]
                 # entries field is a COUNT (int); fetch the real list
                 entries = []
@@ -894,6 +893,9 @@ class TgaNomadApp:
                     entry_type = str(md0.get('entry_type') or 'TgaMeasurement')
                     procedure = self._procedure_label(ed)
                     author = self._author_name(md0, up)
+                # Prefer a human-meaningful name over the upload's own name
+                # (usually unset for ELN-created uploads) or the raw ID.
+                name = up.get('upload_name') or sample or procedure or f'Upload {uid[:8]}'
                 rows.append({
                     'upload_id': uid, 'name': name, 'sample': sample,
                     'entry_type': entry_type, 'procedure': procedure, 'author': author,

@@ -102,7 +102,7 @@ class RampSegment(TemperatureSegmentBase):
     """Heat or cool at a fixed rate to a target temperature."""
     # label_quantity: show this field's value (e.g. "450.0") as the list
     # label for this segment instead of a bare index ("0", "1", ...).
-    m_def = Section(a_eln=ELNAnnotation(properties=dict(label_quantity='end_temp')))
+    m_def = Section(a_eln=ELNAnnotation(more=dict(label_quantity='end_temp')))
     end_temp = Quantity(
         type=float, unit="°C",
         description="Target temperature",
@@ -116,7 +116,7 @@ class RampSegment(TemperatureSegmentBase):
 class IsothermalSegment(TemperatureSegmentBase):
     """Hold at whatever temperature the previous segment ended at, for a
     fixed duration."""
-    m_def = Section(a_eln=ELNAnnotation(properties=dict(label_quantity='duration_min')))
+    m_def = Section(a_eln=ELNAnnotation(more=dict(label_quantity='duration_min')))
     duration_min = Quantity(
         type=float, unit="minute",
         description="Hold duration",
@@ -125,7 +125,7 @@ class IsothermalSegment(TemperatureSegmentBase):
 
 class MassFlowSegment(TemperatureSegmentBase):
     """Set the sample purge gas flow rate."""
-    m_def = Section(a_eln=ELNAnnotation(properties=dict(label_quantity='flow_rate')))
+    m_def = Section(a_eln=ELNAnnotation(more=dict(label_quantity='flow_rate')))
     flow_rate = Quantity(
         type=float, unit="mL/minute",
         description="Sample purge gas flow rate",
@@ -134,7 +134,7 @@ class MassFlowSegment(TemperatureSegmentBase):
 
 class BalanceFlowSegment(TemperatureSegmentBase):
     """Set the balance purge gas flow rate."""
-    m_def = Section(a_eln=ELNAnnotation(properties=dict(label_quantity='flow_rate')))
+    m_def = Section(a_eln=ELNAnnotation(more=dict(label_quantity='flow_rate')))
     flow_rate = Quantity(
         type=float, unit="mL/minute",
         description="Balance purge gas flow rate",

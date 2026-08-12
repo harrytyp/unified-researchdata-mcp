@@ -812,3 +812,58 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         "Generated .tprc (%d bytes) -> %s (upload_files=%s)"
         % (len(tprc_bytes), entry.tprc_filename, added)
     )
+
+    _add_operator_group(archive, logger)
+
+
+def _add_operator_group(archive: Any, logger: Any) -> None:
+    """Add the tga-operators group as coauthor on this upload, so operator
+    accounts (non-admin PATs) that are members of that group see it in
+    their own upload list. NOMAD's admin flag is ignored by the uploads
+    list endpoint - only per-upload coauthor/coauthor_group membership
+    makes an upload appear there (confirmed against
+    nomad/app/v1/routers/uploads.py: get_role_query, on the live server).
+    """
+    import os
+    import requests as _req
+
+    upload_id = getattr(archive.m_context, "upload_id", None)
+    if not upload_id:
+        return
+
+    pat = os.environ.get("NOMAD_PAT", "")
+    nomad_url = os.environ.get(
+        "NOMAD_API_URL", "http://localhost:8000/nomad-oasis/api/v1"
+    )
+    if not pat:
+        logger.warning("NOMAD_PAT not set, cannot share upload with tga-operators")
+        return
+
+    group_id = "tga-operators-6a7ae5e4cec5e87bf39df8a3"
+    headers = {"Authorization": f"Bearer {pat}"}
+    try:
+        get_resp = _req.get(f"{nomad_url}/uploads/{upload_id}", headers=headers, timeout=15)
+        if get_resp.status_code != 200:
+            logger.warning(
+                "Could not read upload %s to share with tga-operators: HTTP %d"
+                % (upload_id, get_resp.status_code)
+            )
+            return
+        current = (get_resp.json().get("data", {}) or {}).get("coauthor_groups") or []
+        if group_id in current:
+            return
+        resp = _req.post(
+            f"{nomad_url}/uploads/{upload_id}/edit",
+            json={"metadata": {"coauthor_groups": current + [group_id]}},
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            logger.info("Shared upload %s with tga-operators" % upload_id)
+        else:
+            logger.warning(
+                "Could not share upload %s with tga-operators: HTTP %d %s"
+                % (upload_id, resp.status_code, resp.text[:200])
+            )
+    except Exception as e:
+        logger.warning("Error sharing upload %s with tga-operators: %s" % (upload_id, e))
