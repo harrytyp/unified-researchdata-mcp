@@ -1,0 +1,78 @@
+/* TGA Operator — dark mode via Quasar's body.body--dark class.
+ * NiceGUI toggles Quasar dark mode, NOT Tailwind's .dark class, so
+ * Tailwind `dark:` variants never apply. These rules cover everything. */
+
+body.body--dark {
+    background-color: #121212;
+}
+
+/* Board column backgrounds */
+body.body--dark .tga-col {
+    background-color: #1e1e1e !important;
+}
+
+/* Cards */
+body.body--dark .tga-card {
+    background-color: #252525 !important;
+    border-color: #3a3a3a !important;
+}
+
+/* Text */
+body.body--dark .tga-title {
+    color: #ffffff !important;
+}
+body.body--dark .tga-sub {
+    color: #9ca3af !important;
+}
+body.body--dark .tga-muted {
+    color: #6b7280 !important;
+}
+
+/* List rows */
+body.body--dark .tga-row {
+    border-bottom-color: #2f2f2f !important;
+}
+body.body--dark .tga-row:hover {
+    background-color: #1a1a1a !important;
+}
+
+/* Slot badges + selection borders stay colored in dark mode */
+body.body--dark .tga-selected {
+    border-color: #22c55e !important;
+}
+
+/* Header switch visibility on dark header */
+body.body--dark .q-switch__label {
+    color: #ffffff !important;
+}
+
+/* Tabs */
+body.body--dark .q-tab {
+    color: #ffffff !important;
+}
+body.body--dark .q-tab__label,
+body.body--dark .q-tab__icon {
+    color: #ffffff !important;
+}
+body.body--dark .q-tabs__content {
+    background-color: #1a1a1a;
+}
+
+/* Tab panels / settings / log backgrounds */
+body.body--dark .q-tab-panel {
+    background-color: #121212;
+}
+
+/* Settings cards */
+body.body--dark .q-card {
+    background-color: #1e1e1e !important;
+    color: #e5e5e5 !important;
+}
+
+/* Inputs in settings (dark) */
+body.body--dark .q-field__control {
+    color: #e5e5e5 !important;
+}
+body.body--dark .q-field__label {
+    color: #9ca3af !important;
+}
