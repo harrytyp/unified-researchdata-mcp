@@ -345,6 +345,13 @@ class TgaMeasurement(PlotSection, EntryData):
         description="Toggle to True and save to trigger CSV processing",
         a_eln=ELNAnnotation(component="ActionEditQuantity"),
     )
+    procedure_status = Quantity(
+        type=str,
+        description="Result of the last '.tprc' generation attempt, so a "
+                     "problem is visible here on Overview without having to "
+                     "open the processing log.",
+        a_eln=ELNAnnotation(overview=True),
+    )
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
