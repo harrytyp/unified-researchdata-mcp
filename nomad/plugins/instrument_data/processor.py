@@ -730,7 +730,7 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
             "No temperature_segments set - nothing to generate. "
             "Fill in at least one temperature program segment or link an upload."
         )
-        entry.procedure_status = "Eksik: hic sicaklik segmenti girilmedi"
+        entry.procedure_status = "Missing: no temperature segments entered"
         return
 
     params = {
@@ -774,11 +774,11 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         tprc_bytes = build_tprc(params, segment_dicts, logger=logger)
     except ValueError as e:
         logger.warning("Cannot generate .tprc, fix the temperature segments: %s" % e)
-        entry.procedure_status = "Eksik: %s" % e
+        entry.procedure_status = "Missing: %s" % e
         return
     except Exception as e:
         logger.warning("build_tprc failed: %s" % e)
-        entry.procedure_status = "Hata: %s" % e
+        entry.procedure_status = "Error: %s" % e
         return
 
     safe_sample = "".join(c for c in (sample_name or "Sample") if c.isalnum() or c in "-_ ").strip() or "Sample"
@@ -816,7 +816,7 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         % (len(tprc_bytes), entry.tprc_filename, added)
     )
 
-    entry.procedure_status = "Hazir" if added else "Hazir (NOMAD dosyasina eklenemedi, loga bak)"
+    entry.procedure_status = "Ready" if added else "Ready (could not attach file to upload, check log)"
 
     _add_operator_group(archive, logger)
 
