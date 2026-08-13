@@ -39,17 +39,30 @@ read/write access to **every upload by ID** and to all entries.
 
 ### 2. `tga-operators` user group on all uploads (`coauthor_groups`)
 
-Because the upload **list** ignores admin, the operator must appear as
-coauthor on the uploads. A user group is the scalable way:
+Because the upload **list** used to ignore admin, the operator had to appear
+as coauthor on the uploads — a user group is the scalable way. **Since the
+2026-08-13 admin fix** (`plugins/patch_uploads_admin.sh`) admins see ALL
+uploads regardless of roles; the group is still needed for NON-admin PATs
+with group membership and for auto-sharing from `instrument_data/processor.py`.
+
+> **WICHTIG (Bug-Fix 2026-08-13):** The group document MUST be schema-conform —
+> with `group_id` (the primary-key field!), `owner` and `members_info`.
+> Without `group_id`, `MongoUserGroup.get_ids_by_user_id()` does not return
+> the group (the code reads `group.group_id`), which drops every upload that
+> is only visible via the group — AND the groups serialization crashes with
+> HTTP 500 in the UI (required `members_info`/`owner` missing).
 
 ```python
 # In MongoDB (nomad_oasis_v1), via mongosh:
-# 1. Create the group with a STRING _id (NOMAD expects string group ids;
-#    an ObjectId breaks the API response validation):
+# 1. Create the group schema-conform (STRING _id; group_id = same string;
+#    owner = operator user_id; members_info = [{user_id, role}]):
 db.user_group.insertOne({
     _id: "tga-operators-<random>",
+    group_id: "tga-operators-<random>",           # REQUIRED (primary-key field)
     group_name: "tga-operators",
-    members: ["41875c3d-785d-4c2f-a7f5-1c81e6290276"],   # operator user_id
+    owner: "41875c3d-785d-4c2f-a7f5-1c81e6290276",   # operator user_id
+    members: ["41875c3d-785d-4c2f-a7f5-1c81e6290276"],
+    members_info: [{"user_id": "41875c3d-785d-4c2f-a7f5-1c81e6290276", "role": "owner"}],
     created: new Date()
 })
 
@@ -58,7 +71,15 @@ db.upload.updateMany({}, { $addToSet: { coauthor_groups: "tga-operators-<random>
 ```
 
 Then `MongoUserGroup.get_ids_by_user_id(user_id)` returns the group id, the
-role query matches `coauthor_groups`, and the list endpoint shows all uploads.
+role query matches `coauthor_groups`, and the list endpoint shows all uploads
+for NON-admin PATs with group membership.
+
+> **Admin-PAT (empfohlen):** `plugins/patch_uploads_admin.sh` (invoked by
+> `plugins/startup.sh` on every container start) patches `get_role_query`
+> so that admins (`is_admin: True`) see ALL uploads — independent of roles
+> or groups. Verify: `GET /uploads` with the admin PAT returns all uploads
+> (pagination `total` = row count in DB), paged via `page_after_value`
+> (page_size is capped at 10; `per_page` is ignored).
 
 ### 3. PAT scopes
 
