@@ -34,7 +34,9 @@ class FakeClient:
         if uid == 'AAA111':
             return [{'name': 'Sample.tprc', 'size': 2550, 'is_file': True}]
         if uid == 'BBB222':
-            return [{'name': 'result.tri', 'size': 100, 'is_file': True}]
+            return [{'name': 'Sample.tprc', 'size': 2550, 'is_file': True},
+                    {'name': 'result.tri', 'size': 100, 'is_file': True}]
+        # CCC333: NO raw files (no .tprc) — used by test 5a
         return []
     def download_raw(self, uid, rel, dest):
         Path(dest).write_bytes(self.tprc)
@@ -82,10 +84,23 @@ assert slot_filename('Probe A', '03', 'AAA111') == 'Probe A_03.tprc'
 print('4. Slot-Zuweisung + display_status=assigned OK')
 
 # 5. save_slot_files (lädt .tprc als {Sample}_{Slot}.tprc)
+# Slots werden JETZT intern vergeben (atomar mit der Dateiarbeit — kein
+# Race mit dem Watcher). Erster freier Slot: 01.
 import_dir = Path(_tmp) / 'TRIOS' / 'Methods'
-ok, failed = b.save_slot_files([{'upload_id': 'AAA111', 'sample': 'Probe A', 'slot': '03'}], import_dir)
-assert ok and (import_dir / 'Probe A_03.tprc').exists(), f'ok={ok} failed={failed}'
-print(f'5. Slot-Dateien OK: {(import_dir / "Probe A_03.tprc").name}')
+ok, failed = b.save_slot_files([{'upload_id': 'AAA111', 'sample': 'Probe A'}], import_dir)
+assert ok and (import_dir / 'Probe A_01.tprc').exists(), f'ok={ok} failed={failed}'
+assert b.slot_for('AAA111') == '01', f'Slot muss intern vergeben sein, ist {b.slot_for("AAA111")}'
+print(f'5. Slot-Dateien OK: {(import_dir / "Probe A_01.tprc").name} (Slot intern vergeben)')
+
+# 5a. Probe OHNE .tprc darf keinen Slot verbrennen (Bug-Fix: Slots 3-4 statt 1-2)
+# CCC333 hat im FakeClient keinen .tprc-Raw-File -> muss fehlschlagen UND Slot 02
+# muss für die nächste erfolgreiche Probe frei bleiben.
+ok2, failed2 = b.save_slot_files([{'upload_id': 'CCC333', 'sample': 'Probe C'},
+                                  {'upload_id': 'BBB222', 'sample': 'Probe B'}], import_dir)
+assert len(ok2) == 1 and len(failed2) == 1, f'ok={ok2} failed={failed2}'
+assert b.slot_for('BBB222') == '02', f'Probe B muss Slot 02 bekommen (01 nicht verbrannt), ist {b.slot_for("BBB222")}'
+assert b.slot_for('CCC333') is None, 'Probe C (ohne tprc) darf keinen Slot haben'
+print('5a. Probe ohne .tprc: kein Slot-Verbrauch OK (B -> 02, C -> keiner)')
 
 # 5b. Slot wird bei Statuswechsel auf measured gelöscht (Bug-Fix)
 b.assign_slot('BBB222', '05')

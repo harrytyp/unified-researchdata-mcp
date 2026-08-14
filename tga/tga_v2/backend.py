@@ -6,6 +6,7 @@ All state lives in a single Backend instance owned by the UI.
 """
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -153,6 +154,7 @@ class Backend:
     """All app state + business logic. UI-agnostic; UI calls these methods."""
 
     def __init__(self, client=None):
+        self.refreshing = False
         self.config = load_config()
         self.client = client
         self.uploads = []            # enriched upload dicts (UI rows/cards)
@@ -242,105 +244,114 @@ class Backend:
 
     # ── Data loading ────────────────────────────────────────────
 
+    def _enrich_upload(self, up):
+        uid = up.get('upload_id', up.get('id', ''))
+        if not uid:
+            return None
+        name = up.get('upload_name') or f'Upload {uid[:8]}'
+        created = (up.get('upload_create_time', '') or '')[:16]
+        entries = []
+        try:
+            entries = self.client.list_upload_entries(uid) or []
+        except NomadApiError as e:
+            self.log(f'  entries {uid[:8]}: {e}', 'warn')
+        tga = []
+        entry_ids = []
+        entry_names = []
+        for e in entries:
+            md = e.get('entry_metadata') or {} if isinstance(e, dict) else {}
+            if 'TgaMeasurement' in str(md.get('entry_type', '')):
+                tga.append(md)
+                eid = e.get('entry_id') if isinstance(e, dict) else None
+                if eid:
+                    entry_ids.append(str(eid))
+                ename = e.get('entry_name') if isinstance(e, dict) else None
+                if ename:
+                    entry_names.append(str(ename))
+        if not tga:
+            return None
+        files = []
+        try:
+            files = self.client.list_raw_files(uid) or []
+        except NomadApiError as e:
+            self.log(f'  rawdir {uid[:8]}: {e}', 'warn')
+        fnames = []
+        for f in files:
+            if isinstance(f, dict):
+                fnames.append(f.get('path', f.get('name', '')))
+            else:
+                fnames.append(str(f))
+        has_tprc = any(str(f).lower().endswith('.tprc') for f in fnames)
+        has_tri = any(str(f).lower().endswith(('.tri', '.xlsx')) for f in fnames)
+        md0 = tga[0] if tga else {}
+        ed = md0.get('data') or {}
+        # Display name: prefer the ELN sample_name; fall back to the
+        # .tprc filename stem (Sample.tprc -> Sample), the entry name,
+        # or the entry id. NEVER "Upload {random-id}" as the title —
+        # that made the board unusable when users left the sample
+        # field empty.
+        sample_name = str((ed.get('sample') or {}).get('sample_name', '')).strip()
+        if not sample_name:
+            # Prefer the tprc_filename the ELN wrote (may or may not
+            # carry a .tprc extension), then the raw .tprc stem, then
+            # the entry name stem, then the entry id.
+            tprc_file = str(ed.get('tprc_filename') or '').strip()
+            if tprc_file:
+                sample_name = Path(tprc_file).stem
+            else:
+                raw_stem = next((Path(str(f)).stem for f in fnames
+                                 if str(f).lower().endswith('.tprc')), '')
+                entry_stem = Path(str(entry_names[0] if entry_names else '')).stem
+                sample_name = (raw_stem or entry_stem
+                               or str(entry_ids[0] or uid))[:60]
+        row = {
+            'upload_id': uid,
+            'name': name,
+            'sample': sample_name[:60],
+            'entry_type': str(md0.get('entry_type') or 'TgaMeasurement'),
+            'procedure': procedure_label(ed),
+            'author': author_name(md0, up, self.author_cache),
+            'segments': ed.get('temperature_segments') or [],
+            'entry_id': entry_ids[0] if entry_ids else None,
+            'has_tprc': has_tprc,
+            'has_tri': has_tri,
+            'entries': len(tga),
+            'created': created,
+            'files': fnames,
+        }
+        if has_tri and self.manual_status(uid) is None \
+                and self.config.get('auto_mark_measured', True):
+            self.config.setdefault('sample_status', {})[uid] = {
+                'status': 'measured',
+                'ts': datetime.now().isoformat(timespec='seconds')}
+        for f in fnames:
+            if str(f).lower().endswith('.tprc'):
+                self.file_owner[str(f)] = uid
+        return row
     def refresh(self):
         """Fetch all TGA uploads and enrich them. Returns list of dicts."""
         if not self.client:
             self.log('Not connected — set NOMAD URL + PAT first', 'err')
             return []
+        self.refreshing = True
         try:
             uploads = self.client.list_uploads(per_page=100)
-            rows = []
-            for up in uploads:
-                uid = up.get('upload_id', up.get('id', ''))
-                if not uid:
-                    continue
-                name = up.get('upload_name') or f'Upload {uid[:8]}'
-                created = (up.get('upload_create_time', '') or '')[:10]
-                entries = []
-                try:
-                    entries = self.client.list_upload_entries(uid) or []
-                except NomadApiError as e:
-                    self.log(f'  entries {uid[:8]}: {e}', 'warn')
-                tga = []
-                entry_ids = []
-                entry_names = []
-                for e in entries:
-                    md = e.get('entry_metadata') or {} if isinstance(e, dict) else {}
-                    if 'TgaMeasurement' in str(md.get('entry_type', '')):
-                        tga.append(md)
-                        eid = e.get('entry_id') if isinstance(e, dict) else None
-                        if eid:
-                            entry_ids.append(str(eid))
-                        ename = e.get('entry_name') if isinstance(e, dict) else None
-                        if ename:
-                            entry_names.append(str(ename))
-                if not tga:
-                    continue
-                files = []
-                try:
-                    files = self.client.list_raw_files(uid) or []
-                except NomadApiError as e:
-                    self.log(f'  rawdir {uid[:8]}: {e}', 'warn')
-                fnames = []
-                for f in files:
-                    if isinstance(f, dict):
-                        fnames.append(f.get('path', f.get('name', '')))
-                    else:
-                        fnames.append(str(f))
-                has_tprc = any(str(f).lower().endswith('.tprc') for f in fnames)
-                has_tri = any(str(f).lower().endswith(('.tri', '.xlsx')) for f in fnames)
-                md0 = tga[0] if tga else {}
-                ed = md0.get('data') or {}
-                # Display name: prefer the ELN sample_name; fall back to the
-                # .tprc filename stem (Sample.tprc -> Sample), the entry name,
-                # or the entry id. NEVER "Upload {random-id}" as the title —
-                # that made the board unusable when users left the sample
-                # field empty.
-                sample_name = str((ed.get('sample') or {}).get('sample_name', '')).strip()
-                if not sample_name:
-                    # Prefer the tprc_filename the ELN wrote (may or may not
-                    # carry a .tprc extension), then the raw .tprc stem, then
-                    # the entry name stem, then the entry id.
-                    tprc_file = str(ed.get('tprc_filename') or '').strip()
-                    if tprc_file:
-                        sample_name = Path(tprc_file).stem
-                    else:
-                        raw_stem = next((Path(str(f)).stem for f in fnames
-                                         if str(f).lower().endswith('.tprc')), '')
-                        entry_stem = Path(str(entry_names[0] if entry_names else '')).stem
-                        sample_name = (raw_stem or entry_stem
-                                       or str(entry_ids[0] or uid))[:60]
-                row = {
-                    'upload_id': uid,
-                    'name': name,
-                    'sample': sample_name[:60],
-                    'entry_type': str(md0.get('entry_type') or 'TgaMeasurement'),
-                    'procedure': procedure_label(ed),
-                    'author': author_name(md0, up, self.author_cache),
-                    'segments': ed.get('temperature_segments') or [],
-                    'entry_id': entry_ids[0] if entry_ids else None,
-                    'has_tprc': has_tprc,
-                    'has_tri': has_tri,
-                    'entries': len(tga),
-                    'created': created,
-                    'files': fnames,
-                }
-                if has_tri and self.manual_status(uid) is None \
-                        and self.config.get('auto_mark_measured', True):
-                    self.config.setdefault('sample_status', {})[uid] = {
-                        'status': 'measured',
-                        'ts': datetime.now().isoformat(timespec='seconds')}
-                rows.append(row)
-                for f in fnames:
-                    if str(f).lower().endswith('.tprc'):
-                        self.file_owner[str(f)] = uid
+            # Enrich uploads IN PARALLEL: each upload needs 2 HTTP calls
+            # (entries + rawdir); sequential = 2*N roundtrips and the main
+            # reason the app felt slow to start (~3s for 17 -> ~0.5s).
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results = list(pool.map(self._enrich_upload, uploads))
+            rows = [r for r in results if r]
             self.uploads = rows
+            self.refreshing = False
             self.log(f'Refresh: {len(rows)} TGA upload(s)', 'ok')
             return rows
         except NomadApiError as e:
+            self.refreshing = False
             self.log(f'Refresh failed: {e}', 'err')
             return []
         except Exception as e:
+            self.refreshing = False
             self.log(f'Refresh error: {e}', 'err')
             return []
 
@@ -365,10 +376,15 @@ class Backend:
     def save_slot_files(self, assignments, import_dir=None):
         """Download each .tprc as {Sample}_{Slot}.tprc (filename stage).
 
-        assignments: list of {'upload_id', 'sample', 'slot'}
+        assignments: list of {'upload_id', 'sample'} — slots are assigned HERE
+        (atomically with the file work), not by the caller, so a concurrent
+        watcher tick cannot hand out the same slot twice.
         """
         import_dir = Path(import_dir or self.config.get('trios_import_dir', ''))
         import_dir.mkdir(parents=True, exist_ok=True)
+        used = {self.slot_for(r['upload_id'])
+                for r in self.uploads if self.slot_for(r['upload_id'])}
+        free = [f'{n:02d}' for n in range(1, 31) if f'{n:02d}' not in used]
         ok, failed = [], []
         for a in assignments:
             try:
@@ -378,15 +394,21 @@ class Backend:
                             if str(f.get('path', f.get('name', ''))).lower().endswith('.tprc')), None)
                 if not rel:
                     raise RuntimeError('no .tprc in this upload')
-                new_name = slot_filename(a.get('sample', ''), a['slot'], uid)
+                # Take the slot ONLY after the .tprc exists — otherwise a
+                # failed sample burns a slot number (slots shift: 3-4 statt
+                # 1-2 for the samples that DO have a tprc).
+                if not free:
+                    raise RuntimeError('no free slot left')
+                slot = free.pop(0)
+                new_name = slot_filename(a.get('sample', ''), slot, uid)
                 tmp = import_dir / f'.tmp_{Path(rel).name}'
                 self.client.download_raw(uid, rel, str(tmp))
                 dest = import_dir / new_name
                 dest.write_bytes(tmp.read_bytes())
                 tmp.unlink(missing_ok=True)
                 self.file_owner[dest.name] = uid
-                self.assign_slot(uid, a['slot'])
-                self.log(f'Slot {a["slot"]}: {new_name} ready', 'ok')
+                self.assign_slot(uid, slot)
+                self.log(f'Slot {slot}: {new_name} ready', 'ok')
                 ok.append(str(dest))
             except Exception as e:
                 self.log(f'Slot assignment failed ({a.get("upload_id", "?")}): {e}', 'err')

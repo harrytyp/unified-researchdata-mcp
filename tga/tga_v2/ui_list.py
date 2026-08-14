@@ -100,17 +100,31 @@ def make_row(backend: Backend, r: dict, body: ui.column, state):
                 'border-grey-2 tga-row '
                 + ('bg-primary-50 tga-selected cursor-default'
                    if is_sel else 'hover:bg-grey-2 cursor-pointer')) as row:
-            # Checkbox button (dedicated click target — no bubbling surprises)
+            # Checkbox button (dedicated click target — no bubbling surprises).
+            # NOTE: do_select must NOT call render_rows — rebuilding the whole
+            # list inside the click handler replaces the clicked button mid-
+            # event, which makes rapid multi-clicks drop selections (verified
+            # with playwright: 17 clicks -> 15 selected). Update only the icon.
             def do_select():
                 toggle_select(uid)
-                render_rows(backend, body, state)
+                now_sel = uid in selected
+                icon.set_name('check_box' if now_sel else 'check_box_outline_blank')
+                icon.classes(add='text-green-600' if now_sel else 'text-grey-5 tga-sub',
+                             remove='text-grey-5 tga-sub' if now_sel else 'text-green-600')
+                # add/remove only — replace= would wipe the row's layout
+                # classes (w-full, gap-2, tga-row) and break clicks (verified
+                # with playwright stress test: 17 clicks -> 10 selected).
+                row.classes(add=('bg-primary-50 tga-selected cursor-default'
+                                 if now_sel else 'hover:bg-grey-2 cursor-pointer'),
+                            remove=('hover:bg-grey-2 cursor-pointer'
+                                    if now_sel else 'bg-primary-50 tga-selected cursor-default'))
                 if on_selection_change:
                     on_selection_change()
             with ui.button('') \
                     .on('click.stop', do_select) \
                     .props('flat round dense padding=xs'):
                 with ui.icon('check_box' if is_sel else 'check_box_outline_blank') \
-                        .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub'):
+                        .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub') as icon:
                     pass
             ui.label(r['sample'] or r['name']).classes(
                 'flex-1 text-sm truncate tga-title')

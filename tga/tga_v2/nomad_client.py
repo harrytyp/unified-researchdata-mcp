@@ -24,8 +24,18 @@ class NomadClient:
         self.pat = pat or ''
         self.verify = verify
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.verify = verify
+        # requests.Session is NOT thread-safe — refresh() enriches uploads in
+        # parallel (ThreadPoolExecutor), so each thread needs its own session.
+        import threading
+        self._local = threading.local()
+
+    def session(self):
+        s = getattr(self._local, 's', None)
+        if s is None:
+            s = requests.Session()
+            s.verify = self.verify
+            self._local.s = s
+        return s
 
     def _headers(self):
         if not self.pat:
@@ -37,7 +47,7 @@ class NomadClient:
         kwargs.setdefault('headers', self._headers())
         kwargs.setdefault('timeout', self.timeout)
         try:
-            resp = self.session.request(method, url, **kwargs)
+            resp = self.session().request(method, url, **kwargs)
         except requests.exceptions.Timeout:
             raise NomadApiError(0, f'Timeout after {self.timeout}s: {path}')
         except requests.exceptions.ConnectionError as e:

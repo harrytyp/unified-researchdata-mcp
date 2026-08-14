@@ -1,3 +1,4 @@
+@layer overrides {
 /* TGA Operator — dark mode via Quasar's body.body--dark class.
  * NiceGUI toggles Quasar dark mode, NOT Tailwind's .dark class, so
  * Tailwind `dark:` variants never apply. These rules cover everything. */
@@ -75,4 +76,6 @@ body.body--dark .q-field__control {
 }
 body.body--dark .q-field__label {
     color: #9ca3af !important;
+}
+
 }

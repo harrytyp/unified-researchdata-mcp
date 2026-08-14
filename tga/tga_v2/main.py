@@ -45,6 +45,7 @@ STRINGS = {
     'saved': {'en': 'Settings saved', 'de': 'Einstellungen gespeichert'},
     'save_failed': {'en': 'Save failed: ', 'de': 'Speichern fehlgeschlagen: '},
     'sync': {'en': 'Syncing…', 'de': 'Sync…'},
+    'loading_samples': {'en': 'Loading samples…', 'de': 'Lade Proben…'},
     'selected': {'en': 'selected', 'de': 'ausgewählt'},
     'dl_tprc': {'en': '⬇ Load .tprc', 'de': '⬇ .tprc laden'},
     'assign_slots': {'en': '◫ Assign slots', 'de': '◫ Slots zuweisen'},
@@ -95,9 +96,20 @@ STRINGS = {
 
 def _load_dark_css():
     """Global dark-mode CSS (NiceGUI uses Quasar's body.body--dark, not
-    Tailwind dark: variants — those never apply)."""
+    Tailwind dark: variants — those never apply).
+
+    shared=True is REQUIRED: without it the <style> is only injected into the
+    current client session and can be missing on other pages/clients (the
+    board cards stayed white in dark mode — verified with playwright).
+    The CSS is wrapped in @layer overrides so it beats Tailwind utilities.
+    Called ONCE at import time (module level) — calling it per page would
+    duplicate the <style> for every client."""
     css = Path(__file__).with_name('tga_dark.css').read_text(encoding='utf-8')
-    ui.add_head_html(f'<style>{css}</style>')
+    ui.add_head_html(f'<style>{css}</style>', shared=True)
+
+
+# Load once at import time (shared -> all pages/clients, no duplication).
+_load_dark_css()
 
 # Widget references (never attach to the nicegui.ui module — it rejects
 # unknown attributes). Stored in a plain dict owned by this module.
@@ -125,6 +137,9 @@ async def do_refresh():
         rows = await run.io_bound(backend.refresh)
         if 'sync_box' in refs:
             refs['sync_box'].clear()
+        if rows is None:
+            ui.notify('Refresh lieferte keine Daten', type='warning')
+            return
         ui.notify(f'{len(rows)} TGA Uploads', type='positive')
         redraw_all()
     except RuntimeError as e:
@@ -134,12 +149,27 @@ async def do_refresh():
 
 # ── Board ──────────────────────────────────────────────────────
 
+def _loading_placeholder(container):
+    """Spinner shown while the first refresh is still running."""
+    container.clear()
+    with container:
+        with ui.column().classes('w-full items-center justify-center py-16 gap-2'):
+            ui.spinner(size='lg').classes('text-primary')
+            ui.label(_('loading_samples')).classes('text-grey-6 tga-sub')
+
+
 def build_board_body():
+    if not backend.uploads and backend.refreshing:
+        _loading_placeholder(refs['board_container'])
+        return
     ui_board.build_board(backend, refs['board_container'])
 
 # ── List ───────────────────────────────────────────────────────
 
 def build_list_body():
+    if not backend.uploads and backend.refreshing:
+        _loading_placeholder(refs['list_container'])
+        return
     ui_list.build_list(backend, refs['list_container'])
 
 # ── Detail ─────────────────────────────────────────────────────
@@ -155,6 +185,15 @@ def open_detail(uid: str):
 
 def update_action_bar():
     n = len(selected)
+    # Filter selection down to rows that still exist (uploads may disappear
+    # after a refresh/deletion) — otherwise the footer shows a stale count
+    # with all buttons disabled.
+    existing = [r for r in backend.uploads if r['upload_id'] in selected]
+    if len(existing) != n:
+        stale = selected - {r['upload_id'] for r in backend.uploads}
+        for s in stale:
+            selected.discard(s)
+        n = len(selected)
     if n == 0:
         refs['footer'].set_visibility(False)
         return
@@ -171,46 +210,72 @@ def update_action_bar():
     # Upload .tri: only when tprc present and not yet measured
     refs['btn_tri'].set_enabled(all_tprc and bool(statuses - {'measured'}))
 
+def set_actions_enabled(enabled: bool):
+    """Disable/enable footer action buttons (prevents double-click races)."""
+    for key in ('btn_dl', 'btn_slots', 'btn_tri'):
+        if key in refs:
+            refs[key].set_enabled(enabled)
+
+
 async def action_download_tprc():
-    for uid in list(selected):
-        try:
-            await run.io_bound(backend.download_tprc, uid)
-        except Exception as e:
-            ui.notify(f'Download {uid[:8]} fehlgeschlagen: {e}', type='negative')
-    ui.notify(_('downloads_done'), type='positive')
-    redraw_all()
+    set_actions_enabled(False)
+    try:
+        for uid in list(selected):
+            try:
+                await run.io_bound(backend.download_tprc, uid)
+            except Exception as e:
+                ui.notify(f'Download {uid[:8]} fehlgeschlagen: {e}', type='negative')
+        ui.notify(_('downloads_done'), type='positive')
+        redraw_all()
+    finally:
+        set_actions_enabled(True)
+
 
 async def action_assign_slots():
     """Auto-assign lowest free slots to all received/pending selection."""
-    used = {backend.slot_for(r['upload_id'])
-            for r in backend.uploads if backend.slot_for(r['upload_id'])}
-    free = [f'{n:02d}' for n in range(1, 31) if f'{n:02d}' not in used]
-    rows = [r for r in backend.uploads if r['upload_id'] in selected
-            and backend.display_status(r['upload_id'], r['has_tri']) != 'measured']
-    if len(rows) > len(free):
-        ui.notify(_('not_enough_slots'), type='negative')
-        return
-    assignments = []
-    for r, slot in zip(rows, free):
-        backend.assign_slot(r['upload_id'], slot)
-        assignments.append({'upload_id': r['upload_id'], 'sample': r['sample'], 'slot': slot})
-    ok, failed = await run.io_bound(backend.save_slot_files, assignments)
-    ui.notify(f'{len(ok)} Proben → Slots {", ".join(free[:len(ok)])}', type='positive')
-    clear_selection()
-    redraw_all()
+    set_actions_enabled(False)
+    try:
+        rows = [r for r in backend.uploads if r['upload_id'] in selected
+                and backend.display_status(r['upload_id'], r['has_tri']) != 'measured']
+        # Only samples WITH a .tprc can get a slot — others would fail inside
+        # save_slot_files anyway AND burn a slot number (the "3-4 statt 1-2"
+        # bug). Filter here + tell the user what was skipped.
+        no_tprc = [r for r in rows if not r.get('has_tprc')]
+        rows = [r for r in rows if r.get('has_tprc')]
+        if no_tprc:
+            names = ', '.join((r.get('sample') or r['upload_id'][:8]) for r in no_tprc[:3])
+            more = f' +{len(no_tprc) - 3} weitere' if len(no_tprc) > 3 else ''
+            ui.notify(f'Ohne .tprc übersprungen: {names}{more}', type='warning')
+        assignments = [{'upload_id': r['upload_id'], 'sample': r['sample']} for r in rows]
+        # Slots are handed out inside save_slot_files (atomic with the file
+        # work — no race with the watcher assigning slots concurrently).
+        ok, failed = await run.io_bound(backend.save_slot_files, assignments)
+        ui.notify(f'{len(ok)} Proben → Slots zugewiesen', type='positive')
+        if failed:
+            ui.notify(f'{len(failed)} fehlgeschlagen: {failed[0]}', type='negative')
+        clear_selection()
+        redraw_all()
+    finally:
+        set_actions_enabled(True)
+
 
 async def action_upload_tri():
-    result = await ui.run.io_bound(pick_tri_file)
-    if not result:
-        return
-    for uid in list(selected):
-        try:
-            await run.io_bound(backend.upload_result, uid, result)
-        except Exception as e:
-            ui.notify(f'Upload {uid[:8]} fehlgeschlagen: {e}', type='negative')
-    ui.notify(_('result_uploaded'), type='positive')
-    clear_selection()
-    redraw_all()
+    set_actions_enabled(False)
+    try:
+        result = await ui.run.io_bound(pick_tri_file)
+        if not result:
+            return
+        for uid in list(selected):
+            try:
+                await run.io_bound(backend.upload_result, uid, result)
+            except Exception as e:
+                ui.notify(f'Upload {uid[:8]} fehlgeschlagen: {e}', type='negative')
+        ui.notify(_('result_uploaded'), type='positive')
+        clear_selection()
+        redraw_all()
+    finally:
+        set_actions_enabled(True)
+
 
 def pick_tri_file():
     """File picker via tkinter (desktop) — returns path or None."""
@@ -225,6 +290,7 @@ def pick_tri_file():
         return path
     except Exception:
         return None
+
 
 # ── Log view ───────────────────────────────────────────────────
 
@@ -254,6 +320,10 @@ def build_settings():
                           label=_('language')).classes('w-40') \
                     .on_value_change(change_language)
                 # Dark mode lives in the config (persisted), applied globally.
+                # The dark_mode element is created here (settings is the only
+                # place the toggle exists now).
+                refs['dark_mode_el'] = ui.dark_mode(
+                    value=backend.config.get('dark_mode', False))
                 ui.switch(_('dark_mode'), value=cfg.get('dark_mode', False)) \
                     .props('color=primary') \
                     .on_value_change(lambda e: set_dark_mode(bool(e.value)))
@@ -332,7 +402,6 @@ def save_settings(url_in, pat_in, imp_in, exp_in):
 
 @ui.page('/')
 def index():
-    _load_dark_css()
     from ui_common import set_i18n
     set_i18n(STRINGS, backend.config.get('language', 'en'))
     # Header
@@ -343,13 +412,9 @@ def index():
         with ui.row().classes('items-center gap-3'):
             refs['sync_box'] = ui.row().classes('items-center gap-2')
             ui.button('', on_click=do_refresh).props('icon=refresh flat round dense text-white')
-            # One global dark-mode element; both header switch and settings
-            # write to the config (persisted) and this element applies it.
-            refs['dark_mode_el'] = ui.dark_mode(
-                value=backend.config.get('dark_mode', False))
-            ui.switch('Dark').props('color=primary dark') \
-                .bind_value_from(refs['dark_mode_el'], 'value') \
-                .on_value_change(lambda e: set_dark_mode(bool(e.value)))
+            # One global dark-mode element; the SETTINGS switch writes to the
+            # config (persisted) and this element applies it. (Header toggle
+            # removed per user request — settings is the single place.)
 
     # Tabs (main area left, detail panel right) — h-screen, no page scroll
     with ui.row().classes('w-full flex-1 items-stretch min-h-0'):
@@ -391,13 +456,17 @@ def index():
     ui_board.on_selection_change = update_action_bar
     ui_board.on_status_changed = redraw_all
     ui_list.on_open_detail = open_detail
-    ui_list.on_list_selection_cb = update_action_bar
+    ui_list.on_selection_change = update_action_bar
     ui_detail.on_status_changed = redraw_all
 
-    # Connection + initial load
+    # Connection (client setup + health check only — fast).
     connect()
     build_log_body()
     update_action_bar()
+    # Deferred initial refresh: build the UI FIRST (spinner shown in the
+    # board), then load data 0.5s later. Makes the window appear instantly
+    # on cold start instead of waiting for all API calls.
+    ui.timer(0.5, do_refresh, once=True)
     # Lock the page height so only the board columns scroll internally
     ui.query('body').classes('overflow-hidden h-screen')
     ui.query('.q-page').classes('h-screen overflow-hidden')
@@ -438,9 +507,29 @@ def connect():
         ui.notify(f'Verbindung fehlgeschlagen: {msg}', type='negative')
 
 
+def _warmup_server():
+    """Pay the one-time Python import cost (fastapi/uvicorn/pydantic load on
+    the FIRST http request) before the user opens the window. A GET to a
+    static asset warms the server WITHOUT building the whole page.
+    Measured: first request after server start ~3.5s slower than warm."""
+    import threading, time as _t
+    import urllib.request
+
+    def _hit():
+        _t.sleep(2.5)  # give ui.run time to bind the port
+        try:
+            urllib.request.urlopen('http://127.0.0.1:8080/logo.png', timeout=10)
+        except Exception:
+            pass  # warmup is best-effort
+    threading.Thread(target=_hit, daemon=True).start()
+
+
 if __name__ in {'__main__', '__mp_main__'}:
+    # native window (pywebview) for the packaged EXE; browser mode for dev.
+    native = os.environ.get('TGA_NATIVE', '1') != '0'
+    _warmup_server()
     ui.run(title='TGA Operator',
            dark=backend.config.get('dark_mode', False),
-           native=False,
+           native=native,
            port=8080,
            reload=False)

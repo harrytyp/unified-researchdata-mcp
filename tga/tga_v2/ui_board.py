@@ -26,7 +26,13 @@ def build_board(backend: Backend, container: ui.column):
                     with ui.scroll_area().classes('h-[calc(100vh-260px)] w-full'):
                         with ui.column().classes('gap-2 w-full') as col_body:
                             build_column_body(backend, status, col_body)
+                    # Drop target on BOTH the column background AND the cards
+                    # container: a human drop often lands on a card inside the
+                    # column, not on the background — without this the drop
+                    # silently does nothing until the next refresh (the
+                    # reported "needs a reload to show the move").
                     make_column_drop_target(backend, status, col_outer)
+                    make_column_drop_target(backend, status, col_body)
 
 
 def build_column_header(backend: Backend, status: str):
@@ -120,20 +126,34 @@ def make_card(backend: Backend, r: dict, parent=None):
                 if slot:
                     ui.badge(f'#{slot}').props('color=deep-purple outline').classes('text-xs')
                 # Selection toggle (separate click target on the card).
+                # Update the icon + border immediately (no full redraw — the
+                # board rebuild only happens on the next sync otherwise, which
+                # made the checkmark feel seconds-late; verified with playwright).
                 def do_select():
                     toggle_select(uid)
+                    now_sel = uid in selected
+                    icon.set_name('check_circle' if now_sel else 'radio_button_unchecked')
+                    icon.classes(add='text-green-600' if now_sel else 'text-grey-5 tga-sub',
+                                 remove='text-grey-5 tga-sub' if now_sel else 'text-green-600')
+                    # add/remove only — replace= would wipe the card layout
+                    # classes and break the drag/drop + click targets.
+                    card.classes(add='border-green-500 tga-selected' if now_sel else 'border-grey-3',
+                                 remove='border-grey-3' if now_sel else 'border-green-500 tga-selected')
                     if on_selection_change:
                         on_selection_change()
                 with ui.button('', on_click=do_select) \
                         .props('flat round dense padding=xs').classes('p-0 w-6 h-6'):
                     with ui.icon('check_circle' if is_sel else 'radio_button_unchecked') \
-                            .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub'):
+                            .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub') as icon:
                         pass
             ui.label(r['procedure'] or '—').classes(
                 'text-xs truncate w-full text-grey-6 tga-sub')
             with ui.row().classes('items-center gap-2 w-full'):
                 ui.label(r['author']).classes(
                     'text-xs truncate flex-1 text-grey-5 tga-sub')
+                if r.get('created'):
+                    ui.label(r['created']).classes(
+                        'text-xs text-grey-5 tga-sub').tooltip('Upload-Zeitpunkt')
                 ui.icon('download', color='green' if r['has_tprc'] else 'grey-4').classes('text-sm')
                 ui.icon('task_alt', color='green' if r['has_tri'] else 'grey-4').classes('text-sm')
 
@@ -144,10 +164,26 @@ def open_detail(uid: str):
 
 
 def make_column_drop_target(backend: Backend, status: str, col_body):
-    """Drop on the column background = status change (no slot)."""
+    """Drop on the column background OR its cards container = status change.
+
+    Two targets per column (background + cards) both call the same handler;
+    the drop event bubbles from cards → col_body → col_outer, so the handler
+    guards against double execution per drop (uid + status + short window).
+    """
+    _last = {}
+
+    def _on_drop(e):
+        uid = (e.args or {}).get('uid')
+        key = (status, uid)
+        now = _last.get(key, 0)
+        import time as _t
+        if _t.time() - now < 1.0:
+            return  # same drop already handled via bubbling
+        _last[key] = _t.time()
+        handle_column_drop(backend, status, uid)
+
     col_body.on('dragover.prevent', lambda: None)
-    col_body.on('drop.prevent',
-                lambda e: handle_column_drop(backend, status, (e.args or {}).get('uid')),
+    col_body.on('drop.prevent', _on_drop,
                 js_handler='(e) => emit({ uid: e.dataTransfer.getData("text/plain") })')
 
 
@@ -156,6 +192,16 @@ def handle_column_drop(backend: Backend, status: str, uid: str | None = None):
         ui.notify(_('no_upload_id'), type='warning')
         return
     if status == 'assigned':
+        # A sample without a .tprc cannot be measured — reject with a clear
+        # message instead of silently assigning a slot (reported bug).
+        row = next((r for r in backend.uploads if r['upload_id'] == uid), None)
+        if row is None:
+            ui.notify(f'{uid[:8]} nicht gefunden', type='negative')
+            return
+        if not row.get('has_tprc'):
+            ui.notify(f'{row.get("sample") or uid[:8]} hat keine .tprc — kein Slot möglich',
+                      type='negative')
+            return
         # Already in a slot? Keep it (no surprise relocation). Only cards
         # WITHOUT a slot get auto-assigned to the lowest free one.
         if backend.slot_for(uid):
