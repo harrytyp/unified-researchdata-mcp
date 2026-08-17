@@ -39,4 +39,8 @@ if [ -f /app/plugins/nomad_processor.py ]; then
     echo "[startup] NOMAD TGA processor started"
 fi
 cd /app
+
+# Admin list patch: admins see all uploads in GET /uploads (file patch)
+bash /app/plugins/patch_uploads_admin.sh
+
 exec python -m nomad.cli "$@"
