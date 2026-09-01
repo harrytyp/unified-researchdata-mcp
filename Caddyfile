@@ -1,3 +1,19 @@
+elabftw.researchmcp.duckdns.org {
+    reverse_proxy elabftw:8080 {
+        flush_interval -1
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {host}
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
 econversion.researchmcp.duckdns.org {
     basicauth {
         econversion {$ECONVERSION_BCRYPT_HASH}

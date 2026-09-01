@@ -51,6 +51,7 @@ services:
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
     volumes:
       - ./econversion/data:/app/data
     mem_limit: 2g
@@ -78,6 +79,60 @@ services:
     mem_limit: 512m
     stop_grace_period: 30s
 
+  # ── eLabFTW (self-hosted ELN) ──────────────────────────────────────────
+  elab-mysql:
+    image: mysql:8.4
+    container_name: elab-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=elabftw
+      - MYSQL_USER=elabftw
+      - MYSQL_PASSWORD=${ELABFTW_DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${ELABFTW_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - elab_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "/usr/bin/mysql", "--user=elabftw", "--password=${ELABFTW_DB_PASSWORD}", "--execute", "SHOW DATABASES;"]
+      interval: 5s
+      timeout: 5s
+      retries: 42
+    mem_limit: 512m
+
+  elabftw:
+    image: elabftw/elabimg:6.0.0-beta2
+    container_name: elabftw
+    restart: unless-stopped
+    user: "999:994"
+    read_only: true
+    tmpfs:
+      - /run:mode=755,uid=999,gid=994,exec,nosuid,nodev
+      - /var/cache/elabftw:mode=755,uid=999,gid=994,exec,nosuid,nodev
+    depends_on:
+      elab-mysql:
+        condition: service_healthy
+    expose:
+      - "8080"
+    environment:
+      - DB_HOST=elab-mysql
+      - DB_PORT=3306
+      - DB_NAME=elabftw
+      - DB_USER=elabftw
+      - DB_PASSWORD=${ELABFTW_DB_PASSWORD}
+      - SITE_URL=https://elabftw.researchmcp.duckdns.org
+      - DISABLE_HTTPS=true
+      - SECRET_KEY=${ELABFTW_SECRET_KEY}
+      - PHP_TIMEZONE=Europe/Berlin
+      - TZ=Europe/Berlin
+    volumes:
+      - elab_uploads:/var/lib/elabftw/uploads
+      - elab_exports:/var/lib/elabftw/exports
+      - elab_nginx_cache:/var/cache/nginx
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+
   # ── Caddy reverse proxy ──────────────────────────────────────────────────
   caddy:
     image: caddy:2
@@ -98,6 +153,7 @@ services:
       - econversion
       - elab-app
       - proespm-app
+      - elabftw
     networks:
       - default
       - nomad_oasis_network
@@ -107,6 +163,10 @@ volumes:
   caddy_data:
   caddy_config:
   elab_app_data: {}
+  elab_mysql: {}
+  elab_uploads: {}
+  elab_exports: {}
+  elab_nginx_cache: {}
 
 networks:
   internal:
