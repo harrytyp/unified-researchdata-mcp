@@ -10,6 +10,15 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from datatagger_mcp.api import mcp as mcp_server
+# The datatagger_mcp LIBRARY resolves auth from ITS OWN context vars
+# (datatagger_mcp.api.session_key_var / session_base_url_var), falling
+# back to env FDM_TOKEN. We must set the library's vars in the request
+# handler (not the middleware: BaseHTTPMiddleware runs in a separate
+# task whose contextvars do not reach the handler).
+from datatagger_mcp.api import (
+    session_key_var as _lib_session_key_var,
+    session_base_url_var as _lib_session_base_url_var,
+)
 from .jwt_token import encode_token, decode_token
 
 session_key_var: ContextVar[Optional[str]] = ContextVar("session_key", default=None)
@@ -409,6 +418,26 @@ async def mcp_handler(request: Request):
     msg_id = body.get("id", 1)
     method = body.get("method", "")
     params = body.get("params", {})
+
+    # Auth: decode the JWT here (query ?token= or Authorization: Bearer) and
+    # set the LIBRARY's context vars so datatagger_mcp calls authenticate.
+    _token = request.query_params.get("token", "")
+    if not _token:
+        _auth = request.headers.get("authorization", "")
+        if _auth.startswith("Bearer "):
+            _token = _auth[7:]
+    if _token:
+        _payload = decode_token(_token)
+        if _payload:
+            _lib_session_key_var.set(_payload["k"])
+            _lib_session_base_url_var.set(_payload["u"])
+            _enabled = _payload.get("t")
+        else:
+            return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
+                "error": {"code": -32001, "message": "Invalid or expired token"}},
+                status_code=401)
+    else:
+        _enabled = None
     if method == "initialize":
         return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": "2024-11-05",
@@ -419,14 +448,14 @@ async def mcp_handler(request: Request):
         return JSONResponse(None, status_code=202)
     elif method == "tools/list":
         tools = await mcp_server.list_tools()
-        enabled = session_enabled_tools_var.get()
+        enabled = _enabled
         result = [{"name": t.name, "description": t.description or "",
                     "inputSchema": t.inputSchema or {"type": "object", "properties": {}}}
                   for t in tools
                   if enabled is None or t.name in enabled]
         return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": result}})
     elif method == "tools/call":
-        enabled = session_enabled_tools_var.get()
+        enabled = _enabled
         if enabled is not None and params["name"] not in enabled:
             tool_name = params["name"]
             return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
