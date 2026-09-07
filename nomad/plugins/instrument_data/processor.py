@@ -414,14 +414,24 @@ def process_tga_file(
 def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
     """NOMAD normalizer for TgaMeasurement.
 
-    Called when the user toggles ``process_now`` on a TgaMeasurement entry.
-    Reads the raw CSV/TXT file from the referenced NOMAD upload, parses it,
-    computes results, and populates the entry's signal + result fields.
+    Called when the user toggles ``process_now`` on a TgaMeasurement entry
+    (or automatically when a TRIOS JSON result file is detected in the same
+    upload). Priority:
+      1. If the entry is inside an upload that contains a TRIOS JSON export
+         (.json), parse it and fill the result_* fields (measurement output).
+      2. Else if ``source_upload_id`` is set, read the raw CSV/TXT file from
+         that referenced upload and populate signal + result fields.
+      3. Else generate a .tprc from the ELN parameters (no upload).
 
     If ELABFTW_API_KEY is set, also pushes results to the linked elabFTW item.
     """
     import os
     import requests as _req
+
+    # (1) TRIOS JSON result in the CURRENT upload (auto-detected, no
+    #     source_upload_id needed): the entry and the .json live together.
+    if _process_trios_json_in_upload(entry, archive, logger):
+        return
 
     upload_id = getattr(entry, "source_upload_id", None)
     if not upload_id:
@@ -607,6 +617,163 @@ def normalize_tga_entry(entry: Any, archive: Any, logger: Any) -> None:
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
+
+
+def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool:
+    """Process a TRIOS JSON export sitting in the SAME upload as the entry.
+
+    The operator app uploads the result .json into the existing upload that
+    holds the .tprc and this TgaMeasurement entry (no new entry is created).
+    NOMAD re-processes the upload, the normalizer runs, and this function:
+
+      1. finds the .json among the upload's raw files (via archive.m_context),
+      2. reads + extracts downsampled signals + metadata (trios_json_reader),
+      3. fills the entry's result_* fields, the results (TgaResults) summary
+         and the signal arrays used by the PlotSection figures.
+
+    Idempotent: re-processing the same upload just overwrites the same fields
+    (no duplicate figures — PlotSection normalize clears self.figures first).
+
+    Returns True if a TRIOS JSON was found and processed (or already done).
+    """
+    import json as _json
+
+    # Locate the current upload files (staging during processing)
+    upload_files = None
+    upload_id = None
+    try:
+        mctx = getattr(archive, "m_context", None)
+        upload_id = getattr(mctx, "upload_id", None) or getattr(entry, "source_upload_id", None)
+        upload_files = getattr(mctx, "upload_files", None)
+    except Exception:
+        pass
+    if upload_files is None:
+        # During a pure normalizer run the upload_files may not be attached;
+        # fall back to scanning the upload's server path via source_upload_id.
+        if not upload_id:
+            return False
+        upload_files = None
+
+    # Find the .json filename
+    json_name = None
+    try:
+        listing = getattr(upload_files, "raw_listdir", None)
+        if listing is not None:
+            for f in listing():
+                path = getattr(f, "path", str(f))
+                if str(path).lower().endswith(".json"):
+                    json_name = str(path)
+                    break
+    except Exception:
+        json_name = None
+
+    if not json_name:
+        return False
+
+    # Read the JSON bytes (from the upload raw files)
+    data = None
+    try:
+        if upload_files is not None:
+            # StagingUploadFiles/UploadFiles expose raw_file_object(path) ->
+            # file-like PathObject (NOT read_raw_file — verified API).
+            fo = upload_files.raw_file_object(json_name)
+            raw = fo.read()
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8-sig")
+            data = _json.loads(raw)
+    except Exception as e:
+        logger.warning(f"Could not read TRIOS JSON {json_name}: {e}")
+        return False
+
+    if data is None:
+        return False
+
+    # Extract signals + metadata
+    try:
+        from instrument_data.trios_json_reader import extract_trios_signals
+        res = extract_trios_signals(data, max_points=4000)
+    except Exception as e:
+        logger.warning(f"TRIOS JSON parse failed ({json_name}): {e}")
+        return False
+
+    meta = res["meta"]
+    sig = res["signals"]
+
+    # Fill result_* provenance fields
+    try:
+        entry.result_json_filename = json_name
+        if meta.get("sample_name"):
+            entry.result_sample_name = str(meta["sample_name"])
+        if meta.get("start_time"):
+            entry.result_start_time = str(meta["start_time"])
+        if meta.get("operator"):
+            entry.result_operator = str(meta["operator"])
+        if meta.get("procedure_name"):
+            entry.result_procedure_name = str(meta["procedure_name"])
+        entry.result_row_count = int(meta.get("row_count") or 0)
+        entry.result_processed_columns = ",".join(res.get("columns") or [])
+    except Exception as e:
+        logger.warning(f"Could not set TRIOS JSON provenance: {e}")
+
+    # Signal arrays (downsampled, used by plot)
+    try:
+        if sig.get("temperature"):
+            entry.result_temperature_signal = sig["temperature"]
+        if sig.get("time"):
+            entry.result_time_signal = sig["time"]
+        if sig.get("mass_pct"):
+            entry.result_mass_pct_signal = sig["mass_pct"]
+        if sig.get("mass_mg"):
+            entry.result_mass_mg_signal = sig["mass_mg"]
+        if sig.get("dtg"):
+            entry.result_dtg_signal = sig["dtg"]
+    except Exception as e:
+        logger.warning(f"Could not set TRIOS JSON signals: {e}")
+
+    # Compute TGA results (onset/residue/Td5/Td10/steps) from the JSON signals
+    try:
+        if sig.get("temperature") and (sig.get("mass_pct") or sig.get("mass_mg")):
+            mass_key = "mass_pct" if sig.get("mass_pct") else "mass_mg"
+            signals_for_comp = {
+                "temperature": sig["temperature"],
+                "weight": sig.get("mass_mg") or sig[mass_key],
+                "weight_pct": sig.get("mass_pct") or [],
+            }
+            computed = compute_tga(signals_for_comp, {})
+            summary = computed.get("summary", {})
+            if not entry.results:
+                from instrument_data.schema import TgaResults
+                entry.results = TgaResults()
+            results = entry.results
+            if summary.get("onset_temperature_c"):
+                results.onset_temperature = float(summary["onset_temperature_c"])
+            if summary.get("residue_mass_pct"):
+                results.residue_mass_pct = float(summary["residue_mass_pct"])
+            if summary.get("mass_loss_5pct"):
+                results.mass_loss_5pct = float(summary["mass_loss_5pct"])
+            if summary.get("mass_loss_10pct"):
+                results.mass_loss_10pct = float(summary["mass_loss_10pct"])
+            if summary.get("dtg_max"):
+                results.residue_mass_mg = float(abs(summary["dtg_max"]))
+            steps_data = computed.get("steps", [])
+            if steps_data:
+                from instrument_data.schema import TgaStep
+                results.steps = []
+                for sd in steps_data:
+                    step = TgaStep()
+                    step.peak_dtg_temperature = sd.get("peak_temperature_c")
+                    step.mass_loss_pct = sd.get("mass_loss_pct")
+                    step.assignment = sd.get("assignment")
+                    results.steps.append(step)
+            logger.info(
+                f"TRIOS JSON processed: {json_name} ({meta.get('row_count')} pts, "
+                f"downsampled to {len(sig.get('temperature') or [])}), "
+                f"residue={summary.get('residue_mass_pct')}%"
+            )
+    except Exception as e:
+        logger.warning(f"TRIOS JSON compute failed: {e}")
+
+    return True
 
 
 def _to_float(value: Any) -> float | None:

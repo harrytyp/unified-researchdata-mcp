@@ -293,6 +293,49 @@ class TgaMeasurement(PlotSection, EntryData):
         type=str,
         description="Path to the exported CSV/TXT file")
 
+    # ── TRIOS JSON export (result of the measurement run) ──
+    # These fields are filled by the server-side normalizer when a TRIOS
+    # JSON export file is present in the same upload as the .tprc. The full
+    # original .json stays as a raw file in the upload (lossless); these are
+    # downsampled arrays for display/indexing + provenance markers.
+    result_json_filename = Quantity(
+        type=str,
+        description="Filename of the TRIOS JSON export that produced this result")
+    result_sample_name = Quantity(
+        type=str,
+        description="Sample name as exported by TRIOS in the JSON")
+    result_start_time = Quantity(
+        type=Datetime,
+        description="Measurement start time from the TRIOS JSON export")
+    result_operator = Quantity(
+        type=str,
+        description="Operator from the TRIOS JSON export")
+    result_procedure_name = Quantity(
+        type=str,
+        description="Procedure name from the TRIOS JSON export")
+    result_row_count = Quantity(
+        type=int,
+        description="Number of data points in the full TRIOS JSON export")
+    result_processed_columns = Quantity(
+        type=str,
+        description="Comma-separated canonical column keys used from the JSON")
+    # Downsampled signal arrays from the JSON (temperature as X axis)
+    result_time_signal = Quantity(
+        type=JSON,
+        description="Time array [min] from TRIOS JSON (downsampled)")
+    result_temperature_signal = Quantity(
+        type=JSON,
+        description="Temperature array [°C] from TRIOS JSON (downsampled)")
+    result_mass_pct_signal = Quantity(
+        type=JSON,
+        description="Mass array [%] from TRIOS JSON (downsampled)")
+    result_mass_mg_signal = Quantity(
+        type=JSON,
+        description="Mass array [mg] from TRIOS JSON (downsampled)")
+    result_dtg_signal = Quantity(
+        type=JSON,
+        description="DTG (derivative mass) array from TRIOS JSON (downsampled)")
+
     # ── Signal data (parsed curves) ──
     time_signal = Quantity(
         type=JSON,
@@ -375,6 +418,13 @@ class TgaMeasurement(PlotSection, EntryData):
             self.process_now = False
             from instrument_data.processor import normalize_tga_entry
             normalize_tga_entry(self, archive, logger)
+        # Auto-process a TRIOS JSON result file that sits in the same upload
+        # as this entry (no process_now toggle needed): the normalizer scans
+        # the upload's raw files for a *.json and fills result_* fields.
+        # Guarded by a cheap check so plain saves don't re-scan every time.
+        elif self._json_in_upload(archive):
+            from instrument_data.processor import normalize_tga_entry
+            normalize_tga_entry(self, archive, logger)
 
         # Preview of the planned heating profile, built from the segments
         # themselves - available even before any real measurement exists.
@@ -382,7 +432,20 @@ class TgaMeasurement(PlotSection, EntryData):
         if preview_fig is not None:
             self.figures.append(preview_fig)
 
-        if self.temperature_signal and self.weight_signal and \
+        # Measurement plot: prefer the TRIOS JSON result curves (mass-% over
+        # temperature — the classic TGA view); fall back to the legacy
+        # CSV/TXT signal fields.
+        temp_arr = self.result_temperature_signal or self.temperature_signal
+        mass_arr = self.result_mass_pct_signal or self.weight_pct_signal
+        if temp_arr and mass_arr and len(temp_arr) == len(mass_arr):
+            fig = px.scatter(
+                x=temp_arr,
+                y=mass_arr,
+                labels={'x': 'Temperature (°C)', 'y': 'Mass (%)'},
+                title='TGA — Mass vs Temperature',
+            )
+            self.figures.append(PlotlyFigure(label='TGA curve', figure=fig.to_plotly_json()))
+        elif self.temperature_signal and self.weight_signal and \
                 len(self.temperature_signal) == len(self.weight_signal):
             fig = px.scatter(
                 x=self.temperature_signal,
@@ -391,6 +454,28 @@ class TgaMeasurement(PlotSection, EntryData):
                 title='TGA — Mass vs Temperature',
             )
             self.figures.append(PlotlyFigure(label='TGA curve', figure=fig.to_plotly_json()))
+
+    def _json_in_upload(self, archive) -> bool:
+        """Cheap check: does this upload contain a TRIOS JSON export?
+
+        Used to auto-trigger JSON processing without requiring the user to
+        toggle process_now. The real scan happens in processor.normalize_tga_entry.
+        """
+        try:
+            upload_files = archive.m_context.upload_files
+            if upload_files is None:
+                return False
+            # raw_listdir yields RawPathInfo objects; guard for the API
+            listing = getattr(upload_files, "raw_listdir", None)
+            if listing is None:
+                return False
+            for f in listing():
+                path = getattr(f, "path", str(f))
+                if str(path).lower().endswith(".json"):
+                    return True
+        except Exception:
+            return False
+        return False
 
 
 # ── DMA ──────────────────────────────────────────────────────────────────────

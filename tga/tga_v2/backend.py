@@ -30,6 +30,11 @@ DEFAULT_CONFIG = {
     'dark_mode': False,
     'language': 'en',              # 'en' (default) or 'de'
     'debug_mode': False,           # True = demo data (FakeClient), no PAT needed
+    'uploaded_results': {},        # export-filename -> {'target': '<uploaded-versioned-name>', 'ts': iso}
+                                  # PERSISTENT log of what the watcher already uploaded — so a
+                                  # restart (EXE started AFTER TRIOS finished) does NOT re-upload
+                                  # files that are already in NOMAD, but DOES pick up files that
+                                  # were present before the app started and never uploaded.
 }
 
 STATUSES = ('pending', 'received', 'assigned', 'measured')
@@ -183,11 +188,11 @@ class Backend:
             return st.get('status') if st.get('status') in STATUSES else None
         return st if st in STATUSES else None
 
-    def display_status(self, uid, has_tri=False):
+    def display_status(self, uid, has_result=False):
         manual = self.manual_status(uid)
         if manual:
             return manual
-        if has_tri and self.config.get('auto_mark_measured', True):
+        if has_result and self.config.get('auto_mark_measured', True):
             return 'measured'
         slot = self.slot_for(uid)
         if slot:
@@ -283,6 +288,7 @@ class Backend:
                 fnames.append(str(f))
         has_tprc = any(str(f).lower().endswith('.tprc') for f in fnames)
         has_tri = any(str(f).lower().endswith(('.tri', '.xlsx')) for f in fnames)
+        has_json = any(str(f).lower().endswith('.json') for f in fnames)
         md0 = tga[0] if tga else {}
         ed = md0.get('data') or {}
         # Display name: prefer the ELN sample_name; fall back to the
@@ -315,11 +321,13 @@ class Backend:
             'entry_id': entry_ids[0] if entry_ids else None,
             'has_tprc': has_tprc,
             'has_tri': has_tri,
+            'has_json': has_json,
+            'has_result': has_tri or has_json,
             'entries': len(tga),
             'created': created,
             'files': fnames,
         }
-        if has_tri and self.manual_status(uid) is None \
+        if (has_tri or has_json) and self.manual_status(uid) is None \
                 and self.config.get('auto_mark_measured', True):
             self.config.setdefault('sample_status', {})[uid] = {
                 'status': 'measured',
@@ -415,9 +423,15 @@ class Backend:
                 failed.append(str(e))
         return ok, failed
 
-    def upload_result(self, uid, filepath):
-        """Upload a .tri/.xlsx result into an upload + trigger processing."""
+    def upload_result(self, uid, filepath, versioned_name=None):
+        """Upload a .tri/.xlsx/.json result into an upload + trigger processing.
+
+        versioned_name: optional alternate filename (e.g. a TRIOS JSON gets a
+        unique name so re-measurements don't overwrite earlier results).
+        """
         fname = Path(filepath).name
+        if versioned_name:
+            fname = versioned_name
         self.client.upload_raw(uid, fname, filepath)
         self.log(f'Uploaded {fname} → {uid[:8]}', 'ok')
         if self.manual_status(uid) is None and self.config.get('auto_mark_measured', True):
@@ -428,34 +442,139 @@ class Backend:
         except NomadApiError as e:
             self.log(f'Process trigger failed: {e}', 'warn')
 
-    # ── Watcher ────────────────────────────────────────────────
+    def _map_result_to_upload(self, fname, export_dir):
+        """Map a result file (.json/.tri) to an upload_id.
+
+        Priority:
+          1. exact filename -> owner (file_owner maps downloaded .tprc names)
+          2. stem + '.tprc' -> owner (e.g. 'Probe A_03.json' -> 'Probe A_03.tprc')
+          3. For JSON: sample name inside the file against upload samples
+        Returns upload_id or None.
+        """
+        stem = Path(fname).stem
+        uid = self.file_owner.get(fname) or self.file_owner.get(f'{stem}.tprc')
+        if uid:
+            return uid
+        if str(fname).lower().endswith('.json'):
+            # Sample-name fallback: read Sample.Name from the JSON header
+            try:
+                import json as _json
+                with open(export_dir / fname, encoding='utf-8-sig') as f:
+                    d = _json.load(f)
+                sname = ((d.get('Sample') or {}).get('Name') or '').strip()
+                if sname:
+                    for r in self.uploads:
+                        if r.get('sample') and sname.lower() in str(r['sample']).lower():
+                            return r['upload_id']
+            except Exception:
+                pass
+        return None
+
+    def _json_versioned_name(self, fname, export_dir):
+        """Version a TRIOS JSON upload name with its StartTime (if available),
+        so re-measurements of the same sample don't overwrite each other.
+        Falls back to the plain filename."""
+        try:
+            import json as _json
+            with open(export_dir / fname, encoding='utf-8-sig') as f:
+                d = _json.load(f)
+            start = (d.get('StartTime') or '').replace(':', '').replace('T', '_')
+            start = start[:15]
+            if start:
+                base = Path(fname).stem
+                return f'{base}_{start}.json'
+        except Exception:
+            pass
+        return fname
+
+    def _already_uploaded(self, fname, target_name=None):
+        """Check the persistent uploaded_results log (by export filename OR
+        by the versioned target name it was uploaded as).
+
+        A ':nomatch' entry means the file had no matching upload on a previous
+        tick (e.g. the app had not refreshed yet) — that is NOT 'uploaded',
+        so it is retried on later ticks.
+        """
+        log = self.config.get('uploaded_results') or {}
+        entry = log.get(fname)
+        if entry:
+            if isinstance(entry, dict) and str(entry.get('target', '')).endswith(':nomatch'):
+                return False  # retry later
+            return True
+        if target_name:
+            for v in log.values():
+                if isinstance(v, dict) and v.get('target') == target_name:
+                    return True
+        return False
+
+    def _mark_uploaded(self, fname, target_name):
+        """Persist that an export file was uploaded (survives restart)."""
+        self.config.setdefault('uploaded_results', {})[fname] = {
+            'target': target_name,
+            'ts': datetime.now().isoformat(timespec='seconds'),
+        }
+        try:
+            save_config(self.config)
+        except Exception as e:
+            self.log(f'Could not save upload log: {e}', 'err')
 
     def watcher_tick(self):
-        """One watcher pass: scan export dir for new .tri/.xlsx and upload."""
+        """One watcher pass: scan export dir for .json/.tri/.xlsx results and
+        upload files that have NOT been uploaded yet.
+
+        Restart-safe: the app may be started AFTER TRIOS already exported the
+        result files (operator starts the EXE when the measurement is done).
+        Two guards prevent duplicate uploads:
+          - ``uploaded_results`` (persistent config log) records every file
+            the watcher uploaded, keyed by export filename AND by the
+            versioned target name.
+          - A file already present in the target upload (checked against the
+            upload's raw files) is skipped even if the log was cleared.
+        """
         export_dir = Path(self.config.get('trios_export_dir', ''))
         if not export_dir.exists():
             return
         current = set(f.name for f in export_dir.glob('*.tri')) | \
-                  set(f.name for f in export_dir.glob('*.xlsx'))
-        if not hasattr(self, '_seen_files') or self._seen_files is None:
-            self._seen_files = current
-            self.last_scan = datetime.now().strftime('%H:%M:%S')
-            return
-        new_files = current - self._seen_files
+                  set(f.name for f in export_dir.glob('*.xlsx')) | \
+                  set(f.name for f in export_dir.glob('*.json'))
         self.last_scan = datetime.now().strftime('%H:%M:%S')
-        for fname in sorted(new_files):
+
+        for fname in sorted(current):
             fpath = export_dir / fname
-            self.log(f'New result file: {fname}', 'ok')
+            # Skip files already uploaded (persistent log survives restart)
+            if self._already_uploaded(fname):
+                continue
             if not self.config.get('auto_upload', True):
-                self.log('  auto-upload disabled — skipping', 'warn')
+                # remember we saw it so we don't warn every tick, but still
+                # allow it to be picked up if auto_upload is enabled later
                 continue
-            stem = Path(fname).stem
-            uid = self.file_owner.get(fname) or self.file_owner.get(f'{stem}.tprc')
+            uid = self._map_result_to_upload(fname, export_dir)
             if not uid:
-                self.log(f'  No matching upload for {fname} — use Upload manually', 'warn')
+                # Warn once per run (not every tick) — but keep retrying the
+                # mapping on later ticks (the upload may appear after refresh).
+                if not hasattr(self, '_nomatch_warned') or fname not in self._nomatch_warned:
+                    self.log(f'  No matching upload for {fname} — use Upload manually', 'warn')
+                    if not hasattr(self, '_nomatch_warned'):
+                        self._nomatch_warned = set()
+                    self._nomatch_warned.add(fname)
                 continue
+            # Version JSON names so re-measurements don't overwrite
+            vname = self._json_versioned_name(fname, export_dir) \
+                if str(fname).lower().endswith('.json') else fname
+            # Skip if the versioned target name is already in the target upload
             try:
-                self.upload_result(uid, str(fpath))
+                existing = {f.get('path', f.get('name', ''))
+                            for f in (self.client.list_raw_files(uid) or [])}
+                if vname in existing:
+                    self._mark_uploaded(fname, vname)
+                    continue
+            except Exception:
+                pass
+            self.log(f'New result file: {fname}', 'ok')
+            try:
+                self.upload_result(uid, str(fpath), versioned_name=vname if vname != fname else None)
+                self._mark_uploaded(fname, vname)
             except NomadApiError as e:
                 self.log(f'  Upload failed for {fname}: {e}', 'err')
         self._seen_files = current
+

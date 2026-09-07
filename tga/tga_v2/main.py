@@ -201,7 +201,7 @@ def update_action_bar():
     refs['footer_label'].set_text(f'{n} {_("selected")}')
     # Determine which actions apply to the selection
     rows = [r for r in backend.uploads if r['upload_id'] in selected]
-    statuses = {backend.display_status(r['upload_id'], r['has_tri']) for r in rows}
+    statuses = {backend.display_status(r['upload_id'], r['has_result']) for r in rows}
     all_tprc = all(r['has_tprc'] for r in rows)
     # Download .tprc: always available
     refs['btn_dl'].set_enabled(bool(rows))
@@ -236,7 +236,7 @@ async def action_assign_slots():
     set_actions_enabled(False)
     try:
         rows = [r for r in backend.uploads if r['upload_id'] in selected
-                and backend.display_status(r['upload_id'], r['has_tri']) != 'measured']
+                and backend.display_status(r['upload_id'], r['has_result']) != 'measured']
         # Only samples WITH a .tprc can get a slot — others would fail inside
         # save_slot_files anyway AND burn a slot number (the "3-4 statt 1-2"
         # bug). Filter here + tell the user what was skipped.
@@ -290,6 +290,7 @@ def pick_tri_file():
         return path
     except Exception:
         return None
+
 
 
 # ── Log view ───────────────────────────────────────────────────

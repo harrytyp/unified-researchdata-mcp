@@ -37,7 +37,7 @@ def build_board(backend: Backend, container: ui.column):
 
 def build_column_header(backend: Backend, status: str):
     rows = [r for r in backend.uploads if backend.display_status(
-        r['upload_id'], r['has_tri']) == status]
+        r['upload_id'], r['has_result']) == status]
     color = STATUS_COLORS[status]
     with ui.row().classes('items-center gap-2 px-1 w-full'):
         ui.badge(len(rows)).props(f'color={color}').classes('text-xs')
@@ -64,10 +64,10 @@ def build_column_body(backend: Backend, status: str, col_body=None):
     if status == 'assigned':
         # Queue first (assigned but no slot yet), then slotted cards sorted.
         queued = [r for r in backend.uploads
-                  if backend.display_status(r['upload_id'], r['has_tri']) == 'assigned'
+                  if backend.display_status(r['upload_id'], r['has_result']) == 'assigned'
                   and not backend.slot_for(r['upload_id'])]
         slotted = [r for r in backend.uploads
-                   if backend.display_status(r['upload_id'], r['has_tri']) == 'assigned'
+                   if backend.display_status(r['upload_id'], r['has_result']) == 'assigned'
                    and backend.slot_for(r['upload_id'])]
         slotted.sort(key=lambda r: int(backend.slot_for(r['upload_id']) or 0))
         if queued:
@@ -80,7 +80,7 @@ def build_column_body(backend: Backend, status: str, col_body=None):
         return
 
     rows = [r for r in backend.uploads if backend.display_status(
-        r['upload_id'], r['has_tri']) == status]
+        r['upload_id'], r['has_result']) == status]
     for r in rows:
         make_card(backend, r, ctx)
 
@@ -93,7 +93,7 @@ def make_card(backend: Backend, r: dict, parent=None):
     components (ui.card) do not reliably forward it.
     """
     uid = r['upload_id']
-    status = backend.display_status(uid, r['has_tri'])
+    status = backend.display_status(uid, r['has_result'])
     color = STATUS_COLORS[status]
     is_sel = uid in selected
 
@@ -155,7 +155,7 @@ def make_card(backend: Backend, r: dict, parent=None):
                     ui.label(r['created']).classes(
                         'text-xs text-grey-5 tga-sub').tooltip('Upload-Zeitpunkt')
                 ui.icon('download', color='green' if r['has_tprc'] else 'grey-4').classes('text-sm')
-                ui.icon('task_alt', color='green' if r['has_tri'] else 'grey-4').classes('text-sm')
+                ui.icon('task_alt', color='green' if r['has_result'] else 'grey-4').classes('text-sm')
 
 
 def open_detail(uid: str):

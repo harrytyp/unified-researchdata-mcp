@@ -65,8 +65,8 @@ assert bb['has_tri']
 print('1. Refresh + Metadaten OK (3 Uploads, author/procedure/fallback)')
 
 # 2. Status-Auto: BBB222 hat .tri -> measured
-assert b.display_status('BBB222', has_tri=True) == 'measured'
-assert b.display_status('AAA111', has_tri=False) == 'pending'
+assert b.display_status('BBB222', has_result=True) == 'measured'
+assert b.display_status('AAA111', has_result=False) == 'pending'
 print('2. Auto-Status OK (BBB measured via .tri, AAA pending)')
 
 # 3. Status setzen + persistieren
@@ -79,7 +79,7 @@ print('3. Status setzen + Config-Persistenz OK')
 # 4. Slot-Zuweisung + Dateinamen
 b.assign_slot('AAA111', '03')
 assert b.slot_for('AAA111') == '03'
-assert b.display_status('AAA111', has_tri=False) == 'assigned'  # Slot -> assigned
+assert b.display_status('AAA111', has_result=False) == 'assigned'  # Slot -> assigned
 assert slot_filename('Probe A', '03', 'AAA111') == 'Probe A_03.tprc'
 print('4. Slot-Zuweisung + display_status=assigned OK')
 
@@ -107,19 +107,92 @@ b.assign_slot('BBB222', '05')
 assert b.slot_for('BBB222') == '05'
 b.set_status('BBB222', 'measured')
 assert b.slot_for('BBB222') is None, 'Slot muss bei measured gelöscht werden'
-assert b.display_status('BBB222', has_tri=True) == 'measured'
+assert b.display_status('BBB222', has_result=True) == 'measured'
 print('5b. Slot-Löschung bei measured OK')
 
-# 6. Watcher: neue .tri im Exportordner -> Upload + measured
+# 6. Watcher RESTART-SAFE: Dateien, die VOR App-Start da waren (z.B. TRIOS
+# fertig, EXE startet danach), werden beim ersten Tick hochgeladen.
 exp = Path(_tmp) / 'TRIOS' / 'Data'
 exp.mkdir(parents=True, exist_ok=True)
-(exp / 'Probe A_03.tri').write_bytes(b'fake tri')
+# 'Probe A_03.tri' liegt schon (wie wenn TRIOS vor der EXE fertig war)
+(exp / 'Probe A_01.tri').write_bytes(b'fake tri')
 # file_owner wurde beim save_slot_files gesetzt (Probe A_03.tprc -> AAA111)
-b.watcher_tick()  # erste Runde: initialisiert _seen_files
-(exp / 'Probe B.tri').write_bytes(b'fake tri2')
-# map: Probe B.tri -> stem Probe B -> kein tprc-Owner -> warn (kein Crash)
+b.config['auto_upload'] = True
+b.watcher_tick()  # erster Tick: MUSS die vorhandene .tri hochladen (kein Skip)
+# 'Probe A_01.tri' -> stem 'Probe A_01' -> file_owner['Probe A_03.tprc'] = AAA111
+assert b.config.get('uploaded_results', {}).get('Probe A_01.tri'),     'Datei die vor Start da war muss hochgeladen + geloggt werden'
+print('6. Restart-sicher: vorhandene .tri beim 1. Tick hochgeladen OK')
+# zweiter Tick: kein Doppel-Upload (im Log)
+n_before = len(b.config.get('uploaded_results', {}))
 b.watcher_tick()
-assert b.last_scan is not None
-print('6. Watcher-Tick OK (kein Crash, last_scan gesetzt)')
+assert len(b.config.get('uploaded_results', {})) == n_before, 'kein Doppel-Upload'
+print('6b. Kein Doppel-Upload nach Restart-Tick OK')
+
+# 7. TRIOS-JSON: Watcher erkennt .json, mapped auf Upload (Stem), versioniert Name
+import json as _json
+exp_json = Path(_tmp) / 'TRIOS' / 'Data'
+# Englische TRIOS-JSON mit StartTime -> versionierter Name erwartet
+en_json = {
+    "Schema": {"Url": "https://software.tainstruments.com/schemas/TRIOSJSONExportSchema"},
+    "Sample": {"Name": "Probe A", "PanType": "Platinum HT", "Mass": {"Value": 10.5, "Unit": {"Name": "mg"}}},
+    "Procedure": {"Name": "10K to 400", "Steps": [{"Name": "Ramp"}]},
+    "StartTime": "2026-09-07T10:30:00",
+    "Operators": [{"Name": "OP"}],
+    "Results": {"Processed": {
+        "Classification": {"Id": "Latest", "Description": "x"},
+        "ResultsSteps": [{"Name": "Ramp", "Id": "a"}],
+        "ColumnHeaders": {
+            "Time_min": {"DisplayName": "Time", "ValueType": "Number", "Unit": {"Name": "min"}},
+            "Temperature_°C": {"DisplayName": "Temperature", "ValueType": "Number", "Unit": {"Name": "°C"}},
+            "Weight_%": {"DisplayName": "Weight", "ValueType": "Number", "Unit": {"Name": "%"}},
+            "Weight_mg": {"DisplayName": "Weight", "ValueType": "Number", "Unit": {"Name": "mg"}},
+        },
+        "Rows": [
+            {"Time_min": 0.0, "Temperature_°C": 30.0, "Weight_%": 100.0, "Weight_mg": 10.5},
+            {"Time_min": 1.0, "Temperature_°C": 400.0, "Weight_%": 30.0, "Weight_mg": 3.15},
+        ]
+    }}
+}
+# file_owner: nach save_slot_files hat 'Probe A_01.tprc' -> AAA111 (aus Test 5)
+json_fname = 'Probe A_01.json'
+(exp_json / json_fname).write_text(_json.dumps(en_json), encoding='utf-8')
+# Watcher: .json ist NEU (vorher nur .tri/.xlsx gesehen)
+b.watcher_tick()   # Runde nach dem .tri aus Test 6 — .json ist jetzt neu
+# Mapping: 'Probe A_01.json' -> stem 'Probe A_01' -> file_owner['Probe A_01.tprc'] = AAA111
+uid_mapped = b._map_result_to_upload(json_fname, exp_json)
+assert uid_mapped == 'AAA111', f"JSON-Mapping: erwartet AAA111, habe {uid_mapped}"
+# Versionierter Name enthält StartTime
+vname = b._json_versioned_name(json_fname, exp_json)
+assert '2026-09-07' in vname.replace('_', ' ') or '2026_09_07' in vname, f"Versionierung fehlt: {vname}"
+print(f'7. TRIOS-JSON erkannt + Mapping AAA111 + versioniert ({vname}) OK')
+
+# 8. JSON-Mapping via Sample-Name (Fallback ohne Stem-Treffer) + upload_raw Aufruf
+class CountingClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.uploaded = []
+        self.published = []
+    def upload_raw(self, uid, rel, filepath):
+        self.uploaded.append((uid, rel))
+        return True
+    def publish(self, uid, embargo_length=36):
+        self.published.append((uid, embargo_length))
+        return True
+cc = CountingClient()
+b2 = Backend(client=cc)
+b2.file_owner = dict(b.file_owner)  # 'Probe A_01.tprc' -> AAA111 (aus Test 5)
+# uploads: nur die Zeile mit sample 'Probe A' (AAA111) — für Sample-Name-Mapping
+b2.uploads = [r for r in b.uploads if r['upload_id'] == 'AAA111']
+# 'Probe C_99.json' hat KEINEN Stem-Treffer (kein 'Probe C_99.tprc' owner),
+# aber JSON Sample.Name = 'Probe A' -> matcht Upload AAA111 (sample 'Probe A')
+json_c = 'Probe C_99.json'
+(exp_json / json_c).write_text(_json.dumps(en_json), encoding='utf-8')
+uid2 = b2._map_result_to_upload(json_c, exp_json)
+assert uid2 == 'AAA111', f"Sample-Name-Mapping: erwartet AAA111, habe {uid2}"
+# upload_result mit versioniertem Namen -> CountingClient.uploaded
+b2.upload_result(uid2, str(exp_json / json_c),
+                 versioned_name=b2._json_versioned_name(json_c, exp_json))
+assert cc.uploaded and cc.uploaded[0][0] == 'AAA111', f"Upload fehlt: {cc.uploaded}"
+print(f'8. JSON Sample-Name-Mapping + Upload OK: {cc.uploaded}')
 
 print('\nALLE BACKEND-TESTS BESTANDEN')
