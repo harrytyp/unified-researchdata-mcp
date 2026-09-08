@@ -303,6 +303,7 @@ services:
     volumes:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
+    - /home/debian/unified-researchdata-mcp/nomad/configs/nomad.yaml:/app/nomad.yaml
 volumes:
   elastic:
     name: nomad_oasis_elastic
