@@ -287,6 +287,7 @@ services:
       NOMAD_ELASTIC_HOST: elastic
       NOMAD_LOGSTASH_HOST: logtransfer
       NOMAD_MONGO_HOST: mongo
+      NOMAD_API_URL: http://nomad_oasis_app:8000/nomad-oasis/api/v1
       NOMAD_SERVICE: nomad_oasis_worker
       NOMAD_TEMPORAL_HOST: temporal
       PYTHONPATH: /app/plugins

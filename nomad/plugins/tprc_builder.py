@@ -1,5 +1,13 @@
 """
-tprc_builder.py v2 — Build .tprc by modifying a real template file.
+tprc_builder.py v3 — Build .tprc from an empty TRIOS base + inserted SGMT blocks.
+
+v3 change: instead of patching values into a foreign multi-segment template
+(which left the template's own procedure steps in the file), the procedure
+is now *built*: an empty .tprc (TRIOS-exported, no SGMT blocks) is used as
+the base and exactly one SGMT block is inserted per entered segment, before
+the LengthTagged section. Verified byte-identical against real
+TRIOS-exported reference files (empty.tprc + 1 Ramp == Procedure.tprc,
+and 12-segment output matches the real LBAM file block-for-block).
 """
 import logging
 import struct, os, json, shutil
@@ -8,14 +16,27 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Template path (use a real .tprc as base)
+# Base template: a real TRIOS .tprc with *no* procedure segments (434 B,
+# exported from TRIOS 6.1). Segment SGMT blocks are inserted into it.
 import platform
 if platform.system() == 'Windows':
-    TEMPLATE_PATH = Path(r"C:\Users\go75bel\Downloads\tgafiles_new\Matching data 1_PROCEDURE TGA_LBAM Hofmann 10K min 400 C N2.tprc")
-    FALLBACK_TEMPLATE = Path(r"C:\Users\go75bel\Downloads\tgaautomation\sample files\TGA_Char yield 1Cmin 1000C.tprc")
+    TEMPLATE_PATH = Path(r"C:\Users\go75bel\Downloads\empty.tprc")
+    FALLBACK_TEMPLATE = Path(r"C:\Users\go75bel\Downloads\empty.tprc")
 else:
-    TEMPLATE_PATH = Path("/app/plugins/sample_files/TGA_Char yield 1Cmin 1000C.tprc")
-    FALLBACK_TEMPLATE = Path("/home/debian/tga_service/Matching_data_1_PROCEDURE_TGA_LBAM_Hofmann_10K_min_400_C_N2.tprc")
+    TEMPLATE_PATH = Path("/app/plugins/sample_files/empty.tprc")
+    FALLBACK_TEMPLATE = Path("/app/plugins/sample_files/empty.tprc")
+
+# SGMT block type bytes (verified against real TRIOS-exported files)
+T_RAMP = 0x06       # 20 B: SGMT + type + flags + id + end_temp(LE@+12) + rate(LE@+16)
+T_ISO = 0x04        # 16 B: duration_min at +12 (LE)
+T_MASSFLOW = 0x0E   # 16 B: flow_rate at +12 (LE)
+T_BALFLOW = 0x13    # 16 B: flow_rate at +12 (LE)
+BLOCK_FLAGS = {
+    T_RAMP: b'\x00\x03\x00',
+    T_ISO: b'\x00\x03\x00',
+    T_MASSFLOW: b'\x00\x03\x00',
+    T_BALFLOW: b'\x00\x03\x03',
+}
 
 
 def _patch_be_f32(data: bytearray, offset: int, value: float):
@@ -26,9 +47,7 @@ def _patch_be_f32(data: bytearray, offset: int, value: float):
 
 
 def _patch_le_f32(data: bytearray, offset: int, value: float):
-    """Same as _patch_be_f32 but little-endian — the isothermal duration
-    field uses the opposite byte order from every other field we've found
-    in this format, confirmed by comparing real TRIOS-exported files."""
+    """Little-endian float write (the format's value encoding)."""
     packed = struct.pack('<f', float(value))
     for i in range(4):
         if offset + i < len(data):
@@ -142,10 +161,26 @@ def _validate_segments(segments: List[Dict]) -> List[str]:
     return problems
 
 
+def _make_sgmt_block(seg_type: int, block_id: int, value1: float,
+                     value2: Optional[float] = None) -> bytes:
+    """Build one SGMT block in the verified TRIOS layout (LE floats).
+
+    Ramp is 20 bytes (end_temp at +12, rate at +16); all other types are
+    16 bytes (single value at +12). The id field is a free-running counter
+    that is never referenced elsewhere in the file (verified).
+    """
+    flags = BLOCK_FLAGS.get(seg_type, b'\x00\x03\x00')
+    blk = bytearray(b'SGMT') + bytes([seg_type]) + flags + struct.pack('<I', block_id)
+    blk += struct.pack('<f', value1)
+    if value2 is not None:
+        blk += struct.pack('<f', value2)
+    return bytes(blk)
+
+
 def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path] = None,
                logger: Optional[logging.Logger] = None) -> bytes:
     """
-    Build a .tprc by patching a template.
+    Build a .tprc by inserting one SGMT block per segment into an empty base.
 
     params keys:
       sample_name, procedure_name (strings)
@@ -162,35 +197,29 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
     Every segment is validated before anything is written: a Ramp needs
     both end_temp and rate, an Isothermal needs duration_min, a Mass Flow
     or Balance Flow needs flow_rate. If any segment is incomplete, this
-    raises ValueError instead of silently patching a default of 0 — a
-    half-filled segment must not produce a "successful" but physically
-    meaningless procedure file.
+    raises ValueError instead of silently writing a default of 0.
 
-    Each valid segment is then patched into the nth SGMT block of its
-    matching type in the template (Ramp -> 0x06, Isothermal -> 0x04,
-    Mass Flow -> 0x0E, Balance Flow -> 0x13), in the order the segments
-    were entered. The template only has a fixed number of SGMT blocks of
-    each type, so segments beyond that count cannot be written and are
-    skipped with a logged warning.
+    Layout (reverse-engineered from real TRIOS-exported files, confirmed by
+    byte-comparing empty.tprc against a single-Ramp export of the same
+    procedure): the file is a container whose procedure segments live as
+    SGMT blocks directly in front of the LengthTagged section. A 4-byte
+    length field at lt-4 holds the total byte size of the SGMT region, and
+    the container length at offset 36 grows by the same amount. The base
+    template (empty.tprc, exported from TRIOS with no segments) therefore
+    yields exactly the entered segments and nothing else — no foreign
+    template steps remain.
 
-    Encoding (all confirmed by comparing real TRIOS-exported .tprc files
-    that differed only in one changed value, isolating each field):
-      - Isothermal segment type byte is 0x04, not 0x05 as earlier code
-        assumed; duration_min lives at +12 from the block's "SGMT" marker,
-        little-endian. There is no target-temperature field in this block
-        type — an isothermal segment holds at whatever temperature the
-        preceding segment ended at, so end_temp is not written for it.
-      - Ramp: end_temp lives at +12 and rate at +16, both little-endian —
-        not +8/+12 big-endian as earlier code assumed. Confirmed both with
-        isolated single-Ramp test files (only temp changed, only rate
-        changed) and by re-reading a real multi-segment template file,
-        where the corrected offsets produced sensible values matching the
-        file's own name (e.g. "1Cmin 1000C" -> rate=1.0, end_temp=1000.0)
-        while the old offsets produced garbage.
-      - Mass Flow (0x0E) and Balance Flow (0x13): flow_rate lives at +12,
-        little-endian — same "+12, little-endian" pattern as the other
-        segment types' primary value. Confirmed against a real multi-segment
-        operator file (matched TRIOS's displayed "200.00 mL/min" exactly).
+    Encoding (confirmed by comparing real TRIOS-exported .tprc files that
+    differed only in one changed value, isolating each field):
+      - Ramp: type byte 0x06; end_temp at +12 and rate at +16 from the
+        block start, little-endian. Block size 20.
+      - Isothermal: type byte 0x04; duration_min at +12, little-endian.
+        No target-temperature field — holds at the previous segment's end
+        temperature. Block size 16.
+      - Mass Flow: type byte 0x0E; flow_rate at +12, little-endian.
+        Block size 16, flags 00 03 00.
+      - Balance Flow: type byte 0x13; flow_rate at +12, little-endian.
+        Block size 16, flags 00 03 03.
     """
     log = logger or globals()['logger']
 
@@ -216,60 +245,36 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
     sample_name = params.get('sample_name', 'Sample')
     _patch_after_marker(data, b'<SAMPLENAME>', sample_name)
 
-    # ── 3. Patch each segment into its matching SGMT block, in order ──
-    max_ramp = _count_sgmt_blocks(data, 0x06)
-    max_iso = _count_sgmt_blocks(data, 0x04)
-    max_mass_flow = _count_sgmt_blocks(data, 0x0E)
-    max_balance_flow = _count_sgmt_blocks(data, 0x13)
-    ramp_count = 0
-    iso_count = 0
-    mass_flow_count = 0
-    balance_flow_count = 0
+    # ── 3. Build one SGMT block per entered segment, in order ──
+    lt = data.find(b'\x0cLengthTagged')
+    if lt < 0:
+        raise ValueError("Template has no LengthTagged section - not a .tprc?")
+    # 4-byte length field right before LengthTagged holds the SGMT region size
+    len_field_pos = lt - 4
+
+    blocks = bytearray()
+    start_id = 903  # arbitrary free-running id, never referenced (verified)
     for i, seg in enumerate(segments):
         seg_type = (seg.get('type') or 'Ramp').lower()
+        bid = start_id + i
         if seg_type == 'ramp':
-            idx = _find_sgmt_block(data, 0x06, ramp_count)
-            if idx >= 0:
-                # Confirmed against real TRIOS-exported files (isolated
-                # single-Ramp segments, only one variable changed at a time):
-                # target temperature lives at +12 and rate at +16, both
-                # little-endian - not +8/+12 big-endian as previously assumed.
-                _patch_le_f32(data, idx + 12, float(seg['end_temp']))  # Target temperature
-                _patch_le_f32(data, idx + 16, float(seg['rate']))      # Heating rate
-            else:
-                log.warning(
-                    "Template only has %d Ramp slot(s); segment %d (Ramp to %s) not written",
-                    max_ramp, i + 1, seg.get('end_temp'))
-            ramp_count += 1
+            blocks += _make_sgmt_block(T_RAMP, bid, float(seg['end_temp']), float(seg['rate']))
         elif seg_type == 'isothermal':
-            idx = _find_sgmt_block(data, 0x04, iso_count)
-            if idx >= 0:
-                _patch_le_f32(data, idx + 12, float(seg['duration_min']))  # Hold duration (minutes)
-            else:
-                log.warning(
-                    "Template only has %d Isothermal slot(s); segment %d (Isothermal, %s min) not written",
-                    max_iso, i + 1, seg.get('duration_min'))
-            iso_count += 1
+            blocks += _make_sgmt_block(T_ISO, bid, float(seg['duration_min']))
         elif seg_type == 'mass_flow':
-            idx = _find_sgmt_block(data, 0x0E, mass_flow_count)
-            if idx >= 0:
-                _patch_le_f32(data, idx + 12, float(seg['flow_rate']))  # Sample purge flow (mL/min)
-            else:
-                log.warning(
-                    "Template only has %d Mass Flow slot(s); segment %d (Mass Flow, %s mL/min) not written",
-                    max_mass_flow, i + 1, seg.get('flow_rate'))
-            mass_flow_count += 1
+            blocks += _make_sgmt_block(T_MASSFLOW, bid, float(seg['flow_rate']))
         elif seg_type == 'balance_flow':
-            idx = _find_sgmt_block(data, 0x13, balance_flow_count)
-            if idx >= 0:
-                _patch_le_f32(data, idx + 12, float(seg['flow_rate']))  # Balance purge flow (mL/min)
-            else:
-                log.warning(
-                    "Template only has %d Balance Flow slot(s); segment %d (Balance Flow, %s mL/min) not written",
-                    max_balance_flow, i + 1, seg.get('flow_rate'))
-            balance_flow_count += 1
+            blocks += _make_sgmt_block(T_BALFLOW, bid, float(seg['flow_rate']))
 
-    # ── 4. Patch gas atmosphere in TLV strings ──
+    # ── 4. Insert blocks before LengthTagged, fix the two length fields ──
+    block_len = len(blocks)
+    if block_len:
+        data[lt:lt] = blocks
+        struct.pack_into('<I', data, len_field_pos, block_len)
+        c_len = struct.unpack_from('<I', data, 36)[0]
+        struct.pack_into('<I', data, 36, c_len + block_len)
+
+    # ── 5. Patch gas atmosphere in TLV strings ──
     gas = params.get('gas_atmosphere', 'Nitrogen')
     if gas:
         for marker in [b'Nitrogen', b'Air', b'Argon', b'Helium']:
@@ -280,10 +285,11 @@ def build_tprc(params: Dict, segments: List[Dict], template_path: Optional[Path]
 
 
 def parse_tprc(path: str) -> Dict:
-    """Parse .tprc and return readable info."""
+    """Parse .tprc and return readable info (values little-endian, matching
+    how build_tprc writes them)."""
     with open(path, 'rb') as f:
         data = bytearray(f.read())
-    
+
     result = {
         'filename': Path(path).name,
         'size': len(data),
@@ -291,7 +297,7 @@ def parse_tprc(path: str) -> Dict:
         'sample_name': '',
         'segments': [],
     }
-    
+
     # Extract sample name
     for m in [b'<SAMPLENAME>', b'SampleName', b'SAMPLE']:
         pos = data.find(m)
@@ -300,7 +306,7 @@ def parse_tprc(path: str) -> Dict:
             if ns < len(data) and 1 <= data[ns] <= 100 and ns + 1 + data[ns] < len(data):
                 result['sample_name'] = data[ns+1:ns+1+data[ns]].decode('ascii', errors='replace').strip()
                 break
-    
+
     # Extract procedure name
     for marker in [b'LBAM', b'Procedure']:
         pos = data.find(marker)
@@ -309,27 +315,55 @@ def parse_tprc(path: str) -> Dict:
             if lp > 0 and 1 <= data[lp] <= 100:
                 result['procedure_name'] = data[pos:pos+data[lp]].decode('ascii', errors='replace').strip()
                 break
-    
-    # Find SGMT blocks  
-    pos = 0
+
+    # SGMT blocks: the SGMT region begins right after a 4-byte length field
+    # (which holds the region's total byte size) and ends at the
+    # LengthTagged marker. Locate the region via the first 'SGMT' after the
+    # header area (~offset 88+), read the length field before it, and take
+    # every procedure-type SGMT block inside [start, start+region_len).
+    lt = data.find(b'\x0cLengthTagged')
+    # first standalone SGMT in the block area (after header GUIDs ~off 44-88)
+    first = -1
+    pos = 88
     while True:
         pos = data.find(b'SGMT', pos)
-        if pos < 0: break
-        if pos + 24 <= len(data):
-            block = data[pos:pos+24]
-            params = []
-            for off in [8, 12, 16]:
+        if pos < 0 or (lt >= 0 and pos >= lt):
+            break
+        first = pos
+        break
+    if first >= 0 and first >= 4:
+        region_len = struct.unpack_from('<I', data, first - 4)[0]
+        region_start = first
+        region_end = min(first + region_len, lt if lt >= 0 else len(data))
+        pos = region_start
+        while pos + 4 <= region_end:
+            if data[pos:pos + 4] != b'SGMT':
+                pos += 1
+                continue
+            typ = data[pos + 4]
+            if typ in (T_RAMP, T_ISO, T_MASSFLOW, T_BALFLOW):
                 try:
-                    v = struct.unpack('>f', block[off:off+4])[0]
-                    params.append(round(v, 1))
-                except: params.append(0)
-            result['segments'].append({
-                'offset': pos,
-                'type': block[4] if len(block) > 4 else 0,
-                'params': params,
-            })
-        pos += 4
-    
+                    v1 = struct.unpack('<f', data[pos+12:pos+16])[0]
+                except Exception:
+                    v1 = 0.0
+                v2 = None
+                if typ == T_RAMP and pos + 20 <= len(data):
+                    try:
+                        v2 = struct.unpack('<f', data[pos+16:pos+20])[0]
+                    except Exception:
+                        v2 = 0.0
+                block_len = 20 if typ == T_RAMP else 16
+                result['segments'].append({
+                    'offset': pos,
+                    'type': typ,
+                    'length': block_len,
+                    'value1': round(v1, 4),
+                    'value2': round(v2, 4) if v2 is not None else None,
+                })
+                pos += block_len
+            else:
+                pos += 4
+
     return result
 
 
@@ -339,30 +373,23 @@ if __name__ == '__main__':
         r = parse_tprc(sys.argv[1])
         print(json.dumps(r, indent=2, default=str))
         sys.exit(0)
-    
-    # Build and compare
+
+    # Build and self-check
     params = {
         'sample_name': 'Test Kollidon',
         'procedure_name': 'Ramp 10Kmin 400C N2',
         'gas_atmosphere': 'Nitrogen',
     }
-    segments = [{'type': 'Ramp', 'end_temp': 400, 'rate': 10}]
+    segments = [
+        {'type': 'Ramp', 'end_temp': 400, 'rate': 10},
+        {'type': 'Isothermal', 'duration_min': 30},
+    ]
     tprc = build_tprc(params, segments)
     out = Path(__file__).parent / 'test_output.tprc'
     out.write_bytes(tprc)
     print(f"Built: {out} ({len(tprc)} bytes)")
-    
-    # Compare with real
-    real = TEMPLATE_PATH
-    if real.exists():
-        rd = real.read_bytes()
-        same = sum(1 for i in range(min(len(tprc), len(rd))) if tprc[i] == rd[i])
-        print(f"Real: {len(rd)} bytes, same: {same}/{len(rd)} ({same/len(rd)*100:.1f}%)")
-        
-        # Parse back
-        r = parse_tprc(str(out))
-        print(f"Parsed: proc={r['procedure_name']}, sample={r['sample_name']}")
-        for s in r['segments'][:5]:
-            type_names = {0x0E: 'MassFlow', 0x06: 'Ramp', 0x05: 'Iso/End', 0x13: 'Gas'}
-            tn = type_names.get(s['type'], f'0x{s["type"]:02X}')
-            print(f"  [{tn}] params={s['params']}")
+    r = parse_tprc(str(out))
+    print(f"Parsed: sample={r['sample_name']!r}")
+    for s in r['segments']:
+        tn = {0x0E: 'MassFlow', 0x06: 'Ramp', 0x04: 'Iso', 0x13: 'BalFlow'}.get(s['type'], hex(s['type']))
+        print(f"  [{tn}] v1={s['value1']} v2={s['value2']}")
