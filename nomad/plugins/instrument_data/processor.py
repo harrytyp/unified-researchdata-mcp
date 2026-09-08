@@ -670,31 +670,47 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
     if not json_name:
         return False
 
-    # Read the JSON bytes (from the upload raw files)
+    # Read the JSON (STREAMED — never load a 100+ MB export fully into RAM).
+    # The worker has a 500 MB memory cap; fo.read()+json.loads() of a 128 MB
+    # TRIOS export needs ~600 MB and would OOM-kill the container.
     data = None
     try:
         if upload_files is not None:
-            # StagingUploadFiles/UploadFiles expose raw_file_object(path) ->
-            # file-like PathObject (NOT read_raw_file — verified API).
-            fo = upload_files.raw_file_object(json_name)
-            raw = fo.read()
-            if isinstance(raw, bytes):
-                raw = raw.decode("utf-8-sig")
-            data = _json.loads(raw)
+            # StagingUploadFiles exposes raw_file(path) as a CONTEXT MANAGER
+            # opening the raw file ('br'); raw_file_object(path) only returns
+            # a PathObject with exists/size/delete — NO read(). (Verified API
+            # on the running instance 2026-09-08.)
+            try:
+                from instrument_data.trios_json_reader import extract_trios_signals_streaming
+                with upload_files.raw_file(json_name, 'br') as raw_f:
+                    res = extract_trios_signals_streaming(raw_f, max_points=4000)
+                sig = res["signals"]
+                meta = res["meta"]
+                raw = None
+                data = None
+            except ImportError:
+                with upload_files.raw_file(json_name, 'rb') as raw_f:
+                    raw = raw_f.read()
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8-sig")
+                data = _json.loads(raw)
+                res = None
     except Exception as e:
         logger.warning(f"Could not read TRIOS JSON {json_name}: {e}")
         return False
 
-    if data is None:
+    if res is None and data is None:
         return False
 
-    # Extract signals + metadata
-    try:
-        from instrument_data.trios_json_reader import extract_trios_signals
-        res = extract_trios_signals(data, max_points=4000)
-    except Exception as e:
-        logger.warning(f"TRIOS JSON parse failed ({json_name}): {e}")
-        return False
+    # Extract signals + metadata (only when the non-streaming path read data;
+    # the streaming path already produced res with sig+meta)
+    if res is None:
+        try:
+            from instrument_data.trios_json_reader import extract_trios_signals
+            res = extract_trios_signals(data, max_points=4000)
+        except Exception as e:
+            logger.warning(f"TRIOS JSON parse failed ({json_name}): {e}")
+            return False
 
     meta = res["meta"]
     sig = res["signals"]

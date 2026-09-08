@@ -25,6 +25,7 @@ from nomad.datamodel.data import EntryData, ElnIntegrationCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.metainfo import JSON, Datetime, MEnum, Quantity, Section, SubSection, MSection
 from nomad.datamodel.metainfo.plot import PlotSection, PlotlyFigure
+import numpy as np
 import plotly.express as px
 
 
@@ -319,21 +320,23 @@ class TgaMeasurement(PlotSection, EntryData):
     result_processed_columns = Quantity(
         type=str,
         description="Comma-separated canonical column keys used from the JSON")
-    # Downsampled signal arrays from the JSON (temperature as X axis)
+    # Downsampled signal arrays from the JSON (temperature as X axis).
+    # NOTE: type=JSON expects dicts, NOT number lists ('26.9 needs to be a
+    # dict'); plain float arrays must be np.float64 with shape=['*'].
     result_time_signal = Quantity(
-        type=JSON,
+        type=np.float64, shape=['*'], unit='minute',
         description="Time array [min] from TRIOS JSON (downsampled)")
     result_temperature_signal = Quantity(
-        type=JSON,
+        type=np.float64, shape=['*'], unit='degree_Celsius',
         description="Temperature array [°C] from TRIOS JSON (downsampled)")
     result_mass_pct_signal = Quantity(
-        type=JSON,
+        type=np.float64, shape=['*'], unit='percent',
         description="Mass array [%] from TRIOS JSON (downsampled)")
     result_mass_mg_signal = Quantity(
-        type=JSON,
+        type=np.float64, shape=['*'], unit='milligram',
         description="Mass array [mg] from TRIOS JSON (downsampled)")
     result_dtg_signal = Quantity(
-        type=JSON,
+        type=np.float64, shape=['*'],
         description="DTG (derivative mass) array from TRIOS JSON (downsampled)")
 
     # ── Signal data (parsed curves) ──

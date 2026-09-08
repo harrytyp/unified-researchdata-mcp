@@ -306,3 +306,248 @@ def _argmax_area(y: np.ndarray, lo: int, hi: int, prev_idx: int, avg_x: float, a
         if area > best_area:
             best_area, best_i = area, i
     return best_i
+
+
+# ── Streaming parser (worker OOM protection) ────────────────────────────────
+# The NOMAD worker runs with a 500 MB memory cap. A 128 MB TRIOS export must
+# NOT be json.load'ed there (~600 MB peak). This scanner reads the file in
+# chunks, locates the Rows array, and extracts each row object incrementally
+# without ever materializing the whole document.
+
+def _stream_find(text: str, needle: str, start: int = 0) -> int:
+    return text.find(needle, start)
+
+
+def extract_trios_signals_streaming(fileobj, max_points: int = 4000,
+                                    chunk_size: int = 1024 * 1024) -> Dict[str, Any]:
+    """Stream-parse a TRIOS JSON export from a binary file-like object.
+
+    Memory-bounded: reads ``chunk_size`` bytes at a time, keeps only the
+    current row + the column-header block in memory. A 134 MB file never
+    materializes as a whole (~600 MB json.load peak avoided).
+
+    Returns the SAME dict shape as :func:`extract_trios_signals`:
+        meta: {sample_name, pan_type, pan_number, sample_mass_mg, operator,
+               procedure_name, start_time, step_count, row_count}
+        signals: {temperature[], time[], mass_pct[], mass_mg[], dtg[]} (downsampled)
+        columns: canonical keys actually used
+    """
+    CH = chunk_size
+
+    # 1) Find the ColumnHeaders of the first usable DataSet (Processed or
+    #    Original), scanning forward in chunks. ColumnHeaders is a small
+    #    object near the top of the file (a few KB) — we buffer until its
+    #    closing brace is found.
+    header_block = None   # decoded text containing ColumnHeaders
+    headers: Dict[str, Any] = {}
+    state = 'scan'
+    chunk_count = 0
+    raw_carry = b''       # bytes past the headers block (candidate Rows data)
+
+    header_buf = b''
+    while state == 'scan':
+        chunk = fileobj.read(CH)
+        if not chunk:
+            break
+        header_buf += chunk
+        chunk_count += 1
+        if chunk_count * CH > 64 * 1024 * 1024:  # 64 MB safety valve
+            raise TriosJsonError('ColumnHeaders not found in TRIOS JSON')
+        try:
+            text = header_buf.decode('utf-8-sig')
+        except Exception:
+            continue
+        hi = text.find('"ColumnHeaders"')
+        if hi >= 0:
+            cb = text.find('{', hi)
+            if cb >= 0:
+                depth, i, in_str, esc = 0, cb, False, False
+                while i < len(text):
+                    c = text[i]
+                    if in_str:
+                        if esc:
+                            esc = False
+                        elif c == '\\':
+                            esc = True
+                        elif c == '"':
+                            in_str = False
+                    else:
+                        if c == '"':
+                            in_str = True
+                        elif c == '{':
+                            depth += 1
+                        elif c == '}':
+                            depth -= 1
+                            if depth == 0:
+                                break
+                    i += 1
+                if depth == 0:
+                    try:
+                        headers = json.loads(text[cb:i + 1])
+                        state = 'headers_found'
+                        header_block = text
+                        # Keep the bytes AFTER the headers block (the current
+                        # chunk may continue into ResultsSteps/Rows — do not
+                        # lose them): they go into raw_carry for the Rows scan.
+                        # header_buf is bytes; the headers block ended at char
+                        # index i in the decoded text. We approximate the byte
+                        # offset by re-encoding the prefix (header_buf is
+                        # small at this point, so this is cheap and safe).
+                        prefix = text[:i + 1].encode('utf-8')
+                        raw_carry = header_buf[len(prefix):]
+                        header_buf = b''
+                        break
+                    except Exception:
+                        pass
+
+    if state != 'headers_found':
+        raise TriosJsonError('Could not locate ColumnHeaders in TRIOS JSON')
+
+    # Classify the columns (same logic as extract_trios_signals)
+    roles: Dict[str, str] = {}
+    for key, header in headers.items():
+        if not isinstance(header, dict):
+            continue
+        role = _classify_column(key, header)
+        if role and role in SIGNAL_ROLES and role not in roles.values():
+            roles[key] = role
+    if 'temperature' not in roles.values():
+        raise TriosJsonError('No temperature column found in TRIOS JSON')
+    role_to_key = {role: key for key, role in roles.items()}
+
+    # 2) Stream the Rows array. The file object is at the position right
+    #    after the ColumnHeaders block. We read forward hunting for
+    #    '"Rows": [' then parse the array row-by-row with raw_decode over a
+    #    SLIDING window — consumed text is dropped each iteration, so memory
+    #    stays bounded regardless of file size. An INCREMENTAL utf-8 decoder
+    #    is used so a chunk boundary never corrupts a multibyte char (the °
+    #    in keys like 'Temperatur_°C' must survive chunk splits).
+    arrays: Dict[str, List[float]] = {role: [] for role in SIGNAL_ROLES}
+    dec = json.JSONDecoder()
+    window = ''          # decoded text awaiting parse (bounded: only the
+    #                    # incomplete last row survives between chunks)
+    scanning = True      # still looking for the '"Rows"' key
+    n = 0
+    tail_txt = ''        # small tail buffer for StartTime (end of file)
+    import codecs
+    inc_dec = codecs.getincrementaldecoder('utf-8')()
+
+    while True:
+        chunk = fileobj.read(CH)
+        if not chunk:
+            break
+        if scanning:
+            raw_carry += chunk
+            idx = raw_carry.find(b'"Rows"')
+            if idx >= 0:
+                ob = raw_carry.find(b'[', idx)
+                if ob >= 0:
+                    # decode everything after '[' with the incremental decoder
+                    after = raw_carry[ob + 1:]
+                    window = inc_dec.decode(after)
+                    raw_carry = b''
+                    scanning = False
+            elif len(raw_carry) > 64 * 1024 * 1024:
+                raise TriosJsonError('Rows array not found after ColumnHeaders')
+            continue
+        # decode this chunk and append to the window (bounded: the inner loop
+        # below consumes complete rows, leaving only a partial row behind)
+        window += inc_dec.decode(chunk)
+        # parse as many complete row objects as possible
+        while True:
+            w = window.lstrip()
+            if not w:
+                window = ''
+                break
+            if w[0] == ']':
+                # end of Rows array — everything after is file tail
+                window = w[1:]
+                tail_txt = window
+                # keep draining to the end (collect tail for StartTime)
+                while True:
+                    rest = fileobj.read(CH)
+                    if not rest:
+                        break
+                    tail_txt += inc_dec.decode(rest)
+                tail_txt += inc_dec.decode(b'', final=True)
+                window = ''
+                break
+            if w[0] != '{':
+                k = 0
+                while k < len(w) and w[k] not in '{]':
+                    k += 1
+                window = w[k:]
+                continue
+            try:
+                row, end = dec.raw_decode(w)
+            except json.JSONDecodeError:
+                break  # incomplete row — need more bytes
+            if isinstance(row, dict):
+                for role, key in role_to_key.items():
+                    val = row.get(key)
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        arrays[role].append(float(val))
+                    else:
+                        arrays[role].append(np.nan)
+                n += 1
+            window = w[end:]
+
+    # 3) Metadata (Sample/Operators/Procedure are BEFORE ColumnHeaders, so the
+    #    buffered header_block text contains them)
+    meta = _meta_from_header(header_block)
+    # StartTime sits at the END of the export (after the Rows array) — extract
+    # from the tail we drained.
+    if tail_txt:
+        import re
+        m = re.search(r'"StartTime"\s*:\s*"([^"]+)"', tail_txt)
+        if m:
+            meta['start_time'] = m.group(1)
+
+    n_temp = len(arrays['temperature'])
+    if n_temp == 0:
+        raise TriosJsonError('No numeric rows in TRIOS JSON')
+
+    def _down(arr: List[float]) -> List[float]:
+        arr_np = np.asarray(arr, dtype=float)
+        if len(arr_np) <= max_points:
+            return arr_np.tolist()
+        idx = np.linspace(0, len(arr_np) - 1, max_points).round().astype(int)
+        return arr_np[idx].tolist()
+
+    signals = {role: _down(arrays[role]) for role in SIGNAL_ROLES if arrays[role]}
+    meta = dict(meta)
+    meta['row_count'] = n_temp
+    return {'meta': meta, 'signals': signals, 'columns': list(roles.keys())}
+
+
+def _meta_from_header(text: str) -> Dict[str, Any]:
+    """Extract metadata fields from the (early) JSON text region.
+
+    Sample/Operators/Procedure live near the top of a TRIOS export, so the
+    buffered header block contains them. StartTime sits at the very END of
+    the file (after the huge Rows array) — we return None for it here; the
+    caller may patch it if the tail was captured.
+    """
+    import re
+    meta: Dict[str, Any] = {
+        'sample_name': None, 'pan_type': None, 'pan_number': None,
+        'sample_mass_mg': None, 'operator': None, 'procedure_name': None,
+        'start_time': None, 'step_count': 0, 'row_count': 0,
+    }
+    try:
+        m = re.search(r'"Sample"\s*:\s*\{[^}]*?"Name"\s*:\s*"([^"]+)"', text, re.DOTALL)
+        if m:
+            meta['sample_name'] = m.group(1)
+        m = re.search(r'"Sample"\s*:\s*\{[^}]*?"PanType"\s*:\s*"([^"]*)"', text, re.DOTALL)
+        if m:
+            meta['pan_type'] = m.group(1) or None
+        m = re.search(r'"Operators"\s*:\s*\[\s*\{[^}]*?"Name"\s*:\s*"([^"]+)"', text, re.DOTALL)
+        if m:
+            meta['operator'] = m.group(1)
+        m = re.search(r'"Procedure"\s*:\s*\{[^}]*?"Name"\s*:\s*"([^"]+)"', text, re.DOTALL)
+        if m:
+            meta['procedure_name'] = m.group(1)
+    except Exception:
+        pass
+    return meta
+
