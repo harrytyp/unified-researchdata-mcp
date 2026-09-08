@@ -107,11 +107,11 @@ class RampSegment(TemperatureSegmentBase):
     end_temp = Quantity(
         type=float, unit="°C",
         description="Target temperature",
-        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+        a_eln=ELNAnnotation(component="NumberEditQuantity", defaultDisplayUnit="°C"))
     rate = Quantity(
         type=float, unit="°C/minute",
         description="Heating/cooling rate",
-        a_eln=ELNAnnotation(component="NumberEditQuantity"))
+        a_eln=ELNAnnotation(component="NumberEditQuantity", defaultDisplayUnit="°C/minute"))
 
 
 class IsothermalSegment(TemperatureSegmentBase):
