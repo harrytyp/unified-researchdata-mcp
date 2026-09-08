@@ -661,7 +661,12 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
         if listing is not None:
             for f in listing():
                 path = getattr(f, "path", str(f))
-                if str(path).lower().endswith(".json"):
+                p = str(path).lower()
+                # Skip NOMAD mainfile archives (.archive.json) - they are entry
+                # metadata, NOT TRIOS exports. raw_listdir is case-sensitively
+                # sorted, so "E2E_....archive.json" can precede the real
+                # "<stem>.json" and was picked first (bug 2026-09-08).
+                if p.endswith(".json") and not p.endswith(".archive.json"):
                     json_name = str(path)
                     break
     except Exception:

@@ -181,6 +181,20 @@ class TgaResults(MSection):
         description="Individual mass loss steps")
 
 
+def _first_signal(preferred, fallback):
+    """Return `preferred` if it is set and non-empty, else `fallback`.
+
+    Never use `arr or fallback` for this: temperature signals are pint
+    Quantities with an OFFSET unit (°C), and bool() on an offset-unit
+    PlainQuantity raises 'Boolean value of PlainQuantity with offset unit is
+    ambiguous'. Check for None/empty explicitly instead.
+    """
+    for arr in (preferred, fallback):
+        if arr is not None and len(arr) > 0:
+            return arr
+    return None
+
+
 def _build_procedure_preview_figure(segments):
     """Build a temperature-vs-time preview plot from the procedure segments,
     so the user can see the planned heating profile before any real
@@ -438,9 +452,13 @@ class TgaMeasurement(PlotSection, EntryData):
         # Measurement plot: prefer the TRIOS JSON result curves (mass-% over
         # temperature — the classic TGA view); fall back to the legacy
         # CSV/TXT signal fields.
-        temp_arr = self.result_temperature_signal or self.temperature_signal
-        mass_arr = self.result_mass_pct_signal or self.weight_pct_signal
-        if temp_arr and mass_arr and len(temp_arr) == len(mass_arr):
+        # NOTE: never use `arr or fallback` on these — temperature signals are
+        # pint Quantities with an OFFSET unit (°C); bool() on an offset-unit
+        # PlainQuantity raises "Boolean value of PlainQuantity with offset unit
+        # is ambiguous" (2026-09-08 E2E). Check for None/empty instead.
+        temp_arr = _first_signal(self.result_temperature_signal, self.temperature_signal)
+        mass_arr = _first_signal(self.result_mass_pct_signal, self.weight_pct_signal)
+        if temp_arr is not None and mass_arr is not None and len(temp_arr) == len(mass_arr):
             fig = px.scatter(
                 x=temp_arr,
                 y=mass_arr,
@@ -448,8 +466,8 @@ class TgaMeasurement(PlotSection, EntryData):
                 title='TGA — Mass vs Temperature',
             )
             self.figures.append(PlotlyFigure(label='TGA curve', figure=fig.to_plotly_json()))
-        elif self.temperature_signal and self.weight_signal and \
-                len(self.temperature_signal) == len(self.weight_signal):
+        elif (self.temperature_signal is not None and self.weight_signal is not None and
+                len(self.temperature_signal) == len(self.weight_signal)):
             fig = px.scatter(
                 x=self.temperature_signal,
                 y=self.weight_signal,
