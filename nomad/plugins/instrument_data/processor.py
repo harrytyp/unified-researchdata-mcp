@@ -654,7 +654,7 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
             return False
         upload_files = None
 
-    # Find the .json filename
+    # Find the .json / .gz filename
     json_name = None
     try:
         listing = getattr(upload_files, "raw_listdir", None)
@@ -666,9 +666,15 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
                 # metadata, NOT TRIOS exports. raw_listdir is case-sensitively
                 # sorted, so "E2E_....archive.json" can precede the real
                 # "<stem>.json" and was picked first (bug 2026-09-08).
-                if p.endswith(".json") and not p.endswith(".archive.json"):
-                    json_name = str(path)
-                    break
+                # Issue #5: compressed TRIOS exports are supported too. TRIOS
+                # names them "*.gz" (NO ".json" in the filename — verified on
+                # a real export: '..._MEASUREMENT_TGA_Kollidon VA64.gz'), so
+                # ANY .gz is a candidate; the content is validated below
+                # (TRIOS schema URL) before it is treated as a result.
+                if p.endswith(".json") or p.endswith(".gz"):
+                    if ".archive.json" not in p:
+                        json_name = str(path)
+                        break
     except Exception:
         json_name = None
 
@@ -678,7 +684,10 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
     # Read the JSON (STREAMED — never load a 100+ MB export fully into RAM).
     # The worker has a 500 MB memory cap; fo.read()+json.loads() of a 128 MB
     # TRIOS export needs ~600 MB and would OOM-kill the container.
+    # Issue #5: .json.gz exports are decompressed on the fly (gzip streams
+    # through the same chunked reader, still no full materialization).
     data = None
+    is_gz = json_name.lower().endswith(".gz")
     try:
         if upload_files is not None:
             # StagingUploadFiles exposes raw_file(path) as a CONTEXT MANAGER
@@ -687,15 +696,23 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
             # on the running instance 2026-09-08.)
             try:
                 from instrument_data.trios_json_reader import extract_trios_signals_streaming
-                with upload_files.raw_file(json_name, 'br') as raw_f:
-                    res = extract_trios_signals_streaming(raw_f, max_points=4000)
+                with upload_files.raw_file(json_name) as raw_f:
+                    if is_gz:
+                        import gzip
+                        with gzip.GzipFile(fileobj=raw_f) as gz_f:
+                            res = extract_trios_signals_streaming(gz_f, max_points=4000)
+                    else:
+                        res = extract_trios_signals_streaming(raw_f, max_points=4000)
                 sig = res["signals"]
                 meta = res["meta"]
                 raw = None
                 data = None
             except ImportError:
-                with upload_files.raw_file(json_name, 'rb') as raw_f:
+                with upload_files.raw_file(json_name) as raw_f:
                     raw = raw_f.read()
+                if is_gz:
+                    import gzip
+                    raw = gzip.decompress(raw)
                 if isinstance(raw, bytes):
                     raw = raw.decode("utf-8-sig")
                 data = _json.loads(raw)

@@ -245,12 +245,17 @@ def extract_sample_name(data: Dict[str, Any]) -> Optional[str]:
 def read_trios_json_file(path: str, max_points: int = 4000) -> Dict[str, Any]:
     """Read a TRIOS JSON file from disk and extract signals (streaming-friendly).
 
-    Uses a memory-bounded JSON read: loads the full file (a 134 MB export
-    loads in ~2-3s and ~300 MB RAM with stdlib json) — acceptable for the
-    operator app, but the NOMAD worker should call extract_trios_signals on
-    already-loaded data when possible.
+    Supports plain ``.json`` AND compressed exports — TRIOS names them
+    ``*.gz`` (no ``.json`` in the filename), so any ``.gz`` is opened with
+    gzip (Issue #5). Uses a memory-bounded JSON read: loads the full file
+    (a 134 MB export loads in ~2-3s and ~300 MB RAM with stdlib json) —
+    acceptable for the operator app, but the NOMAD worker should call
+    extract_trios_signals on already-loaded data when possible.
     """
-    with open(path, "r", encoding="utf-8-sig") as f:
+    import gzip
+
+    opener = gzip.open if str(path).lower().endswith('.gz') else open
+    with opener(path, "rt", encoding="utf-8-sig") as f:
         data = json.load(f)
     return extract_trios_signals(data, max_points=max_points)
 
