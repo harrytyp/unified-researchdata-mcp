@@ -1,4 +1,4 @@
-"""TGA Measurement Request — a guided form hosted under the NOMAD login.
+"""TGA Measurement Request: a guided form hosted under the NOMAD login.
 
 Lives under /nomad-oasis/api/tga-forms/ (cookie path of the NOMAD GUI), so it
 inherits the NOMAD session via the 'Authorization' cookie and creates real
@@ -129,7 +129,7 @@ def rebuild_segments():
         if not segs:
             with ui.row().classes('items-center gap-2 text-grey-5'):
                 ui.icon('info')
-                ui.label('No segments yet — add at least one.')
+                ui.label('No segments yet. Add at least one to continue.')
         for i in range(len(segs)):
             segment_card(i)
 
@@ -201,7 +201,7 @@ def submit():
         return
     tok = auth_token()
     if not tok:
-        ui.notify('Not logged in — please sign in to NOMAD first.', type='negative')
+        ui.notify('Not logged in. Please sign in to NOMAD first.', type='negative')
         return
     form = dict(get_form())
     archive = nomad_api.build_archive({'**form': form} | {'segments': get_segments()}) \
@@ -238,7 +238,7 @@ def submit():
                     ui.label('The operator will see this request in the TGA app and '
                              'the result is uploaded automatically after the run.')                         .classes('text-grey-5 text-sm')
             else:
-                ui.label('Request submitted — check the operator app in a moment.')                     .classes('text-grey-5')
+                ui.label('Request submitted. The operator app will pick it up shortly.')                     .classes('text-grey-5')
         if uid:
             ui.notify('Measurement request created ✓', type='positive', timeout=6000)
     except Exception as e:
@@ -252,7 +252,7 @@ btn_submit = None
 result_box = None
 
 
-# ── Dark mode (element created per page build — never cache across clients) ──
+# ── Dark mode (element created per page build; never cache across clients) ──
 
 
 # ── Page ─────────────────────────────────────────────────────────────────────
@@ -299,8 +299,8 @@ def index(request: Request):
             with ui.element('div').classes('tga-login-card'):
                 ui.icon('lock', color=ACCENT).classes('text-5xl')
                 ui.label('Signed in to NOMAD required').classes('tga-login-title')
-                ui.label('This form uses your NOMAD account. The sign-in opens in a '
-                         'new tab — this page reloads automatically once you are '
+                ui.label('This form uses your NOMAD account. The sign-in opens in a new '
+                         'tab, and this page reloads automatically once you are '
                          'signed in.').classes('tga-login-sub')
                 ui.button('Sign in to NOMAD', icon='login', on_click=lambda: ui.navigate.to(
                     '/nomad-oasis/gui', new_tab=True)).props('unelevated size=lg').classes('tga-cta')
@@ -323,18 +323,18 @@ def index(request: Request):
     with ui.column().classes('w-full tga-page'):
         with ui.column().classes('w-full tga-hero'):
             ui.label(f'New measurement request').classes('tga-hero-title')
-            ui.label('Fill in the sample and the temperature program — the request is '
-                     'created as a NOMAD entry and executed by the TGA operator.') \
+            ui.label('Describe the sample and the temperature program. Submitting creates '
+                     'a NOMAD entry that the TGA operator will run on the instrument.') \
                 .classes('tga-hero-sub')
 
 
-        # 1 — Sample
+        # 1. Sample
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
                 ui.icon('science', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0'):
                     ui.label('1 · Sample').classes('tga-section-title')
-                    ui.label('Who and what is being measured.').classes('tga-section-sub')
+                    ui.label('Name the sample and note who runs the measurement.').classes('tga-section-sub')
             with ui.row().classes('w-full gap-4 mt-1'):
                 with ui.column().classes('gap-1 flex-1'):
                     ui.label('Sample name *').classes('tga-label')
@@ -342,7 +342,7 @@ def index(request: Request):
                              on_change=lambda e: get_form().update(sample_name=e.value)) \
                         .props('outlined dense').classes('w-full')
                 with ui.column().classes('gap-1 w-44'):
-                    ui.label('Mass [mg]').classes('tga-label')
+                    ui.label('Sample mass [mg]').classes('tga-label')
                     ui.number(value=get_form()['sample_mass'],
                               on_change=lambda e: get_form().update(
                                   sample_mass=e.value if e.value not in (None, '') else None)) \
@@ -364,13 +364,13 @@ def index(request: Request):
                              on_change=lambda e: get_form().update(pan_number=e.value)) \
                         .props('outlined dense').classes('w-full')
 
-        # 2 — Atmosphere
+        # 2. Atmosphere
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
                 ui.icon('air', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0'):
                     ui.label('2 · Atmosphere & gases').classes('tga-section-title')
-                    ui.label('Purge gas and flow rates.').classes('tga-section-sub')
+                    ui.label('Choose the purge gas and set the flow rates.').classes('tga-section-sub')
             with ui.row().classes('w-full gap-4 mt-1'):
                 with ui.column().classes('gap-1 w-48'):
                     ui.label('Purge gas').classes('tga-label')
@@ -390,27 +390,27 @@ def index(request: Request):
                                   balance_flow_rate=e.value if e.value not in (None, '') else None)) \
                         .props('outlined dense').classes('w-full')
 
-        # 3 — Temperature program
+        # 3. Temperature program
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
                 ui.icon('show_chart', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0 flex-1'):
                     ui.label('3 · Temperature program').classes('tga-section-title')
-                    ui.label('Segments run in order — add as many as you need '
-                             '(ramps, holds, gas steps).').classes('tga-section-sub')
+                    ui.label('Segments run in the order shown. Add as many as you need: ramps, '
+                             'holds, and gas flow steps.').classes('tga-section-sub')
             global seg_container
             seg_container = ui.column().classes('w-full gap-3 mt-1')
             rebuild_segments()
             ui.button('+ Add segment', icon='add', on_click=add_segment) \
                 .props('outline dense').classes('self-start tga-addseg')
 
-        # 4 — Method & notes
+        # 4. Method & notes
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
                 ui.icon('edit_note', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0 flex-1'):
                     ui.label('4 · Method & notes').classes('tga-section-title')
-                    ui.label('Optional details for the operator.').classes('tga-section-sub')
+                    ui.label('A method name and any notes for the operator.').classes('tga-section-sub')
             with ui.column().classes('gap-1 w-full mt-1'):
                 ui.label('Method name').classes('tga-label')
                 ui.input(value=get_form()['procedure_name'],
