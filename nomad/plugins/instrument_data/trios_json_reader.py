@@ -437,10 +437,67 @@ def extract_trios_signals_streaming(fileobj, max_points: int = 4000,
     import codecs
     inc_dec = codecs.getincrementaldecoder('utf-8')()
 
+    # Seed the row scanner with the carry-over bytes from the header scan:
+    # for files smaller than one chunk the stream is already at EOF after
+    # the header scan, and the whole remainder (including the Rows array)
+    # sits in raw_carry. Reading first would return nothing -> rows were
+    # never scanned -> "No numeric rows" (bug, small/compressed files).
+    def drain_window():
+        """Parse as many complete row objects as possible from `window`.
+
+        Returns True when the closing ']' of the Rows array was consumed
+        (rest of window = file tail for StartTime).
+        """
+        nonlocal window, tail_txt, arrays, n
+        while True:
+            w = window.lstrip()
+            if not w:
+                window = ''
+                return False
+            if w[0] == ']':
+                # end of Rows array — everything after is file tail
+                window = w[1:]
+                tail_txt = window
+                window = ''
+                return True
+            if w[0] != '{':
+                k = 0
+                while k < len(w) and w[k] not in '{]':
+                    k += 1
+                window = w[k:]
+                continue
+            try:
+                row, end = dec.raw_decode(w)
+            except json.JSONDecodeError:
+                return False  # incomplete row — need more bytes
+            if isinstance(row, dict):
+                for role, key in role_to_key.items():
+                    val = row.get(key)
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        arrays[role].append(float(val))
+                    else:
+                        arrays[role].append(np.nan)
+                n += 1
+            window = w[end:]
+            if window.lstrip().startswith(']'):
+                window = window.lstrip()
+                window = window[1:]
+                tail_txt = window
+                window = ''
+                return True
+
+    rows_closed = False
+    pending = raw_carry
+    raw_carry = b''
     while True:
-        chunk = fileobj.read(CH)
-        if not chunk:
-            break
+        if pending:
+            chunk = pending
+            pending = b''
+        else:
+            chunk = fileobj.read(CH)
+            if not chunk:
+                break
+        found_in_this_chunk = False
         if scanning:
             raw_carry += chunk
             idx = raw_carry.find(b'"Rows"')
@@ -452,50 +509,34 @@ def extract_trios_signals_streaming(fileobj, max_points: int = 4000,
                     window = inc_dec.decode(after)
                     raw_carry = b''
                     scanning = False
+                    found_in_this_chunk = True
             elif len(raw_carry) > 64 * 1024 * 1024:
                 raise TriosJsonError('Rows array not found after ColumnHeaders')
-            continue
-        # decode this chunk and append to the window (bounded: the inner loop
-        # below consumes complete rows, leaving only a partial row behind)
-        window += inc_dec.decode(chunk)
-        # parse as many complete row objects as possible
-        while True:
-            w = window.lstrip()
-            if not w:
-                window = ''
-                break
-            if w[0] == ']':
-                # end of Rows array — everything after is file tail
-                window = w[1:]
-                tail_txt = window
-                # keep draining to the end (collect tail for StartTime)
+        # Rows already located (previous chunk): append this chunk's bytes
+        # to the window (the chunk that CONTAINED '"Rows"' was consumed into
+        # window above via raw_carry — do not double-append it).
+        if not scanning and not found_in_this_chunk:
+            window += inc_dec.decode(chunk)
+        if not scanning:
+            rows_closed = drain_window()
+            if rows_closed:
+                # Rows array fully consumed — the rest of the stream (after
+                # the closing ']') is file tail for StartTime. For small
+                # files the stream is already at EOF; for large files keep
+                # draining remaining chunks into tail_txt.
                 while True:
                     rest = fileobj.read(CH)
                     if not rest:
                         break
                     tail_txt += inc_dec.decode(rest)
                 tail_txt += inc_dec.decode(b'', final=True)
-                window = ''
                 break
-            if w[0] != '{':
-                k = 0
-                while k < len(w) and w[k] not in '{]':
-                    k += 1
-                window = w[k:]
-                continue
-            try:
-                row, end = dec.raw_decode(w)
-            except json.JSONDecodeError:
-                break  # incomplete row — need more bytes
-            if isinstance(row, dict):
-                for role, key in role_to_key.items():
-                    val = row.get(key)
-                    if isinstance(val, (int, float)) and not isinstance(val, bool):
-                        arrays[role].append(float(val))
-                    else:
-                        arrays[role].append(np.nan)
-                n += 1
-            window = w[end:]
+    # EOF reached — parse any rows that were still buffered in the window
+    # (small file: the header scan consumed the whole file and the Rows
+    # array was decoded into window, but the loop ended at EOF before
+    # drain_window ran on it).
+    if not rows_closed and not scanning:
+        drain_window()
 
     # 3) Metadata (Sample/Operators/Procedure are BEFORE ColumnHeaders, so the
     #    buffered header_block text contains them)
