@@ -78,4 +78,22 @@ body.body--dark .q-field__label {
     color: #9ca3af !important;
 }
 
+/* Board: NO horizontal scrolling inside the status columns — vertical
+ * scroll only. Cards wrap (break-words) instead of overflowing; if content
+ * is still wider (long unbreakable names etc.), clip it rather than showing
+ * a horizontal scrollbar (user: "nicht horizontal scrollbar innerhalb der
+ * tabs -> lieber skalieren"). Quasar's scroll-area defaults to overflow-x:
+ * auto, which is what made the scrollbar reappear. */
+.q-scrollarea .q-scrollarea__container,
+.q-scrollarea .q-scrollarea__content {
+    overflow-x: hidden !important;
+}
+.tga-col,
+.tga-col * {
+    max-width: 100%;
+}
+.tga-card {
+    overflow-wrap: anywhere;
+}
+
 }
