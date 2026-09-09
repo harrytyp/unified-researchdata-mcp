@@ -27,6 +27,9 @@ SEGMENT_TYPES = [
     {'id': 'balance_flow', 'label': 'Gas flow (balance)'},
 ]
 SEG_LABEL = {s['id']: s['label'] for s in SEGMENT_TYPES}
+OPEN_LOGIN_JS = '(e) => { try { window.__tgaLogin = window.open("/nomad-oasis/gui", "_blank"); } catch (err) { window.location = "/nomad-oasis/gui"; } }'
+
+
 CRUCIBLES = ['Alumina', 'Platinum', 'Aluminum']
 GASES = ['N2', 'Air', 'Ar', 'Synthetic Air', 'O2']
 
@@ -288,8 +291,7 @@ def index(request: Request):
                 .props('flat dense outline').classes('tga-header-btn')
         else:
             ui.badge('Not signed in').props('color=amber-8')
-            ui.button('Sign in', on_click=lambda: ui.navigate.to(
-                '/nomad-oasis/gui', new_tab=True)).props('outline dense')
+            ui.button('Sign in')                 .on('click', js_handler=OPEN_LOGIN_JS)                 .props('outline dense')
         ui.button(icon='dark_mode', on_click=toggle_dark).props('flat round dense') \
             .tooltip('Toggle dark / light mode').classes('tga-darkbtn')
 
@@ -299,19 +301,23 @@ def index(request: Request):
             with ui.element('div').classes('tga-login-card'):
                 ui.icon('lock', color=ACCENT).classes('text-5xl')
                 ui.label('Signed in to NOMAD required').classes('tga-login-title')
-                ui.label('This form uses your NOMAD account. The sign-in opens in a new '
-                         'tab, and this page reloads automatically once you are '
-                         'signed in.').classes('tga-login-sub')
-                ui.button('Sign in to NOMAD', icon='login', on_click=lambda: ui.navigate.to(
-                    '/nomad-oasis/gui', new_tab=True)).props('unelevated size=lg').classes('tga-cta')
+                ui.label('This form uses your NOMAD account. Sign-in opens in a '
+                         'separate window and closes automatically once you are '
+                         'signed in, returning you to this page.').classes('tga-login-sub')
+                ui.button('Sign in to NOMAD', icon='login')                     .on('click', js_handler=OPEN_LOGIN_JS)                     .props('unelevated size=lg').classes('tga-cta')
         ui.add_body_html('''
             <script>
             if (!document.cookie.includes('Authorization=')) {
                 (function pollAuth() {
                     if (document.cookie.includes('Authorization=')) {
+                        try {
+                            if (window.__tgaLogin && !window.__tgaLogin.closed) {
+                                window.__tgaLogin.close();
+                            }
+                        } catch (err) {}
                         location.reload();
                     } else {
-                        setTimeout(pollAuth, 1500);
+                        setTimeout(pollAuth, 1000);
                     }
                 })();
             }
