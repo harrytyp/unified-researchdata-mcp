@@ -155,6 +155,31 @@ class NomadClient:
         resp = self._request('POST', f'/uploads/{upload_id}/action/process', json={})
         return resp.status_code in (200, 201, 202)
 
+    def get_upload(self, upload_id):
+        """Upload detail as dict (process_running, process_status, ...)."""
+        resp = self._request('GET', f'/uploads/{upload_id}')
+        data = resp.json()
+        return data.get('data', data) if isinstance(data, dict) else data
+
+    def wait_until_idle(self, upload_id, timeout=180, poll=3):
+        """Block until no process runs and the status is final
+        (SUCCESS/FAILED/READY).
+
+        NOMAD rejects a process trigger while another workflow is running
+        (``AssertionError: Upload is currently being processed by another
+        workflow``) — and a raw-file PUT itself starts a short workflow.
+        Callers must wait for idle before calling trigger_process.
+        """
+        import time as _time
+        t0 = _time.time()
+        while _time.time() - t0 < timeout:
+            d = self.get_upload(upload_id)
+            if isinstance(d, dict) and not d.get('process_running') \
+                    and d.get('process_status') in ('SUCCESS', 'FAILED', 'READY'):
+                return True
+            _time.sleep(poll)
+        return False
+
     def list_upload_entries(self, upload_id):
         resp = self._request('GET', f'/uploads/{upload_id}/entries')
         data = resp.json()

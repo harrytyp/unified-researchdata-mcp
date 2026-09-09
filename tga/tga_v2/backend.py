@@ -453,11 +453,43 @@ class Backend:
         self.log(f'Uploaded {fname} → {uid[:8]}', 'ok')
         if self.manual_status(uid) is None and self.config.get('auto_mark_measured', True):
             self.set_status(uid, 'measured')
-        try:
-            self.client.trigger_process(uid)
-            self.log('Processing triggered', 'ok')
-        except NomadApiError as e:
-            self.log(f'Process trigger failed: {e}', 'warn')
+        self._trigger_process_async(uid)
+
+    def _trigger_process_async(self, uid):
+        """Trigger (re-)processing in a background thread, but only once the
+        upload is idle.
+
+        NOMAD rejects a process trigger while another workflow still runs
+        (the raw-file PUT itself starts one → 'Upload is currently being
+        processed by another workflow'), which silently swallowed result
+        processing in the watcher flow. Waiting here must NOT block the UI
+        thread (watcher_tick runs on a ui.timer), hence the daemon thread.
+        """
+        import threading
+
+        def _run():
+            try:
+                if not self.client.wait_until_idle(uid, timeout=180):
+                    self.log(f'Processing wait timeout for {uid[:8]}', 'warn')
+                    return
+                for attempt in range(3):
+                    try:
+                        self.client.trigger_process(uid)
+                        self.log('Processing triggered', 'ok')
+                        return
+                    except NomadApiError as e:
+                        busy = 'currently being processed' in str(e).lower()
+                        if attempt == 2 or not busy:
+                            raise
+                        self.log(f'Processing busy, retry {attempt + 1}/3', 'warn')
+                        import time as _time
+                        _time.sleep(6)
+            except NomadApiError as e:
+                self.log(f'Process trigger failed: {e}', 'warn')
+            except Exception as e:
+                self.log(f'Process trigger error: {e}', 'warn')
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _map_result_to_upload(self, fname, export_dir):
         """Map a result file (.json/.tri) to an upload_id.

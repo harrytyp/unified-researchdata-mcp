@@ -44,6 +44,11 @@ class FakeClient:
     def upload_raw(self, *a, **k):
         return True
     def trigger_process(self, uid):
+        self.triggers = getattr(self, 'triggers', []) + [uid]
+        return True
+    def get_upload(self, uid):
+        return {'process_running': False, 'process_status': 'SUCCESS'}
+    def wait_until_idle(self, uid, timeout=180, poll=3):
         return True
     def check_health(self):
         return True, 'ok'
@@ -257,5 +262,31 @@ a5 = next(r for r in rows5 if r['upload_id'] == 'AAA111')
 assert a5['has_json'] and a5['has_result'] and not a5['has_tri']
 assert b5.display_status('AAA111', a5['has_result']) == 'measured'
 print('FIX #3: has_result erkennt reine JSON-Ergebnisse → measured OK')
+
+# E2E-Race: upload_result muss processing asynchron triggern (nicht im
+# UI-Thread blockieren) und NUR wenn der Upload idle ist.
+import time as _time
+class BusyClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.busy_calls = 0
+    def wait_until_idle(self, uid, timeout=180, poll=3):
+        self.busy_calls += 1
+        return True  # sofort idle (Fake)
+
+b6 = Backend(client=BusyClient())
+b6.config['sample_status'] = {}
+b6.config['slot_assignments'] = {}
+b6.refresh()
+res6 = Path(_tmp) / 'TRIOS' / 'Data6'
+res6.mkdir(parents=True, exist_ok=True)
+f6 = res6 / 'Probe A.json'
+f6.write_text('{"Sample": {"Name": "Probe A"}}', encoding='utf-8')
+b6.upload_result('AAA111', str(f6))
+_time.sleep(1.0)  # Daemon-Thread Zeit geben
+assert getattr(b6.client, 'triggers', []) == ['AAA111'], \
+    f'upload_result muss trigger_process auslösen: {getattr(b6.client, "triggers", [])}'
+assert b6.client.busy_calls >= 1, 'wait_until_idle muss vor dem Trigger laufen'
+print('E2E-RACE: upload_result → wait_until_idle + async trigger_process OK')
 
 print('\nALLE ISSUE-FIX-TESTS BESTANDEN')
