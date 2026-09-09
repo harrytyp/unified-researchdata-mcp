@@ -88,7 +88,7 @@ location /nomad-oasis/north/ {
 # Erbt die NOMAD-Session: die GUI setzt das 'Authorization'-Cookie mit
 # Path=/nomad-oasis; Requests an /nomad-oasis/tga-forms/* senden es mit.
 location = /nomad-oasis/tga-forms {
-    return 301 /nomad-oasis/tga-forms/;
+    return 301 /nomad-oasis/api/tga-forms/;
 }
 
 
@@ -114,6 +114,12 @@ location /_nicegui/ {
 }
 
 location /nomad-oasis/tga-forms/ {
+    return 301 /nomad-oasis/api/tga-forms/;
+}
+
+# TGA-Formular unter /nomad-oasis/api/... — NUR dort sendet der Browser das
+# Authorization-Cookie (die GUI setzt es mit Path=<apiBase>=/nomad-oasis/api)
+location /nomad-oasis/api/tga-forms/ {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
