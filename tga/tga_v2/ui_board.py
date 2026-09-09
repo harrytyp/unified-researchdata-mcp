@@ -15,13 +15,19 @@ def build_board(backend: Backend, container: ui.column):
     """Build the full board inside the given container (refreshable body)."""
     container.clear()
     with container:
-        with ui.row().classes('gap-3 p-3 items-stretch overflow-x-auto w-full'):
+        # flex-nowrap: all 4 status columns stay in ONE row — nicegui rows
+        # default to flex-wrap, which wrapped columns into 2 lines on narrow
+        # windows (2+2 layout) instead of scrolling horizontally.
+        with ui.row().classes('gap-3 p-3 items-stretch overflow-x-auto flex-nowrap w-full'):
             for status in STATUSES:
                 # The WHOLE column is the drop target (not just col_body which
                 # is only as tall as its content — empty columns were ~0px).
+                # flex-1 + small min-width: columns share the width (scale with
+                # the window); below ~4×min they overflow and the row scrolls
+                # horizontally (left/right between columns).
                 with ui.column().classes(
-                        'w-72 min-w-72 rounded-xl bg-gray-100 tga-col '
-                        'p-2 flex-1 min-h-[300px]') as col_outer:
+                        'flex-1 min-w-[220px] rounded-xl bg-gray-100 tga-col '
+                        'p-2 min-h-[300px]') as col_outer:
                     build_column_header(backend, status)
                     with ui.scroll_area().classes('h-[calc(100vh-260px)] w-full'):
                         with ui.column().classes('gap-2 w-full') as col_body:
