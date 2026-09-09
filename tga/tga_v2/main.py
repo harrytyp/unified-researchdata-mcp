@@ -572,5 +572,6 @@ if __name__ in {'__main__', '__mp_main__'}:
     ui.run(title='TGA Operator',
            dark=backend.config.get('dark_mode', False),
            native=native,
+           window_size=(1440, 900),
            port=8080,
            reload=False)

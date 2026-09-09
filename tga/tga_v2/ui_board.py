@@ -17,16 +17,16 @@ def build_board(backend: Backend, container: ui.column):
     with container:
         # flex-nowrap: all 4 status columns stay in ONE row — nicegui rows
         # default to flex-wrap, which wrapped columns into 2 lines on narrow
-        # windows (2+2 layout) instead of scrolling horizontally.
-        with ui.row().classes('gap-3 p-3 items-stretch overflow-x-auto flex-nowrap w-full'):
+        # windows (2+2 layout). NO horizontal scroll: columns scale to the
+        # available width (flex-1, min-w-0) so all 4 are always fully visible
+        # and the cards inside wrap instead of being cut off (user: "nicht
+        # horizontal scrollbar innerhalb der tabs -> lieber skalieren").
+        with ui.row().classes('gap-3 p-3 items-stretch flex-nowrap w-full'):
             for status in STATUSES:
                 # The WHOLE column is the drop target (not just col_body which
                 # is only as tall as its content — empty columns were ~0px).
-                # flex-1 + small min-width: columns share the width (scale with
-                # the window); below ~4×min they overflow and the row scrolls
-                # horizontally (left/right between columns).
                 with ui.column().classes(
-                        'flex-1 min-w-[220px] rounded-xl bg-gray-100 tga-col '
+                        'flex-1 min-w-0 rounded-xl bg-gray-100 tga-col '
                         'p-2 min-h-[300px]') as col_outer:
                     build_column_header(backend, status)
                     with ui.scroll_area().classes('h-[calc(100vh-260px)] w-full'):
@@ -45,16 +45,16 @@ def build_column_header(backend: Backend, status: str):
     rows = [r for r in backend.uploads if backend.display_status(
         r['upload_id'], r['has_result']) == status]
     color = STATUS_COLORS[status]
-    with ui.row().classes('items-center gap-2 px-1 w-full'):
-        ui.badge(len(rows)).props(f'color={color}').classes('text-xs')
+    with ui.row().classes('items-center gap-2 px-1 w-full min-w-0'):
+        ui.badge(len(rows)).props(f'color={color}').classes('text-xs shrink-0')
         ui.label(column_header(backend.config, status)).classes(
-            'font-bold text-sm flex-1 tga-title')
+            'font-bold text-sm flex-1 min-w-0 break-words tga-title')
         if status == 'assigned':
             filled = sum(1 for r in backend.uploads
                          if backend.slot_for(r['upload_id']))
             ui.linear_progress(value=filled / NUM_SLOTS, show_value=False) \
-                .classes('w-16').props('color=deep-purple')
-            ui.label(f'{filled}/{NUM_SLOTS}').classes('text-xs text-grey-6 tga-sub')
+                .classes('w-16 shrink-0').props('color=deep-purple')
+            ui.label(f'{filled}/{NUM_SLOTS}').classes('text-xs text-grey-6 tga-sub shrink-0')
 
 
 def build_column_body(backend: Backend, status: str, col_body=None):
@@ -119,13 +119,14 @@ def make_card(backend: Backend, r: dict, parent=None):
                                'e.dataTransfer.effectAllowed = "move"; emit(e); }' % uid)
             card.on('dragend', lambda e: None,
                     js_handler='(e) => { emit(e); }')
-            with ui.row().classes('items-center gap-1 w-full'):
+            with ui.row().classes('items-center gap-1 w-full min-w-0'):
                 ui.element('div').classes(
                     f'w-1.5 self-stretch rounded bg-{color}-400')
                 # Only the title opens the detail — the selection button below
                 # is a separate click target, so no bubbling conflicts.
                 ui.label(r['sample'] or r['name']) \
-                    .classes('font-bold text-sm truncate flex-1 tga-title cursor-pointer') \
+                    .classes('font-bold text-sm break-words min-w-0 flex-1 '
+                             'tga-title cursor-pointer') \
                     .on('click', lambda s=uid: open_detail(s)) \
                     .tooltip(_('details_tooltip'))
                 slot = backend.slot_for(uid)
@@ -153,10 +154,10 @@ def make_card(backend: Backend, r: dict, parent=None):
                             .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub') as icon:
                         pass
             ui.label(r['procedure'] or '—').classes(
-                'text-xs truncate w-full text-grey-6 tga-sub')
-            with ui.row().classes('items-center gap-2 w-full'):
+                'text-xs break-words w-full text-grey-6 tga-sub')
+            with ui.row().classes('items-center gap-2 w-full min-w-0 flex-wrap'):
                 ui.label(r['author']).classes(
-                    'text-xs truncate flex-1 text-grey-5 tga-sub')
+                    'text-xs break-words min-w-0 text-grey-5 tga-sub')
                 if r.get('created'):
                     ui.label(r['created']).classes(
                         'text-xs text-grey-5 tga-sub').tooltip('Upload-Zeitpunkt')
