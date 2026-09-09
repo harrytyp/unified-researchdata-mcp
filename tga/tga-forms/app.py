@@ -250,17 +250,35 @@ def index(request: 'Request'):
                 '/nomad-oasis/gui', new_tab=False)).props('flat dense')
         else:
             ui.badge('Nicht eingeloggt').props('color=orange')
-            ui.button('In NOMAD einloggen', on_click=lambda: ui.navigate.to(
-                '/nomad-oasis/gui')).props('outline dense')
+            ui.button('In NOMAD einloggen (neuer Tab)', on_click=lambda: ui.navigate.to(
+                '/nomad-oasis/gui', new_tab=True)).props('outline dense')
 
     if not user:
         with ui.column().classes('items-center w-full py-20 gap-4'):
             ui.icon('lock', color='grey').classes('text-6xl')
             ui.label('Bitte zuerst in NOMAD anmelden.').classes('text-xl')
-            ui.label('Danach diese Seite neu laden — das Formular erscheint hier.') \
+            ui.label('Der Login öffnet sich in einem neuen Tab — sobald du angemeldet '
+                     'bist, lädt diese Seite automatisch neu.') \
                 .classes('text-grey-6')
-            ui.button('Zum NOMAD-Login', on_click=lambda: ui.navigate.to('/nomad-oasis/gui')) \
+            ui.button('Zum NOMAD-Login', on_click=lambda: ui.navigate.to(
+                '/nomad-oasis/gui', new_tab=True)) \
                 .props('unelevated')
+        # Auto-Reload, sobald das Authorization-Cookie (NOMAD-Login) da ist.
+        # Das Cookie (Path=/nomad-oasis/api) ist für diese Seite sichtbar, weil
+        # /nomad-oasis/api/tga-forms/ darunter liegt.
+        ui.add_body_html('''
+            <script>
+            if (!document.cookie.includes('Authorization=')) {
+                (function pollAuth() {
+                    if (document.cookie.includes('Authorization=')) {
+                        location.reload();
+                    } else {
+                        setTimeout(pollAuth, 1500);
+                    }
+                })();
+            }
+            </script>
+        ''')
         return
 
     # Formular
