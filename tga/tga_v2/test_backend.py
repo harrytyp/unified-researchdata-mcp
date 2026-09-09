@@ -283,7 +283,7 @@ res6.mkdir(parents=True, exist_ok=True)
 f6 = res6 / 'Probe A.json'
 f6.write_text('{"Sample": {"Name": "Probe A"}}', encoding='utf-8')
 b6.upload_result('AAA111', str(f6))
-_time.sleep(1.0)  # Daemon-Thread Zeit geben
+_time.sleep(6.5)  # Daemon-Thread: 5s PUT-Registrierungs-Puffer + Trigger
 assert getattr(b6.client, 'triggers', []) == ['AAA111'], \
     f'upload_result muss trigger_process auslösen: {getattr(b6.client, "triggers", [])}'
 assert b6.client.busy_calls >= 1, 'wait_until_idle muss vor dem Trigger laufen'

@@ -440,11 +440,14 @@ class Backend:
                 failed.append(str(e))
         return ok, failed
 
-    def upload_result(self, uid, filepath, versioned_name=None):
+    def upload_result(self, uid, filepath, versioned_name=None, trigger=True):
         """Upload a .tri/.xlsx/.json result into an upload + trigger processing.
 
         versioned_name: optional alternate filename (e.g. a TRIOS JSON gets a
         unique name so re-measurements don't overwrite earlier results).
+        trigger: fire the async reprocess now (single-file callers). The
+        watcher passes False and triggers ONCE per upload after its tick, so
+        .json + .tri of one sample do not start two racing workflows.
         """
         fname = Path(filepath).name
         if versioned_name:
@@ -453,7 +456,8 @@ class Backend:
         self.log(f'Uploaded {fname} → {uid[:8]}', 'ok')
         if self.manual_status(uid) is None and self.config.get('auto_mark_measured', True):
             self.set_status(uid, 'measured')
-        self._trigger_process_async(uid)
+        if trigger:
+            self._trigger_process_async(uid)
 
     def _trigger_process_async(self, uid):
         """Trigger (re-)processing in a background thread, but only once the
@@ -469,6 +473,11 @@ class Backend:
 
         def _run():
             try:
+                # Give the PUT-triggered workflow time to register (it is
+                # queued asynchronously; an immediate idle check would see
+                # the stale SUCCESS and fire into the PUT workflow).
+                import time as _time
+                _time.sleep(5)
                 if not self.client.wait_until_idle(uid, timeout=180):
                     self.log(f'Processing wait timeout for {uid[:8]}', 'warn')
                     return
@@ -482,7 +491,6 @@ class Backend:
                         if attempt == 2 or not busy:
                             raise
                         self.log(f'Processing busy, retry {attempt + 1}/3', 'warn')
-                        import time as _time
                         _time.sleep(6)
             except NomadApiError as e:
                 self.log(f'Process trigger failed: {e}', 'warn')
@@ -587,6 +595,7 @@ class Backend:
                   set(f.name for f in export_dir.glob('*.xlsx')) | \
                   set(f.name for f in export_dir.glob('*.json'))
         self.last_scan = datetime.now().strftime('%H:%M:%S')
+        pending_triggers: set = set()
 
         for fname in sorted(current):
             fpath = export_dir / fname
@@ -621,9 +630,16 @@ class Backend:
                 pass
             self.log(f'New result file: {fname}', 'ok')
             try:
-                self.upload_result(uid, str(fpath), versioned_name=vname if vname != fname else None)
+                self.upload_result(uid, str(fpath), versioned_name=vname if vname != fname else None,
+                                   trigger=False)
                 self._mark_uploaded(fname, vname)
+                pending_triggers.add(uid)
             except NomadApiError as e:
                 self.log(f'  Upload failed for {fname}: {e}', 'err')
+        # One reprocess per affected upload AFTER all files of this tick were
+        # uploaded — per-file triggers raced each other (two workflows on the
+        # same upload → NOMAD 'currently being processed' failure).
+        for uid in pending_triggers:
+            self._trigger_process_async(uid)
         self._seen_files = current
 
