@@ -75,7 +75,7 @@ def render_rows(backend: Backend, body: ui.column, state):
     rows = []
     for r in backend.uploads:
         uid = r['upload_id']
-        status = backend.display_status(uid, r['has_tri'])
+        status = backend.display_status(uid, r['has_result'])
         if state['status'] != 'alle' and status != state['status']:
             continue
         if state['filter']:
@@ -89,7 +89,7 @@ def render_rows(backend: Backend, body: ui.column, state):
 
 def make_row(backend: Backend, r: dict, body: ui.column, state):
     uid = r['upload_id']
-    status = backend.display_status(uid, r['has_tri'])
+    status = backend.display_status(uid, r['has_result'])
     color = STATUS_COLORS.get(status, 'grey')
     slot = backend.slot_for(uid) or '—'
     is_sel = uid in selected
@@ -134,5 +134,5 @@ def make_row(backend: Backend, r: dict, body: ui.column, state):
             ui.badge(i18n(backend.config, status)).props(f'color={color} outline').classes('w-32 text-xs')
             ui.label(slot).classes('w-12 text-sm text-center tga-title')
             ui.icon('description', color='green' if r['has_tprc'] else 'grey-4').classes('w-10 text-sm')
-            ui.icon('task_alt', color='green' if r['has_tri'] else 'grey-4').classes('w-10 text-sm')
+            ui.icon('task_alt', color='green' if r['has_result'] else 'grey-4').classes('w-10 text-sm')
             ui.label(r['created']).classes('w-20 text-xs text-grey-6 tga-sub')

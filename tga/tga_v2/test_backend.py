@@ -196,3 +196,66 @@ assert cc.uploaded and cc.uploaded[0][0] == 'AAA111', f"Upload fehlt: {cc.upload
 print(f'8. JSON Sample-Name-Mapping + Upload OK: {cc.uploaded}')
 
 print('\nALLE BACKEND-TESTS BESTANDEN')
+
+# ── Zusatztests für EXE-Issue-Fixes ────────────────────────────
+
+# Issue #1: Eine NOMAD-Entry-Mainfile '*.archive.json' ist KEIN Messergebnis.
+# Vor dem Fix zählte sie als has_json → Uploads mit nur .tprc + archive.json
+# standen sofort auf 'measured', obwohl nie gemessen wurde.
+class ArchiveJsonClient(FakeClient):
+    def list_raw_files(self, uid):
+        # AAA111-artiger Upload: .tprc + NOMAD-Mainfile (.archive.json)
+        if uid == 'AAA111':
+            return [{'name': 'Sample.tprc', 'size': 2550, 'is_file': True},
+                    {'name': 'AAA111.archive.json', 'size': 500, 'is_file': True}]
+        return []
+
+b3 = Backend(client=ArchiveJsonClient())
+b3.config['sample_status'] = {}    # frühere Tests setzten AAA111 auf received
+b3.config['slot_assignments'] = {}  # ...und auf Slot 01 (→ assigned statt pending)
+rows3 = b3.refresh()
+a3 = next(r for r in rows3 if r['upload_id'] == 'AAA111')
+assert not a3['has_json'], f'archive.json darf nicht als Ergebnis zählen: {a3["has_json"]}'
+assert not a3['has_result'], f'has_result muss False sein: {a3["has_result"]}'
+assert b3.display_status('AAA111', a3['has_result']) == 'pending', \
+    'Upload mit nur .tprc+archive.json muss pending sein, nicht measured'
+print('FIX #1: .archive.json zählt nicht als Ergebnis → kein Sofort-measured OK')
+
+# Issue #4: download_tprc soll bei vergebenem Slot {Sample}_{Slot}.tprc
+# speichern (nicht den rohen Upload-Namen).
+imp4 = Path(_tmp) / 'TRIOS' / 'Methods4'
+imp4.mkdir(parents=True, exist_ok=True)
+b4 = Backend(client=FakeClient())
+b4.refresh()
+b4.assign_slot('AAA111', '07')
+saved4 = b4.download_tprc('AAA111', import_dir=imp4)
+assert saved4 and Path(saved4[0]).name == 'Probe A_07.tprc', \
+    f'Slot muss in den Dateinamen: {saved4}'
+assert b4.file_owner.get('Probe A_07.tprc') == 'AAA111'
+print(f'FIX #4: download_tprc mit Slot → {Path(saved4[0]).name} OK')
+# ohne Slot bleibt der Originalname (BBB222 hat .tprc, aber keinen Slot)
+imp4b = Path(_tmp) / 'TRIOS' / 'Methods4b'
+imp4b.mkdir(parents=True, exist_ok=True)
+saved4b = b4.download_tprc('BBB222', import_dir=imp4b)
+assert saved4b and Path(saved4b[0]).name == 'Sample.tprc', f'ohne Slot Originalname: {saved4b}'
+print('FIX #4b: download_tprc ohne Slot → Originalname OK')
+
+# Issue #3: has_result (nicht has_tri) entscheidet über measured — auch wenn
+# nur eine TRIOS-JSON (.json) als Ergebnis da ist, kein .tri.
+class JsonResultClient(FakeClient):
+    def list_raw_files(self, uid):
+        if uid == 'AAA111':
+            return [{'name': 'Sample.tprc', 'size': 2550, 'is_file': True},
+                    {'name': 'Probe A_01.json', 'size': 200, 'is_file': True}]
+        return []
+
+b5 = Backend(client=JsonResultClient())
+b5.config['sample_status'] = {}    # Altlasten aus früheren Tests entfernen
+b5.config['slot_assignments'] = {}
+rows5 = b5.refresh()
+a5 = next(r for r in rows5 if r['upload_id'] == 'AAA111')
+assert a5['has_json'] and a5['has_result'] and not a5['has_tri']
+assert b5.display_status('AAA111', a5['has_result']) == 'measured'
+print('FIX #3: has_result erkennt reine JSON-Ergebnisse → measured OK')
+
+print('\nALLE ISSUE-FIX-TESTS BESTANDEN')

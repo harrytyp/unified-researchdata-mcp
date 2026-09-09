@@ -42,4 +42,13 @@ async def test_full_app_flow(user: User):
     await user.should_see('Probe A')
     print('3. TAB SWITCH OK')
 
+    # 4. Issue #2: Settings-Tab rendert vollständig (Seite ist overflow-hidden;
+    # Inhalt liegt in einer scroll_area — Smoke: alle drei Cards müssen im DOM
+    # sein, sonst wäre der Tab-Inhalt abgeschnitten/unerreichbar).
+    user.find('Settings').click()
+    await asyncio.sleep(0.6)
+    await user.should_see('NOMAD')      # nomad_conn Card
+    await user.should_see('Save')       # unterer Bereich (nach dem Scrollen)
+    print('4. SETTINGS TAB OK (alle Cards rendern — scroll_area aktiv)')
+
     print('\nALLE UI-TESTS BESTANDEN')

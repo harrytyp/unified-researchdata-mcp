@@ -313,53 +313,57 @@ def build_log_body():
 
 def build_settings():
     cfg = backend.config
-    with ui.column().classes('gap-4 p-4 w-full max-w-2xl'):
-        with ui.card().classes('w-full gap-3 p-4'):
-            ui.label(_('appearance_lang')).classes('font-bold tga-title')
-            with ui.row().classes('items-center gap-4'):
-                ui.select({'en': 'English', 'de': 'Deutsch'}, value=cfg.get('language', 'en'),
-                          label=_('language')).classes('w-40') \
-                    .on_value_change(change_language)
-                # Dark mode lives in the config (persisted), applied globally.
-                # The dark_mode element is created here (settings is the only
-                # place the toggle exists now).
-                refs['dark_mode_el'] = ui.dark_mode(
-                    value=backend.config.get('dark_mode', False))
-                ui.switch(_('dark_mode'), value=cfg.get('dark_mode', False)) \
-                    .props('color=primary') \
-                    .on_value_change(lambda e: set_dark_mode(bool(e.value)))
-        with ui.card().classes('w-full gap-3 p-4'):
-            ui.label(_('nomad_conn')).classes('font-bold tga-title')
-            url_in = ui.input(_('nomad_url'), value=cfg.get('nomad_url', '')).classes('w-full')
-            pat_in = ui.input(_('api_token'), value=cfg.get('nomad_pat', '')) \
-                .props('type=password').classes('w-full') \
-                .tooltip('NOMAD PAT mit uploads:read/write, entries:read + uploads:process')
-            with ui.row().classes('items-center gap-2'):
-                ui.switch(_('debug_mode'), value=cfg.get('debug_mode', False)) \
-                    .props('color=amber') \
-                    .on_value_change(lambda e: cfg.update(debug_mode=bool(e.value))) \
-                    .tooltip('Demo-Daten statt echtem Server — kein PAT nötig')
-            with ui.row().classes('items-center gap-4'):
-                ui.switch(_('ssl_verify'), value=cfg.get('verify_ssl', False)).bind_value_to(
-                    cfg, 'verify_ssl')
-                ui.switch(_('auto_dl'), value=cfg.get('auto_download', True)).bind_value_to(
-                    cfg, 'auto_download')
-                ui.switch(_('auto_up'), value=cfg.get('auto_upload', True)).bind_value_to(
-                    cfg, 'auto_upload')
-        with ui.card().classes('w-full gap-3 p-4'):
-            ui.label(_('trios_dirs')).classes('font-bold tga-title')
-            imp_in = ui.input(_('import_dir'),
-                              value=cfg.get('trios_import_dir', '')).classes('w-full')
-            exp_in = ui.input(_('export_dir'),
-                              value=cfg.get('trios_export_dir', '')).classes('w-full')
-            ui.input(_('poll_interval'), value=str(cfg.get('poll_interval', 15))) \
-                .classes('w-40').on_value_change(
-                    lambda e: cfg.update(poll_interval=int(e.value or 15)))
-        with ui.row().classes('gap-2'):
-            ui.button(_('save'), on_click=lambda: save_settings(
-                url_in, pat_in, imp_in, exp_in)).props('color=primary')
-            ui.button(_('connect_load'),
-                      on_click=do_refresh).props('icon=cloud_done outline')
+    # Same scroll pattern as the board columns: the page itself is
+    # overflow-hidden (see index()), so a tall settings list needs its own
+    # scroll area or it becomes unreachable on small windows.
+    with ui.scroll_area().classes('h-[calc(100vh-220px)] w-full'):
+        with ui.column().classes('gap-4 p-4 w-full max-w-2xl'):
+            with ui.card().classes('w-full gap-3 p-4'):
+                ui.label(_('appearance_lang')).classes('font-bold tga-title')
+                with ui.row().classes('items-center gap-4'):
+                    ui.select({'en': 'English', 'de': 'Deutsch'}, value=cfg.get('language', 'en'),
+                              label=_('language')).classes('w-40') \
+                        .on_value_change(change_language)
+                    # Dark mode lives in the config (persisted), applied globally.
+                    # The dark_mode element is created here (settings is the only
+                    # place the toggle exists now).
+                    refs['dark_mode_el'] = ui.dark_mode(
+                        value=backend.config.get('dark_mode', False))
+                    ui.switch(_('dark_mode'), value=cfg.get('dark_mode', False)) \
+                        .props('color=primary') \
+                        .on_value_change(lambda e: set_dark_mode(bool(e.value)))
+            with ui.card().classes('w-full gap-3 p-4'):
+                ui.label(_('nomad_conn')).classes('font-bold tga-title')
+                url_in = ui.input(_('nomad_url'), value=cfg.get('nomad_url', '')).classes('w-full')
+                pat_in = ui.input(_('api_token'), value=cfg.get('nomad_pat', '')) \
+                    .props('type=password').classes('w-full') \
+                    .tooltip('NOMAD PAT mit uploads:read/write, entries:read + uploads:process')
+                with ui.row().classes('items-center gap-2'):
+                    ui.switch(_('debug_mode'), value=cfg.get('debug_mode', False)) \
+                        .props('color=amber') \
+                        .on_value_change(lambda e: cfg.update(debug_mode=bool(e.value))) \
+                        .tooltip('Demo-Daten statt echtem Server — kein PAT nötig')
+                with ui.row().classes('items-center gap-4'):
+                    ui.switch(_('ssl_verify'), value=cfg.get('verify_ssl', False)).bind_value_to(
+                        cfg, 'verify_ssl')
+                    ui.switch(_('auto_dl'), value=cfg.get('auto_download', True)).bind_value_to(
+                        cfg, 'auto_download')
+                    ui.switch(_('auto_up'), value=cfg.get('auto_upload', True)).bind_value_to(
+                        cfg, 'auto_upload')
+            with ui.card().classes('w-full gap-3 p-4'):
+                ui.label(_('trios_dirs')).classes('font-bold tga-title')
+                imp_in = ui.input(_('import_dir'),
+                                  value=cfg.get('trios_import_dir', '')).classes('w-full')
+                exp_in = ui.input(_('export_dir'),
+                                  value=cfg.get('trios_export_dir', '')).classes('w-full')
+                ui.input(_('poll_interval'), value=str(cfg.get('poll_interval', 15))) \
+                    .classes('w-40').on_value_change(
+                        lambda e: cfg.update(poll_interval=int(e.value or 15)))
+            with ui.row().classes('gap-2'):
+                ui.button(_('save'), on_click=lambda: save_settings(
+                    url_in, pat_in, imp_in, exp_in)).props('color=primary')
+                ui.button(_('connect_load'),
+                          on_click=do_refresh).props('icon=cloud_done outline')
 
 
 def change_language(e):

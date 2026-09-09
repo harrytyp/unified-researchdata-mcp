@@ -22,7 +22,7 @@ def build_detail(backend: Backend, container: ui.column, uid: str | None):
             ui.label(_('not_found')).classes('text-grey-6 tga-sub p-4')
             return
 
-        status = backend.display_status(uid, r['has_tri'])
+        status = backend.display_status(uid, r['has_result'])
         with ui.column().classes('gap-3 p-4 w-full'):
             # Header: name + status select + NOMAD link
             with ui.row().classes('items-center gap-2 w-full'):
@@ -108,13 +108,16 @@ def meta_rows(backend: Backend, r: dict):
 
 def file_row(backend: Backend, uid: str, fname: str):
     lower = fname.lower()
+    # Result files: .tri/.xlsx OR real TRIOS .json (NOT NOMAD '*.archive.json'
+    # mainfiles — those are entry metadata, not measurement results).
+    is_result = (lower.endswith(('.tri', '.xlsx'))
+                 or (lower.endswith('.json') and not lower.endswith('.archive.json')))
     with ui.row().classes('items-center gap-2 w-full'):
         ui.icon('description').classes('text-grey-6')
         ui.label(fname).classes('text-sm truncate flex-1 tga-title')
-        is_tri = lower.endswith(('.tri', '.xlsx'))
-        badge = 'positive' if (is_tri and row_has_tri(backend, uid)) else (
+        badge = 'positive' if (is_result and row_has_result(backend, uid)) else (
             'positive' if lower.endswith('.tprc') else 'warning')
-        ui.badge(_('uploaded') if is_tri else _('ready')).props(f'color={badge} outline').classes('text-xs')
+        ui.badge(_('uploaded') if is_result else _('ready')).props(f'color={badge} outline').classes('text-xs')
 
         async def download(f=fname):
             try:
@@ -126,9 +129,9 @@ def file_row(backend: Backend, uid: str, fname: str):
         ui.button('', on_click=download).props('icon=download flat round dense')
 
 
-def row_has_tri(backend: Backend, uid: str) -> bool:
+def row_has_result(backend: Backend, uid: str) -> bool:
     r = next((x for x in backend.uploads if x['upload_id'] == uid), None)
-    return bool(r and r['has_tri'])
+    return bool(r and r['has_result'])
 
 
 def change_status(backend: Backend, uid: str, status: str):

@@ -288,7 +288,13 @@ class Backend:
                 fnames.append(str(f))
         has_tprc = any(str(f).lower().endswith('.tprc') for f in fnames)
         has_tri = any(str(f).lower().endswith(('.tri', '.xlsx')) for f in fnames)
-        has_json = any(str(f).lower().endswith('.json') for f in fnames)
+        # NOMAD stores each entry's mainfile as '*.archive.json' in the upload
+        # — that is NOT a TRIOS result. Counting it made every fresh upload
+        # (entry + generated .tprc) show 'measured' immediately, before any
+        # measurement existed (same .archive.json bug as the server plugin).
+        has_json = any(str(f).lower().endswith('.json')
+                       and not str(f).lower().endswith('.archive.json')
+                       for f in fnames)
         md0 = tga[0] if tga else {}
         ed = md0.get('data') or {}
         # Display name: prefer the ELN sample_name; fall back to the
@@ -366,15 +372,26 @@ class Backend:
     # ── Downloads / uploads ────────────────────────────────────
 
     def download_tprc(self, uid, import_dir=None):
-        """Download all .tprc of one upload; returns list of saved paths."""
+        """Download all .tprc of one upload; returns list of saved paths.
+
+        If the upload already has a slot assignment, the file is saved as
+        ``{Sample}_{Slot}.tprc`` (the slot_filename convention) instead of
+        the raw upload name — so TRIOS exports (named after the method file)
+        keep the slot in their stem and the watcher can map them back.
+        """
         import_dir = Path(import_dir or self.config.get('trios_import_dir', ''))
         import_dir.mkdir(parents=True, exist_ok=True)
         files = self.client.list_raw_files(uid) or []
+        row = next((r for r in self.uploads if r['upload_id'] == uid), None)
+        slot = self.slot_for(uid)
         saved = []
         for f in files:
             fname = f.get('path', f.get('name', '')) if isinstance(f, dict) else str(f)
             if str(fname).lower().endswith('.tprc'):
-                dest = import_dir / Path(fname).name
+                dest_name = Path(fname).name
+                if slot and row:
+                    dest_name = slot_filename(row.get('sample', ''), slot, uid)
+                dest = import_dir / dest_name
                 n = self.client.download_raw(uid, fname, str(dest))
                 self.file_owner[dest.name] = uid
                 self.log(f'Downloaded {Path(fname).name} ({n} B)', 'ok')
