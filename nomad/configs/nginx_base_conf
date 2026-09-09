@@ -93,6 +93,18 @@ location = /nomad-oasis/tga-forms {
 
 
 # NiceGUI-Assets der TGA-Formular-App (die App referenziert /_nicegui/ absolut)
+
+# NiceGUI-WebSocket der TGA-Formular-App
+location /_nicegui_ws/ {
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_pass http://tga-forms:8090;
+}
+
 location /_nicegui/ {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;

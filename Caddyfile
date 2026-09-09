@@ -83,7 +83,7 @@ researchmcp.duckdns.org {
     }
 
     # NiceGUI-Assets der TGA-Formular-App (app referenziert /_nicegui/ absolut)
-    handle /_nicegui/* {
+    handle /_nicegui* {
         reverse_proxy proxy:80 {
             flush_interval -1
         }
