@@ -52,6 +52,7 @@ services:
     - ./.volumes/fs:/app/.volumes/fs
     - /home/debian/unified-researchdata-mcp/nomad/plugins:/app/plugins
     - /home/debian/unified-researchdata-mcp/nomad/configs/nomad.yaml:/app/nomad.yaml
+    - /home/debian/unified-researchdata-mcp/nomad/configs/gui-override/main.d7847511.chunk.js:/opt/venv/lib/python3.12/site-packages/nomad/app/static/gui/static/js/main.d7847511.chunk.js:ro
   elastic:
     container_name: nomad_oasis_elastic
     environment:

@@ -22,3 +22,6 @@ nomad/plugins/*.tar.gz
 *.save
 *.orig
 *~
+
+# NOMAD-generated GUI runtime copy (recreated on app start)
+nomad/plugins/run/gui_configured/
