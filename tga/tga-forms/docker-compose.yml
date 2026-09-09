@@ -1,0 +1,13 @@
+services:
+  tga-forms:
+    build: .
+    container_name: tga-forms
+    restart: unless-stopped
+    environment:
+      STORAGE_SECRET: ${STORAGE_SECRET:-tga-forms-dev-secret-change-me}
+    networks:
+      - nomad_oasis_network
+
+networks:
+  nomad_oasis_network:
+    external: true

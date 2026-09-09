@@ -84,3 +84,29 @@ location /nomad-oasis/north/ {
 
     proxy_buffering off;
 }
+# ── TGA-Formular (eigene App unter dem NOMAD-Cookie-Pfad) ──────────────────
+# Erbt die NOMAD-Session: die GUI setzt das 'Authorization'-Cookie mit
+# Path=/nomad-oasis; Requests an /nomad-oasis/tga-forms/* senden es mit.
+location = /nomad-oasis/tga-forms {
+    return 301 /nomad-oasis/tga-forms/;
+}
+
+
+# NiceGUI-Assets der TGA-Formular-App (die App referenziert /_nicegui/ absolut)
+location /_nicegui/ {
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_pass http://tga-forms:8090;
+}
+
+location /nomad-oasis/tga-forms/ {
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://tga-forms:8090/;
+}
