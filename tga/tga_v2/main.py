@@ -438,7 +438,11 @@ async def _auto_fit_detail():
 def index():
     from ui_common import set_i18n
     set_i18n(STRINGS, backend.config.get('language', 'en'))
-    refs.setdefault('detail_open', True)
+    # Detail panel starts COLLAPSED — it opens on card click (open_detail)
+    # or via the header chevron. An open-but-empty panel at startup just
+    # wastes half the window ("warum öffnet es mit der detailsicht
+    # eingeblendet aber ohne etwas ausgewählt?").
+    refs.setdefault('detail_open', False)
     # Header
     with ui.header().classes('items-center justify-between px-4'):
         with ui.row().classes('items-center gap-2'):
@@ -476,6 +480,11 @@ def index():
         with ui.column().classes('w-80 min-w-80 border-l border-grey-3 min-h-0') as detail_col:
             refs['detail_col'] = detail_col
             refs['detail_container'] = ui.column().classes('w-full')
+    # Apply the startup state: panel collapsed until a card is clicked.
+    if not refs.get('detail_open', False):
+        refs['detail_col'].set_visibility(False)
+        if 'btn_detail' in refs:
+            refs['btn_detail'].props('icon=chevron_left')
 
     # Action bar (footer, hidden until selection)
     with ui.footer() as footer:
