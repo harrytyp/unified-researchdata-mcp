@@ -19,6 +19,10 @@ plugins:
           image: ghcr.io/harrytyp/econversion-nomad/jupyter:main
 
 meta:
+  description: |
+    Self-hosted **NOMAD Oasis** for research data management (TUM / E-conversion group).
+
+    **TGA measurements:** create a new measurement request with the guided [TGA request form](https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/) (sign in with your NOMAD account). Requests are executed by the TGA operator; results are stored back into NOMAD automatically.
   deployment: "oasis"
   deployment_url: "https://my-oasis.org/api"
   maintainer_email: "me@my-oasis.org"
