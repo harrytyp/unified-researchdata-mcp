@@ -63,6 +63,7 @@ STRINGS = {
     'open_nomad': {'en': 'Open in NOMAD', 'de': 'NOMAD öffnen'},
     'nomad_na': {'en': 'NOMAD link n/a', 'de': 'NOMAD-Link n/a'},
     'no_selection': {'en': 'No sample selected — click a card.', 'de': 'Keine Probe ausgewählt — klicke eine Karte an.'},
+    'close_detail': {'en': 'Close detail panel', 'de': 'Detail-Panel schließen'},
     'not_found': {'en': 'Sample not found.', 'de': 'Probe nicht gefunden.'},
     'uploaded': {'en': 'uploaded', 'de': 'hochgeladen'},
     'ready': {'en': 'ready', 'de': 'bereit'},
@@ -179,6 +180,10 @@ def build_detail_body(uid):
 
 def open_detail(uid: str):
     refs['detail_uid'] = uid
+    # A card click means the user wants to SEE the entry → open the panel
+    # even if it was collapsed for a small window.
+    if not refs.get('detail_open', True):
+        toggle_detail(True)
     build_detail_body(uid)
 
 # ── Action bar (contextual footer) ─────────────────────────────
@@ -405,10 +410,35 @@ def save_settings(url_in, pat_in, imp_in, exp_in):
 
 # ── Main page ──────────────────────────────────────────────────
 
+def toggle_detail(open_state=None):
+    """Show/hide the right-hand detail panel (small screens: more space
+    for board/list/settings). Cards auto-open it via open_detail()."""
+    if open_state is None:
+        refs['detail_open'] = not refs.get('detail_open', True)
+    else:
+        refs['detail_open'] = bool(open_state)
+    refs['detail_col'].set_visibility(refs['detail_open'])
+    icon = 'chevron_right' if refs['detail_open'] else 'chevron_left'
+    if 'btn_detail' in refs:
+        refs['btn_detail'].props(f'icon={icon}')
+
+
+async def _auto_fit_detail():
+    """Small window → collapse the detail panel so all tabs + content fit.
+    The user can still open it per card-click or the header button."""
+    try:
+        w = await ui.context.client.run_javascript('window.innerWidth')
+        if isinstance(w, (int, float)) and w < 1150:
+            toggle_detail(False)
+    except Exception:
+        pass
+
+
 @ui.page('/')
 def index():
     from ui_common import set_i18n
     set_i18n(STRINGS, backend.config.get('language', 'en'))
+    refs.setdefault('detail_open', True)
     # Header
     with ui.header().classes('items-center justify-between px-4'):
         with ui.row().classes('items-center gap-2'):
@@ -417,6 +447,9 @@ def index():
         with ui.row().classes('items-center gap-3'):
             refs['sync_box'] = ui.row().classes('items-center gap-2')
             ui.button('', on_click=do_refresh).props('icon=refresh flat round dense text-white')
+            refs['btn_detail'] = ui.button('', on_click=lambda: toggle_detail()) \
+                .props('icon=chevron_right flat round dense text-white') \
+                .tooltip('Detail-Panel ein/aus')
             # One global dark-mode element; the SETTINGS switch writes to the
             # config (persisted) and this element applies it. (Header toggle
             # removed per user request — settings is the single place.)
@@ -424,7 +457,7 @@ def index():
     # Tabs (main area left, detail panel right) — h-screen, no page scroll
     with ui.row().classes('w-full flex-1 items-stretch min-h-0'):
         with ui.column().classes('flex-1 min-w-0 min-h-0'):
-            with ui.tabs().classes('w-full') as tabs:
+            with ui.tabs().classes('w-full overflow-x-auto flex-nowrap') as tabs:
                 tab_board = ui.tab(_('tab_board'), icon='view_kanban')
                 tab_list = ui.tab(_('tab_list'), icon='view_list')
                 tab_settings = ui.tab(_('tab_settings'), icon='settings')
@@ -439,8 +472,9 @@ def index():
                 with ui.tab_panel(tab_log):
                     refs['log_container'] = ui.column().classes('w-full gap-0 p-2')
 
-        # Detail panel: fixed right column
-        with ui.column().classes('w-80 min-w-80 border-l border-grey-3 min-h-0'):
+        # Detail panel: fixed right column (collapsible — see toggle_detail)
+        with ui.column().classes('w-80 min-w-80 border-l border-grey-3 min-h-0') as detail_col:
+            refs['detail_col'] = detail_col
             refs['detail_container'] = ui.column().classes('w-full')
 
     # Action bar (footer, hidden until selection)
@@ -463,6 +497,7 @@ def index():
     ui_list.on_open_detail = open_detail
     ui_list.on_selection_change = update_action_bar
     ui_detail.on_status_changed = redraw_all
+    ui_detail.on_close_detail = lambda: toggle_detail(False)
 
     # Connection (client setup + health check only — fast).
     connect()
@@ -472,6 +507,7 @@ def index():
     # board), then load data 0.5s later. Makes the window appear instantly
     # on cold start instead of waiting for all API calls.
     ui.timer(0.5, do_refresh, once=True)
+    ui.timer(0.8, _auto_fit_detail, once=True)
     # Lock the page height so only the board columns scroll internally
     ui.query('body').classes('overflow-hidden h-screen')
     ui.query('.q-page').classes('h-screen overflow-hidden')

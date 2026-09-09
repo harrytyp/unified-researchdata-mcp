@@ -7,6 +7,7 @@ from backend import Backend, STATUS_LABELS, STATUSES, i18n
 from ui_common import _
 
 on_status_changed = None
+on_close_detail = None  # fn() — collapse the detail panel (set by main.py)
 
 
 def build_detail(backend: Backend, container: ui.column, uid: str | None):
@@ -24,13 +25,16 @@ def build_detail(backend: Backend, container: ui.column, uid: str | None):
 
         status = backend.display_status(uid, r['has_result'])
         with ui.column().classes('gap-3 p-4 w-full'):
-            # Header: name + status select + NOMAD link
+            # Header: name + status select + NOMAD link + close (collapse panel)
             with ui.row().classes('items-center gap-2 w-full'):
                 ui.label(r['sample'] or r['name']).classes(
                     'text-lg font-bold flex-1 tga-title')
                 ui.select({s: i18n(backend.config, s) for s in STATUSES},
                           value=status, label=_('status')).classes('w-40') \
                     .on_value_change(lambda e: change_status(backend, uid, e.value))
+                ui.button('', on_click=lambda: close_detail()) \
+                    .props('icon=close flat round dense text-grey-6') \
+                    .tooltip(_('close_detail'))
             with ui.row().classes('items-center gap-2 w-full'):
                 nomad_url = nomad_entry_url(backend, uid)
                 if nomad_url:
@@ -132,6 +136,12 @@ def file_row(backend: Backend, uid: str, fname: str):
 def row_has_result(backend: Backend, uid: str) -> bool:
     r = next((x for x in backend.uploads if x['upload_id'] == uid), None)
     return bool(r and r['has_result'])
+
+
+def close_detail():
+    """Collapse the detail panel (callback wired by main.py)."""
+    if on_close_detail:
+        on_close_detail()
 
 
 def change_status(backend: Backend, uid: str, status: str):
