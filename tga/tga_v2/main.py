@@ -568,10 +568,17 @@ def _warmup_server():
 if __name__ in {'__main__', '__mp_main__'}:
     # native window (pywebview) for the packaged EXE; browser mode for dev.
     native = os.environ.get('TGA_NATIVE', '1') != '0'
+    if native:
+        # Start MAXIMIZED (fills the screen minus taskbar — like a normal
+        # Windows app), NOT fullscreen. pywebview supports 'maximized' in
+        # create_window; nicegui only forwards width/height/fullscreen, so
+        # pass it through window_args (merged into create_window in
+        # native_mode._open_window).
+        from nicegui import core
+        core.app.native.window_args['maximized'] = True
     _warmup_server()
     ui.run(title='TGA Operator',
            dark=backend.config.get('dark_mode', False),
            native=native,
-           window_size=(1440, 900),
            port=8080,
            reload=False)
