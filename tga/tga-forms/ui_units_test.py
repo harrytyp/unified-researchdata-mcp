@@ -67,6 +67,22 @@ with sync_playwright() as p:
         '.q-select', 'els => els.length')
     print('  Anzahl Dropdowns:', selects)
     check('mindestens 6 Dropdowns (Crucible, Gas, 3x Einheit, 1 Flow)', selects >= 6, selects)
+    check('kein Operator-Feld mehr im Formular', 'Operator' not in labels, labels)
+
+    # optional (collapsed) sections - their content only exists in the DOM
+    # once expanded, so expand the crucible section to read its note
+    body_html = page.inner_text('body')
+    check('Bereich "Crucible (optional)" vorhanden', 'Crucible (optional)' in body_html)
+    check('Bereich "Method name (optional)" vorhanden', 'Method name (optional)' in body_html)
+    check('Tiegel-Bereich ist standardmaessig zugeklappt',
+          not page.locator('.q-expansion-item--expanded').count())
+    page.get_by_text('Crucible (optional)').click()
+    page.wait_for_timeout(1000)
+    expanded = page.inner_text('body')
+    check('Hinweis zum Tiegel im Ergebnis vorhanden (englisch)',
+          'recorded by the instrument' in expanded and 'TRIOS JSON' in expanded)
+    page.get_by_text('Crucible (optional)').click()  # collapse again
+    page.wait_for_timeout(600)
 
     # segment label shows the chosen unit
     segtext = page.inner_text('.tga-seg')
@@ -112,9 +128,21 @@ with sync_playwright() as p:
     ramp_end = page.locator(
         'xpath=//input[contains(@aria-label,"Target temperature")]').first
     ramp_end.fill('600')
+    ramp_end.press('Tab')
     ramp_rate = page.locator('xpath=//input[contains(@aria-label,"Rate")]').first
     ramp_rate.fill('10')
-    page.wait_for_timeout(500)
+    ramp_rate.press('Tab')
+    page.wait_for_timeout(1500)
+
+    # the method name follows the filled segments (it goes into the .tprc)
+    page.get_by_text('Method name (optional)').click()
+    page.wait_for_timeout(1200)
+    meth = page.locator('.q-expansion-item:has-text("Method name") input').first
+    suggested = meth.input_value()
+    print('  Methodenname-Vorschlag:', repr(suggested))
+    check('Methodenname wird aus den Segmenten gefuellt',
+          'Ramp' in suggested and '600' in suggested and 'N2' in suggested, suggested)
+
     page.get_by_role('button', name='Create measurement request').first.click()
     print('  Submit geklickt, warte auf Ergebnis ...')
     ok = False

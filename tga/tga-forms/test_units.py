@@ -80,5 +80,49 @@ eq('gas flow unveraendert', a2['gas_flow_rate'], 50.0)
 eq('end_temp unveraendert', a2['temperature_segments'][0]['end_temp'], 600.0)
 
 print()
+print('=== suggest_method_name (Methodenname aus den Segmenten) ===')
+segs = [
+    {'type': 'ramp', 'end_temp': 600.0, 'rate': 10.0},
+    {'type': 'isothermal', 'duration_min': 30.0},
+    {'type': 'mass_flow', 'flow_rate': 50.0},
+]
+got = api.suggest_method_name(segs, gas='N2')
+want = 'Ramp 10 °C/min to 600 °C + Hold 30 min + Mass flow 50 mL/min (N2)'
+print(f'  Vorschlag: {got!r}')
+check_name = got == want
+if not check_name:
+    FAILS.append('suggest_method_name')
+print(f'  [{"OK " if check_name else "FAIL"}] erwartet: {want!r}')
+
+got2 = api.suggest_method_name(segs, temp_unit='K', rate_unit='K/min',
+                               time_unit='h', flow_unit='L/min', gas='Ar')
+print(f'  mit K/h/L/min: {got2!r}')
+ok2 = got2 == 'Ramp 10 K/min to 600 K + Hold 30 h + Mass flow 50 L/min (Ar)'
+if not ok2:
+    FAILS.append('suggest_method_name (Einheiten)')
+print(f'  [{"OK " if ok2 else "FAIL"}] Einheiten im Vorschlag')
+
+ok3 = api.suggest_method_name([], gas='N2') == ''
+if not ok3:
+    FAILS.append('suggest_method_name (leer)')
+print(f'  [{"OK " if ok3 else "FAIL"}] ohne Werte -> leerer Vorschlag (auch mit Gas)')
+
+# incomplete segments must not produce broken text
+ok4 = api.suggest_method_name([{'type': 'ramp', 'end_temp': None, 'rate': 10.0}],
+                              gas='N2') == ''
+if not ok4:
+    FAILS.append('suggest_method_name (unvollstaendig)')
+print(f'  [{"OK " if ok4 else "FAIL"}] unvollstaendiges Segment wird ausgelassen')
+
+print()
+print('=== build_archive: kein Operator-Feld mehr aus dem Formular ===')
+a3 = api.build_archive({'sample_name': 'X', 'procedure_name': '',
+                        'segments': [{'type': 'ramp', 'end_temp': 600.0, 'rate': 10.0}]})['data']
+ok5 = 'operator' not in (a3.get('sample') or {})
+if not ok5:
+    FAILS.append('operator nicht im Archiv')
+print(f'  [{"OK " if ok5 else "FAIL"}] sample ohne operator: {a3.get("sample")}')
+
+print()
 print('ERGEBNIS:', 'ALLE TESTS BESTANDEN' if not FAILS else f'{len(FAILS)} FEHLER: {FAILS}')
 sys.exit(1 if FAILS else 0)

@@ -121,6 +121,11 @@ body.body--light .tga-success { color: #374151; }
 .tga-success-title { font-size: 1.15rem; font-weight: 600; color: #f2f3f5; }
 body.body--light .tga-success-title { color: #111827; }
 .tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #8a8f98; }
+/* optional (collapsed) advanced fields */
+.tga-adv { border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 2px 10px; }
+body.body--light .tga-adv { border-color: rgba(0,0,0,0.08); }
+.tga-adv .q-item { min-height: 38px !important; }
+.tga-adv-note { font-size: 0.78rem; color: #8a8f98; line-height: 1.45; margin-bottom: 2px; }
 /* link to the created upload in the NOMAD GUI (success box) */
 .tga-nomad-link { color: var(--tga-accent) !important; text-decoration: underline !important; margin: 2px 0 2px; }
 

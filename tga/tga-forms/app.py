@@ -57,10 +57,12 @@ def st() -> dict:
 
 def default_form() -> dict:
     return {
-        'sample_name': '', 'sample_mass': None, 'operator': '',
+        'sample_name': '', 'sample_mass': None,
         'crucible_type': 'Alumina', 'pan_number': '',
         'gas_atmosphere': 'N2', 'gas_flow_rate': None, 'balance_flow_rate': None,
-        'procedure_name': 'TGA Analysis', 'comments': '',
+        # procedure_name is left empty on purpose: it is suggested from the
+        # segments (see update_method_suggestion) unless the user edits it.
+        'procedure_name': '', 'last_suggestion': '', 'comments': '',
         # units the user enters values in (converted to canonical on submit)
         'mass_unit': 'mg', 'temp_unit': '°C', 'rate_unit': '°C/min',
         'time_unit': 'min', 'flow_unit': 'mL/min',
@@ -114,6 +116,9 @@ def set_field(idx: int, key: str, value):
             segs[idx][key] = float(value)
         except (TypeError, ValueError):
             segs[idx][key] = None
+    # the method name is derived from the segments, so it has to follow every
+    # edit of a segment value
+    update_method_suggestion()
 
 
 # ── Units ────────────────────────────────────────────────────────────────────
@@ -151,6 +156,8 @@ def change_unit(kind: str, new_unit: str, seg_keys=None, form_keys=None):
                 pass
     if seg_keys:
         rebuild_segments()
+    else:
+        update_method_suggestion()
 
 
 def set_segment_type(idx: int, seg_type: str):
@@ -177,6 +184,34 @@ def add_segment():
 
 
 seg_container = None
+method_input = None
+
+
+def update_method_suggestion():
+    """Keep the method name in sync with the segments.
+
+    The name is patched into the .tprc (it is the procedure name the operator
+    sees in TRIOS), so the segments themselves are the most useful default.
+    It is only filled while the field still holds the automatic suggestion (or
+    is empty) - once the user types a name of their own, theirs wins.
+    """
+    form = get_form()
+    name = nomad_api.suggest_method_name(
+        get_segments(), temp_unit=form.get('temp_unit') or '°C',
+        rate_unit=form.get('rate_unit') or '°C/min',
+        time_unit=form.get('time_unit') or 'min',
+        flow_unit=form.get('flow_unit') or 'mL/min',
+        gas=form.get('gas_atmosphere'))
+    current = form.get('procedure_name') or ''
+    if current and current != (form.get('last_suggestion') or ''):
+        return  # the user wrote their own name - leave it alone
+    form['last_suggestion'] = name
+    form['procedure_name'] = name
+    if method_input is not None:
+        try:
+            method_input.value = name
+        except Exception:
+            pass
 
 
 def rebuild_segments():
@@ -191,6 +226,7 @@ def rebuild_segments():
                 ui.label('No segments yet. Add at least one to continue.')
         for i in range(len(segs)):
             segment_card(i)
+    update_method_suggestion()
 
 
 def segment_card(idx: int):
@@ -370,6 +406,8 @@ result_box = None
 def index(request: Request):
     ui.add_head_html(CSS)
     unit_refs.clear()  # widget refs are per page build
+    global method_input
+    method_input = None
     cookie = request.cookies.get('Authorization', '')
     if cookie:
         st()['auth'] = cookie
@@ -468,22 +506,24 @@ def index(request: Request):
                               on_change=lambda e: change_unit(
                                   'mass', e.value, form_keys=['sample_mass'])) \
                         .props('outlined dense').classes('w-full')
-            with ui.row().classes('w-full gap-4 mt-2'):
-                with ui.column().classes('gap-1 flex-1'):
-                    ui.label('Operator').classes('tga-label')
-                    ui.input(value=get_form()['operator'],
-                             on_change=lambda e: get_form().update(operator=e.value)) \
-                        .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-44'):
-                    ui.label('Crucible').classes('tga-label')
-                    ui.select(CRUCIBLES, value=get_form()['crucible_type'],
-                              on_change=lambda e: get_form().update(crucible_type=e.value)) \
-                        .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-44'):
-                    ui.label('Crucible no.').classes('tga-label')
-                    ui.input(value=get_form()['pan_number'],
-                             on_change=lambda e: get_form().update(pan_number=e.value)) \
-                        .props('outlined dense').classes('w-full')
+            # Crucible is optional: the instrument records the crucible it
+            # actually used, so this is only the requester's preference.
+            with ui.expansion('Crucible (optional)', icon='science').classes('tga-adv w-full mt-1'):
+                ui.label('The crucible actually used is recorded by the instrument and '
+                         'is included in the result file (TRIOS JSON). It is not yet '
+                         'parsed into NOMAD. Use these fields only if you want to '
+                         'request a specific crucible.').classes('tga-adv-note')
+                with ui.row().classes('w-full gap-4 mt-1'):
+                    with ui.column().classes('gap-1 w-48'):
+                        ui.label('Crucible').classes('tga-label')
+                        ui.select(CRUCIBLES, value=get_form()['crucible_type'],
+                                  on_change=lambda e: get_form().update(crucible_type=e.value)) \
+                            .props('outlined dense').classes('w-full')
+                    with ui.column().classes('gap-1 w-48'):
+                        ui.label('Crucible no.').classes('tga-label')
+                        ui.input(value=get_form()['pan_number'],
+                                 on_change=lambda e: get_form().update(pan_number=e.value)) \
+                            .props('outlined dense').classes('w-full')
 
         # 2. Atmosphere
         with ui.element('div').classes('tga-panel'):
@@ -496,7 +536,8 @@ def index(request: Request):
                 with ui.column().classes('gap-1 w-48'):
                     ui.label('Purge gas').classes('tga-label')
                     ui.select(GASES, value=get_form()['gas_atmosphere'],
-                              on_change=lambda e: get_form().update(gas_atmosphere=e.value)) \
+                              on_change=lambda e: (get_form().update(gas_atmosphere=e.value),
+                                                   update_method_suggestion())) \
                         .props('outlined dense').classes('w-full')
                 with ui.column().classes('gap-1 w-44'):
                     ui.label('Sample flow').classes('tga-label')
@@ -560,11 +601,16 @@ def index(request: Request):
                 ui.icon('edit_note', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0 flex-1'):
                     ui.label('4 · Method & notes').classes('tga-section-title')
-                    ui.label('A method name and any notes for the operator.').classes('tga-section-sub')
-            with ui.column().classes('gap-1 w-full mt-1'):
-                ui.label('Method name').classes('tga-label')
-                ui.input(value=get_form()['procedure_name'],
-                         on_change=lambda e: get_form().update(procedure_name=e.value)) \
+                    ui.label('Anything the operator should know.').classes('tga-section-sub')
+            # Method name is optional and pre-filled from the segments: it is
+            # patched into the .tprc and becomes the procedure name in TRIOS.
+            with ui.expansion('Method name (optional)', icon='label').classes('tga-adv w-full mt-1'):
+                ui.label('Suggested from the temperature program above and written into '
+                         'the .tprc file, where it becomes the procedure name in TRIOS. '
+                         'Edit it if you prefer a different name.').classes('tga-adv-note')
+                method_input = ui.input(value=get_form()['procedure_name'],
+                                        on_change=lambda e: get_form().update(
+                                            procedure_name=e.value)) \
                     .props('outlined dense').classes('w-full')
             with ui.column().classes('gap-1 w-full mt-2'):
                 ui.label('Comments (optional)').classes('tga-label')

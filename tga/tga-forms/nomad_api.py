@@ -251,6 +251,51 @@ def wait_until_idle(token: str, upload_id: str,
     return False
 
 
+def _num(value) -> str:
+    """Format a number for the method-name suggestion: 10.0 -> '10', 0.5 -> '0.5'."""
+    try:
+        return f'{float(value):g}'
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def suggest_method_name(segments, temp_unit: str = '°C', rate_unit: str = '°C/min',
+                        time_unit: str = 'min', flow_unit: str = 'mL/min',
+                        gas: str = None) -> str:
+    """Build a readable method name from the entered segments.
+
+    The method name is patched into the .tprc, where it becomes the procedure
+    name the operator sees in TRIOS - so a name derived from the actual program
+    ("Ramp 10 °C/min to 600 °C + Hold 30 min (N2)") is a far better default than
+    an empty field or a fixed placeholder. The user can always overwrite it.
+    """
+    parts = []
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        kind = seg.get('type')
+        if kind == 'ramp':
+            end_temp, rate = seg.get('end_temp'), seg.get('rate')
+            if end_temp is not None and rate is not None:
+                parts.append(f'Ramp {_num(rate)} {rate_unit} to '
+                             f'{_num(end_temp)} {temp_unit}')
+        elif kind == 'isothermal':
+            duration = seg.get('duration_min')
+            if duration is not None:
+                parts.append(f'Hold {_num(duration)} {time_unit}')
+        elif kind in ('mass_flow', 'balance_flow'):
+            flow = seg.get('flow_rate')
+            if flow is not None:
+                label = 'Mass flow' if kind == 'mass_flow' else 'Balance flow'
+                parts.append(f'{label} {_num(flow)} {flow_unit}')
+    name = ' + '.join(parts)
+    # Only mention the gas when there is an actual program to name - a fresh
+    # form (no values entered yet) should suggest nothing at all.
+    if gas and parts:
+        name = f'{name} ({gas})'
+    return name
+
+
 def build_archive(form: Dict[str, Any]) -> Dict[str, Any]:
     """Map the form dict to a TgaMeasurement archive (matching the schema).
 
