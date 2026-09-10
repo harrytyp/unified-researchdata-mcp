@@ -121,6 +121,8 @@ body.body--light .tga-success { color: #374151; }
 .tga-success-title { font-size: 1.15rem; font-weight: 600; color: #f2f3f5; }
 body.body--light .tga-success-title { color: #111827; }
 .tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #8a8f98; }
+/* link to the created upload in the NOMAD GUI (success box) */
+.tga-nomad-link { color: var(--tga-accent) !important; text-decoration: underline !important; margin: 2px 0 2px; }
 
 /* ── Quasar input harmonization ── */
 body.body--dark .q-field--outlined .q-field__control { background: rgba(255,255,255,0.02); }

@@ -291,11 +291,15 @@ class TgaMeasurement(PlotSection, EntryData):
         description="Purge gas atmosphere",
         a_eln=ELNAnnotation(component="EnumEditQuantity"))
     gas_flow_rate = Quantity(
-        type=float, unit="mL/min",
+        # NOTE: the unit must be spelled out. NOMAD's unit parser reads the
+        # "min" in "mL/min" as *milli-inch* (verified: ureg.parse_units('mL/min')
+        # -> milliliter / milliinch), which silently gave this quantity a
+        # nonsensical unit. "milliliter / minute" parses correctly.
+        type=float, unit="milliliter / minute",
         description="Sample purge gas flow rate",
         a_eln=ELNAnnotation(component="NumberEditQuantity"))
     balance_flow_rate = Quantity(
-        type=float, unit="mL/min",
+        type=float, unit="milliliter / minute",
         description="Balance purge gas flow rate",
         a_eln=ELNAnnotation(component="NumberEditQuantity"))
 
@@ -680,7 +684,7 @@ class MockRunConfig(MSection):
         a_eln=ELNAnnotation(component="StringEditQuantity"),
     )
     gas_flow_rate = Quantity(
-        type=float, default=50.0, unit="mL/min",
+        type=float, default=50.0, unit="milliliter / minute",
         description="Purge gas flow rate",
         a_eln=ELNAnnotation(component="NumberEditQuantity"),
     )
