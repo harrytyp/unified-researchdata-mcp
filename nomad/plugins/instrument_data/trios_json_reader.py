@@ -566,6 +566,30 @@ def extract_trios_signals_streaming(fileobj, max_points: int = 4000,
     return {'meta': meta, 'signals': signals, 'columns': list(roles.keys())}
 
 
+def _drop_mass_object(block: str) -> str:
+    """Remove the nested ``"Mass": {...}`` object from a Sample slice.
+
+    The mass object contains its own ``"Name"`` (the unit, e.g. "mg"), which
+    would otherwise be mistaken for the sample name. Removing it lets the
+    remaining text be searched for the sample's own fields regardless of the
+    order TRIOS wrote them in.
+    """
+    import re
+    m = re.search(r'"Mass"\s*:\s*\{', block)
+    if not m:
+        return block
+    start = m.end() - 1          # position of the opening '{'
+    depth = 0
+    for i in range(start, len(block)):
+        if block[i] == '{':
+            depth += 1
+        elif block[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return block[:m.start()] + block[i + 1:]
+    return block                  # unbalanced (truncated window) - leave as is
+
+
 def _meta_from_header(text: str) -> Dict[str, Any]:
     """Extract metadata fields from the (early) JSON text region.
 
@@ -573,6 +597,12 @@ def _meta_from_header(text: str) -> Dict[str, Any]:
     buffered header block contains them. StartTime sits at the very END of
     the file (after the huge Rows array) — we return None for it here; the
     caller may patch it if the tail was captured.
+
+    The Sample object is sliced out first and its fields are read inside that
+    slice. Matching over the whole header instead would be ambiguous ("Name"
+    is used for the sample AND for the mass unit) and a nested-brace pattern
+    could not reach the mass, which sits one level deeper in
+    "Mass": {"Value": ..., "Unit": {"Name": "mg"}}.
     """
     import re
     meta: Dict[str, Any] = {
@@ -581,12 +611,41 @@ def _meta_from_header(text: str) -> Dict[str, Any]:
         'start_time': None, 'step_count': 0, 'row_count': 0,
     }
     try:
-        m = re.search(r'"Sample"\s*:\s*\{[^}]*?"Name"\s*:\s*"([^"]+)"', text, re.DOTALL)
+        m = re.search(r'"Sample"\s*:\s*\{', text)
         if m:
-            meta['sample_name'] = m.group(1)
-        m = re.search(r'"Sample"\s*:\s*\{[^}]*?"PanType"\s*:\s*"([^"]*)"', text, re.DOTALL)
-        if m:
-            meta['pan_type'] = m.group(1) or None
+            # fixed window into the still-streamed text: the Sample object is
+            # a few hundred bytes (its fields, then the nested Mass/Unit block)
+            block = text[m.end():m.end() + 1200]
+            # The nested mass object also contains a "Name" (the unit), and it
+            # may sit BEFORE or AFTER the sample name in the field order - so
+            # drop the mass sub-object before looking for the sample name.
+            rest = _drop_mass_object(block)
+            m2 = re.search(r'"Name"\s*:\s*"([^"]*)"', rest)
+            if m2:
+                meta['sample_name'] = m2.group(1) or None
+            m2 = re.search(r'"PanType"\s*:\s*"([^"]*)"', rest)
+            if m2:
+                meta['pan_type'] = m2.group(1) or None
+            # PanNumber is a bare JSON number in the export, but accept a
+            # quoted form too in case TRIOS changes it to a string
+            m2 = re.search(r'"PanNumber"\s*:\s*"?([0-9A-Za-z._-]+)"?', rest)
+            if m2:
+                meta['pan_number'] = m2.group(1) or None
+            # the mass as actually weighed by the instrument
+            m2 = re.search(r'"Mass"\s*:\s*\{.*?"Value"\s*:\s*(-?[0-9][0-9eE+.\-]*)',
+                           block, re.DOTALL)
+            if m2:
+                try:
+                    value = float(m2.group(1))
+                except ValueError:
+                    value = None
+                if value is not None:
+                    m3 = re.search(r'"Mass"\s*:\s*\{.*?"Name"\s*:\s*"([^"]+)"',
+                                   block, re.DOTALL)
+                    unit = ((m3.group(1) if m3 else '') or '').strip().lower()
+                    if unit in ('g', 'gram', 'grams'):
+                        value *= 1000.0   # the schema stores milligrams
+                    meta['sample_mass_mg'] = value
         m = re.search(r'"Operators"\s*:\s*\[\s*\{[^}]*?"Name"\s*:\s*"([^"]+)"', text, re.DOTALL)
         if m:
             meta['operator'] = m.group(1)

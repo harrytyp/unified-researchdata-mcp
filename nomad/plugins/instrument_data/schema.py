@@ -338,6 +338,23 @@ class TgaMeasurement(PlotSection, EntryData):
     result_processed_columns = Quantity(
         type=str,
         description="Comma-separated canonical column keys used from the JSON")
+    # What the instrument actually used, as opposed to what was requested:
+    # the requester may leave the crucible fields empty (or wish for another
+    # one), while TRIOS records the crucible it really ran with. Kept in its
+    # own field INSTEAD of crucible_type, because that one is an enum
+    # ("Platinum HT" from TRIOS is not one of its allowed values).
+    result_pan_type = Quantity(
+        type=str,
+        description="Crucible (pan type) actually used, as reported by the "
+                    "TRIOS JSON export")
+    result_pan_number = Quantity(
+        type=str,
+        description="Crucible (pan) number actually used, as reported by the "
+                    "TRIOS JSON export")
+    result_sample_mass_mg = Quantity(
+        type=float, unit="milligram",
+        description="Sample mass as actually weighed by the instrument "
+                    "(TRIOS JSON export)")
     # Downsampled signal arrays from the JSON (temperature as X axis).
     # NOTE: type=JSON expects dicts, NOT number lists ('26.9 needs to be a
     # dict'); plain float arrays must be np.float64 with shape=['*'].

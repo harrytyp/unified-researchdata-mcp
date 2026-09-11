@@ -30,6 +30,9 @@ MARKER = f'E2E{int(time.time()) % 100000}'
 TRIOS_JSON = {
     "Schema": {"Url": "https://software.tainstruments.com/schemas/TRIOSJSONExportSchema"},
     "Sample": {"Name": f"E2E-Kollidon-{MARKER}",
+               # a real export carries the crucible the instrument actually
+               # used; the normalizer must surface this in NOMAD
+               "PanNumber": 3, "PanType": "Platinum HT",
                "Mass": {"Value": 12.333, "Unit": {"Name": "mg"}}},
     "Procedure": {"Name": "E2E 10K to 400"},
     "Results": {"Processed": {
@@ -240,10 +243,20 @@ def verify_results(upload_id, tag, expect_gz):
     rc = int(res.get('result_row_count', 0) or 0)
     rn = str(res.get('result_sample_name', ''))
     ts = res.get('result_temperature_signal', [])
+    pan_t = str(res.get('result_pan_type', ''))
+    pan_n = str(res.get('result_pan_number', ''))
+    mass = res.get('result_sample_mass_mg')
     ok_name = (jf.endswith('.gz') if expect_gz else jf.endswith('.json')) and MARKER in jf
-    details = f'file={jf} sample={rn} rows={rc} pts={len(ts) if isinstance(ts, list) else "?"} figs={figs}'
+    # crucible + weighed mass from the export (they are not part of the
+    # requester's form data, so they can only come from the JSON)
+    ok_pan = pan_t == 'Platinum HT' and pan_n == '3'
+    ok_mass = mass is not None and abs(float(mass) - 12.333) < 1e-6
+    details = (f'file={jf} sample={rn} rows={rc} '
+               f'pts={len(ts) if isinstance(ts, list) else "?"} figs={figs} '
+               f'pan={pan_t or "-"}/{pan_n or "-"} mass={mass}')
     return (ok_name and MARKER in rn and rc == 6
-            and isinstance(ts, list) and 0 < len(ts) <= 6 and figs >= 1), details
+            and isinstance(ts, list) and 0 < len(ts) <= 6 and figs >= 1
+            and ok_pan and ok_mass), details
 
 
 def main():

@@ -748,6 +748,14 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
             entry.result_operator = str(meta["operator"])
         if meta.get("procedure_name"):
             entry.result_procedure_name = str(meta["procedure_name"])
+        # crucible (pan) + mass as actually used/weighed by the instrument -
+        # TRIOS reports these, the requester only expresses a wish
+        if meta.get("pan_type"):
+            entry.result_pan_type = str(meta["pan_type"])
+        if meta.get("pan_number") not in (None, ""):
+            entry.result_pan_number = str(meta["pan_number"])
+        if meta.get("sample_mass_mg") is not None:
+            entry.result_sample_mass_mg = float(meta["sample_mass_mg"])
         entry.result_row_count = int(meta.get("row_count") or 0)
         entry.result_processed_columns = ",".join(res.get("columns") or [])
     except Exception as e:
