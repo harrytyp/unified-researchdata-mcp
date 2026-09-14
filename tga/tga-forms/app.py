@@ -9,6 +9,7 @@ dark/light toggle persisted per browser session.
 """
 import os
 import re
+import urllib.parse
 import uuid
 
 from nicegui import app, ui
@@ -28,6 +29,47 @@ SEGMENT_TYPES = [
 ]
 SEG_LABEL = {s['id']: s['label'] for s in SEGMENT_TYPES}
 OPEN_LOGIN_JS = '(e) => { try { window.__tgaLogin = window.open("/nomad-oasis/gui", "_blank"); } catch (err) { window.location = "/nomad-oasis/gui"; } }'
+
+# Wait until the Authorization cookie appears, then close the login window and
+# reload this page (the page was built before the sign-in, so it has to be
+# rebuilt with the session in place).
+AUTH_POLL_JS = '''
+    <script>
+    (function pollAuth() {
+        if (document.cookie.includes('Authorization=')) {
+            try { if (window.__tgaLogin && !window.__tgaLogin.closed) window.__tgaLogin.close(); } catch (err) {}
+            location.reload();
+        } else {
+            setTimeout(pollAuth, 1000);
+        }
+    })();
+    </script>
+'''
+
+# Same idea for a session that ran out of time: here the (expired) cookie is
+# still present, so waiting for it to appear would reload in a loop. Wait for a
+# *new* value instead - signing in again replaces the cookie.
+AUTH_REFRESH_JS = '''
+    <script>
+    (function () {
+        var find = function () {
+            return (document.cookie.split('; ').find(function (c) {
+                return c.indexOf('Authorization=') === 0;
+            }) || '');
+        };
+        var start = find();
+        (function pollAuth() {
+            var now = find();
+            if (now && now !== start) {
+                try { if (window.__tgaLogin && !window.__tgaLogin.closed) window.__tgaLogin.close(); } catch (err) {}
+                location.reload();
+            } else {
+                setTimeout(pollAuth, 1000);
+            }
+        })();
+    })();
+    </script>
+'''
 
 
 CRUCIBLES = ['Alumina', 'Platinum', 'Aluminum']
@@ -96,6 +138,32 @@ def get_segments() -> list:
 
 def auth_token() -> str:
     return st().get('auth', '')
+
+
+async def fresh_token() -> str:
+    """The token to submit with - read from the browser, not from page load.
+
+    st()['auth'] is frozen while the page is built. The page then stays open
+    while the form is filled in, and NOMAD's GUI keeps refreshing the
+    Authorization cookie in the browser - but this websocket connection still
+    carries the cookie from page load. Submitting with that frozen value ends
+    in 'HTTP 401 ... Expired token.' once it has aged out (reproduced with a
+    60 s token: form loaded fine, submit failed), so ask the browser for the
+    cookie it holds right now and fall back to the stored one.
+    """
+    raw = ''
+    try:
+        raw = await ui.run_javascript(
+            'document.cookie.split("; ")'
+            '.find(c => c.startsWith("Authorization="))'
+            '?.substring("Authorization=".length) || ""', timeout=5)
+    except Exception:
+        raw = ''
+    tok = urllib.parse.unquote(str(raw or '')).strip()
+    if tok:
+        st()['auth'] = tok
+        return tok
+    return auth_token()
 
 
 def current_user() -> dict | None:
@@ -239,9 +307,16 @@ def segment_card(idx: int):
     seg = get_segments()[idx]
 
     def on_type(e):
-        set_segment_type(idx, e.value)
-        # rebuild to show the right fields for the new type
-        rebuild_segments()
+        # A keystroke can race the page teardown (browser reload): the client
+        # context is gone and rebuild_segments() would raise 'The parent
+        # element this slot belongs to has been deleted.' - the reload rebuilds
+        # the page anyway, so ignore the event.
+        try:
+            set_segment_type(idx, e.value)
+            # rebuild to show the right fields for the new type
+            rebuild_segments()
+        except RuntimeError:
+            return
 
     def on_field(key):
         return lambda e: set_field(idx, key, e.value)
@@ -329,6 +404,31 @@ def create_request(tok: str, archive: dict, file_name: str, display_name: str,
     return out
 
 
+def show_session_expired(detail: str = ''):
+    """Explain a 401/403 as an expired session and offer the way back in.
+
+    A 401 is not a problem with the form: the session token NOMAD was handed
+    is no longer valid (it aged out while the form was being filled). Nothing
+    was created and the entries are still in the form, so signing in again and
+    pressing submit once more is all it takes. Without this the user only saw
+    the raw API error and had no idea whether their data was lost.
+    """
+    result_box.clear()
+    with result_box:
+        with ui.element('div').classes('tga-expired'):
+            ui.icon('lock_clock', color='#f59e0b').classes('text-4xl')
+            ui.label('NOMAD session expired').classes('tga-success-title')
+            ui.label('Your sign-in was no longer valid when the request was sent, '
+                     'so nothing was created. Sign in again and press submit once '
+                     'more - your entries are kept.').classes('text-sm text-grey-5')
+            ui.button('Sign in to NOMAD', icon='login') \
+                .on('click', js_handler=OPEN_LOGIN_JS) \
+                .props('unelevated').classes('tga-cta')
+            if detail:
+                ui.label(detail).classes('tga-mono')
+    ui.add_body_html(AUTH_REFRESH_JS)
+
+
 async def submit():
     from nicegui import run
     errs = validate()
@@ -336,7 +436,7 @@ async def submit():
         for e in errs:
             ui.notify(e, type='negative')
         return
-    tok = auth_token()
+    tok = await fresh_token()
     if not tok:
         ui.notify('Not logged in. Please sign in to NOMAD first.', type='negative')
         return
@@ -361,6 +461,11 @@ async def submit():
         res = await run.io_bound(create_request, tok, archive, file_name,
                                  display_name, safe)
         if res['error']:
+            if res['status'] in (401, 403):
+                # not a form problem - the session is gone; explain it and
+                # offer the way back instead of dumping the API error
+                show_session_expired(str(res['error']))
+                return
             ui.notify(f'Failed to create request (HTTP {res["status"]}): {res["error"]}',
                       type='negative')
             return
@@ -463,24 +568,7 @@ def index(request: Request):
                          'separate window and closes automatically once you are '
                          'signed in, returning you to this page.').classes('tga-login-sub')
                 ui.button('Sign in to NOMAD', icon='login')                     .on('click', js_handler=OPEN_LOGIN_JS)                     .props('unelevated size=lg').classes('tga-cta')
-        ui.add_body_html('''
-            <script>
-            if (!document.cookie.includes('Authorization=')) {
-                (function pollAuth() {
-                    if (document.cookie.includes('Authorization=')) {
-                        try {
-                            if (window.__tgaLogin && !window.__tgaLogin.closed) {
-                                window.__tgaLogin.close();
-                            }
-                        } catch (err) {}
-                        location.reload();
-                    } else {
-                        setTimeout(pollAuth, 1000);
-                    }
-                })();
-            }
-            </script>
-        ''')
+        ui.add_body_html(AUTH_POLL_JS)
         return
 
     # ── Form ──

@@ -140,6 +140,18 @@ body.body--light .tga-sampleid-hint { color: #6b7280; }
 }
 body.body--light .tga-sampleid-code { color: #4338ca; }
 
+/* Expired session: nothing was created, so it must read as a fixable state
+   (sign in again, submit once more) rather than as a failed submission. */
+.tga-expired {
+    display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
+    padding: 1rem 1.2rem; margin-top: 0.4rem;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 0.7rem;
+    background: rgba(245, 158, 11, 0.09);
+}
+.tga-expired .tga-success-title { color: #fcd34d; }
+body.body--light .tga-expired .tga-success-title { color: #92400e; }
+
 /* ── Quasar input harmonization ── */
 body.body--dark .q-field--outlined .q-field__control { background: rgba(255,255,255,0.02); }
 body.body--light .q-field__control { background: #fff; }
