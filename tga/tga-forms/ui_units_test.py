@@ -176,7 +176,7 @@ with sync_playwright() as p:
         uid = m.group(1) if m else None
         print('  upload_id:', uid)
         check('Upload-ID im Erfolgsdialog', bool(uid), uid)
-        # the short sample id the requester has to write on the crucible:
+        # the short sample id the requester has to write on the sample:
         # must be visible, must be a prefix of the upload_id used everywhere
         code = page.locator('.tga-sampleid-code')
         check('Sample-ID-Block vorhanden', code.count() == 1,
@@ -186,8 +186,8 @@ with sync_playwright() as p:
             check('Sample-ID ist die richtige Kurzform', bool(uid) and shown == uid[:5],
                   f'angezeigt={shown!r} erwartet={uid[:5]!r}')
             hint = page.locator('.tga-sampleid')
-            check('Hinweis "write this on the crucible" steht dabei',
-                  'write this on the crucible' in hint.inner_text().lower(),
+            check('Hinweis "write this on the sample" steht dabei',
+                  'write this on the sample' in hint.inner_text().lower(),
                   hint.inner_text().strip()[:60])
         link = page.get_by_role('button', name='Open this upload in NOMAD')
         check('Link "Open this upload in NOMAD" vorhanden', link.count() > 0)

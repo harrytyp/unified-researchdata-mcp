@@ -99,7 +99,7 @@ def nomad_entry_url(backend: Backend, uid: str) -> str | None:
 
 
 def meta_rows(backend: Backend, r: dict):
-    # The id written on the crucible - first row on purpose, in mono so it can
+    # The id written on the sample - first row on purpose, in mono so it can
     # be read and typed into TRIOS. Short form of the upload id.
     with ui.row().classes('gap-2 w-full items-center'):
         ui.label(_('sample_id_label')).classes('text-xs text-grey-5 tga-sub w-24')

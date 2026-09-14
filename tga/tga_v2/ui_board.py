@@ -154,7 +154,7 @@ def make_card(backend: Backend, r: dict, parent=None):
                     with ui.icon('check_circle' if is_sel else 'radio_button_unchecked') \
                             .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub') as icon:
                         pass
-            # The id written on the crucible / entered in TRIOS. Sits right
+            # The id written on the sample / entered in TRIOS. Sits right
             # under the sample name so a physical sample can be matched to a
             # card at a glance (two samples may share a name).
             ui.label(sample_id(uid)).classes('tga-code text-xs') \

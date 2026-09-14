@@ -57,10 +57,12 @@ STRINGS = {
     'click_sort': {'en': 'Click to sort', 'de': 'Klicken zum Sortieren'},
     'details_tooltip': {'en': 'Click for details', 'de': 'Klicken für Details'},
     'sample_id_label': {'en': 'Sample ID', 'de': 'Proben-ID'},
-    # Short sample id (first chars of the upload_id) shown on every card
+    # Short sample id (first chars of the upload_id) shown on every card.
+    # This one is read by the OPERATOR, so it only explains what the code is -
+    # the instruction to write it belongs in the form (tga-forms/app.py).
     'sample_id_tooltip': {
-        'en': 'Sample ID - write this on the crucible',
-        'de': 'Proben-ID - auf den Tiegel schreiben'},
+        'en': 'Sample ID - the code written on the sample',
+        'de': 'Proben-ID - die Kennung auf der Probe'},
     'metadata': {'en': 'Metadata', 'de': 'Metadaten'},
     'segments': {'en': 'Segments', 'de': 'Segmente'},
     'no_segments': {'en': 'No segments defined.', 'de': 'Keine Segmente hinterlegt.'},

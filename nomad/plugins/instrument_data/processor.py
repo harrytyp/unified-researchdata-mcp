@@ -864,7 +864,7 @@ def _to_unit(value: Any, target_unit: str) -> float | None:
 def _tprc_sample_name(upload_id: Any, sample_name: Any) -> str:
     """Prefix the short sample id to the name that goes into the .tprc.
 
-    The requester writes this code on the crucible; putting it into the
+    The requester writes this code on the sample they send in; putting it into the
     procedure's sample name makes TRIOS report it back with the measurement
     (Sample.Name -> result_sample_name), so a result can be traced to its
     request automatically. Sample names are not unique, the code is.

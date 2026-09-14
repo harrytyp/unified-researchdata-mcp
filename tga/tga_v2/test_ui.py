@@ -35,7 +35,7 @@ async def test_full_app_flow(user: User):
     print('2. BOARD CARDS OK (Probe A/B/C)')
 
     # 2b. Every card carries the short sample id - the code the requester
-    # writes on the crucible and the operator matches against the sample.
+    # writes on the sample they send in.
     # (Fake upload ids are AAA111/BBB222/CCC333, so the short form is the
     # first five characters: AAA11 / BBB22 / CCC33.)
     for code in ('AAA11', 'BBB22', 'CCC33'):

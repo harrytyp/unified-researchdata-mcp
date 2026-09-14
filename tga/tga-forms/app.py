@@ -94,7 +94,7 @@ GUI_BASE = 'https://researchmcp.duckdns.org/nomad-oasis/gui'
 # Short sample id handed to the requester on submit. It is the first
 # characters of the NOMAD upload_id, so the same code appears on the operator's
 # board card and can be matched back to the full upload id in NOMAD.
-# Written on the crucible, so keep it short enough to write by hand.
+# Written on the sample by hand, so keep it short enough to write.
 SAMPLE_ID_LEN = 5
 
 
@@ -481,10 +481,10 @@ async def submit():
                     ui.icon('check_circle', color='#10b981').classes('text-4xl')
                     ui.label('Measurement request created!').classes('tga-success-title')
                     ui.label(f'Sample: {sample}').classes('text-sm')
-                    # The requester writes this code on the crucible; the
-                    # operator sees the same code on the board card.
+                    # The requester writes this code on the sample they send
+                    # in; the operator sees the same code on the board card.
                     with ui.element('div').classes('tga-sampleid'):
-                        ui.label('Sample ID - write this on the crucible') \
+                        ui.label('Sample ID - write this on the sample you send in') \
                             .classes('tga-sampleid-hint')
                         ui.label(uid[:SAMPLE_ID_LEN]).classes('tga-sampleid-code')
                     ui.label(f'Upload ID: {uid}').classes('tga-mono')
