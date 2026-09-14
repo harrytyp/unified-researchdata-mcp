@@ -121,13 +121,24 @@ body.body--light .tga-success { color: #374151; }
 .tga-success-title { font-size: 1.15rem; font-weight: 600; color: #f2f3f5; }
 body.body--light .tga-success-title { color: #111827; }
 .tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #8a8f98; }
-/* optional (collapsed) advanced fields */
-.tga-adv { border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 2px 10px; }
-body.body--light .tga-adv { border-color: rgba(0,0,0,0.08); }
-.tga-adv .q-item { min-height: 38px !important; }
-.tga-adv-note { font-size: 0.78rem; color: #8a8f98; line-height: 1.45; margin-bottom: 2px; }
-/* link to the created upload in the NOMAD GUI (success box) */
-.tga-nomad-link { color: var(--tga-accent) !important; text-decoration: underline !important; margin: 2px 0 2px; }
+
+/* Short sample id in the confirmation: the code the requester has to write on
+   the crucible, so it has to stand out enough to copy by hand. */
+.tga-sampleid {
+    display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+    margin: 0.4rem 0 0.15rem; padding: 0.5rem 1.2rem;
+    border: 1px dashed rgba(129, 140, 248, 0.55);
+    border-radius: 0.6rem;
+    background: rgba(99, 102, 241, 0.10);
+}
+.tga-sampleid-hint { font-size: 0.76rem; color: #8a8f98; }
+body.body--light .tga-sampleid-hint { color: #6b7280; }
+.tga-sampleid-code {
+    font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+    font-size: 1.55rem; font-weight: 600; letter-spacing: 0.14em;
+    line-height: 1.25; color: #c7d2fe;
+}
+body.body--light .tga-sampleid-code { color: #4338ca; }
 
 /* ── Quasar input harmonization ── */
 body.body--dark .q-field--outlined .q-field__control { background: rgba(255,255,255,0.02); }

@@ -96,4 +96,16 @@ body.body--dark .q-field__label {
     overflow-wrap: anywhere;
 }
 
+/* Short sample id on the card - the code the requester writes on the
+ * crucible, so a physical sample can be matched to a request. */
+.tga-code {
+    font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+    letter-spacing: 0.08em;
+    color: #4f46e5;
+    line-height: 1.1;
+}
+body.body--dark .tga-code {
+    color: #a5b4fc !important;
+}
+
 }

@@ -31,11 +31,25 @@ def check(label, cond, detail=''):
     print(f'  [{"OK  " if cond else "FAIL"}] {label}{(" - " + str(detail)) if detail else ""}')
 
 
+def _bearer(tok: str) -> dict:
+    """NOMAD's OAuth2PasswordBearer only accepts the "Bearer <token>" form in
+    the Authorization header (a bare token gives 401, even though the very same
+    token works as the GUI's Authorization cookie)."""
+    if not tok.lower().startswith('bearer '):
+        tok = 'Bearer ' + tok
+    return {'Authorization': tok}
+
+
 def api(path, token=None):
-    req = urllib.request.Request(API + path,
-                                 headers={'Authorization': token or TOK})
+    req = urllib.request.Request(API + path, headers=_bearer(token or TOK))
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode())
+
+
+def api_raw(path, token=None):
+    req = urllib.request.Request(API + path, headers=_bearer(token or TOK))
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read()
 
 
 with sync_playwright() as p:
@@ -162,6 +176,19 @@ with sync_playwright() as p:
         uid = m.group(1) if m else None
         print('  upload_id:', uid)
         check('Upload-ID im Erfolgsdialog', bool(uid), uid)
+        # the short sample id the requester has to write on the crucible:
+        # must be visible, must be a prefix of the upload_id used everywhere
+        code = page.locator('.tga-sampleid-code')
+        check('Sample-ID-Block vorhanden', code.count() == 1,
+              f'{code.count()} Treffer')
+        if code.count() == 1:
+            shown = code.inner_text().strip()
+            check('Sample-ID ist die richtige Kurzform', bool(uid) and shown == uid[:5],
+                  f'angezeigt={shown!r} erwartet={uid[:5]!r}')
+            hint = page.locator('.tga-sampleid')
+            check('Hinweis "write this on the crucible" steht dabei',
+                  'write this on the crucible' in hint.inner_text().lower(),
+                  hint.inner_text().strip()[:60])
         link = page.get_by_role('button', name='Open this upload in NOMAD')
         check('Link "Open this upload in NOMAD" vorhanden', link.count() > 0)
         if uid:
@@ -175,9 +202,7 @@ with sync_playwright() as p:
                   up.get('main_author') == '500a3642-1524-4205-9d0d-b750e3d780da',
                   up.get('main_author'))
             time.sleep(4)
-            raw = urllib.request.urlopen(urllib.request.Request(
-                f'{API}/uploads/{uid}/rawdir/', headers={'Authorization': TOK}),
-                timeout=60).read()
+            raw = api_raw(f'/uploads/{uid}/rawdir/')
             check('.tprc wurde erzeugt', b'.tprc' in raw)
     check('keine JS-Fehler', not errors, errors[:2])
     page.screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)),

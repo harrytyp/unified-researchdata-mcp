@@ -3,7 +3,8 @@ from nicegui import ui
 
 from backend import Backend, STATUSES, STATUS_LABELS
 from ui_common import (STATUS_COLORS,
-                       NUM_SLOTS, selected, toggle_select, column_header, _)
+                       NUM_SLOTS, selected, toggle_select, column_header,
+                       sample_id, _)
 
 # Callbacks set by main.py (avoid circular import)
 on_open_detail = None       # fn(upload_id)
@@ -153,6 +154,11 @@ def make_card(backend: Backend, r: dict, parent=None):
                     with ui.icon('check_circle' if is_sel else 'radio_button_unchecked') \
                             .classes('text-green-600' if is_sel else 'text-grey-5 tga-sub') as icon:
                         pass
+            # The id written on the crucible / entered in TRIOS. Sits right
+            # under the sample name so a physical sample can be matched to a
+            # card at a glance (two samples may share a name).
+            ui.label(sample_id(uid)).classes('tga-code text-xs') \
+                .tooltip(_('sample_id_tooltip'))
             ui.label(r['procedure'] or '—').classes(
                 'text-xs break-words w-full text-grey-6 tga-sub')
             with ui.row().classes('items-center gap-2 w-full min-w-0 flex-wrap'):

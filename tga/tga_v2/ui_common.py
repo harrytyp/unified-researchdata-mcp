@@ -31,6 +31,27 @@ selected: set[str] = set()
 
 NUM_SLOTS = 30
 
+# Length of the short sample id shown to humans (the first characters of the
+# NOMAD upload_id). 5 characters are still 62^5 ~ 9e8 combinations, far beyond
+# any lab's sample count, and 5 characters are what fits on a crucible. Any
+# short id is a pure prefix of the full upload_id, so it can always be matched
+# back to the id NOMAD and the entry use.
+SAMPLE_ID_LEN = 5
+
+
+def sample_id(upload_id: str | None) -> str:
+    """Short, hand-writable form of the NOMAD upload_id.
+
+    The form hands this code to the requester as soon as the request is
+    submitted, the requester writes it on the crucible, and the operator sees
+    the same code on the board card and in the detail panel. The full
+    upload_id stays authoritative everywhere (NOMAD, deep links).
+
+    NOTE: the length is mirrored in tga/tga-forms/app.py and in the NOMAD
+    plugin (instrument_data/sample_id.py) - keep them in sync.
+    """
+    return (upload_id or '')[:SAMPLE_ID_LEN]
+
 
 def set_drag_source(uid: str | None):
     global drag_source

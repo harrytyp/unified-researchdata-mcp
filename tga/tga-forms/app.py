@@ -49,6 +49,12 @@ OPERATOR_GROUP = 'tga-operators-6a7ae5e4cec5e87bf39df8a3'
 # NOMAD GUI base, for the deep link to a created upload.
 GUI_BASE = 'https://researchmcp.duckdns.org/nomad-oasis/gui'
 
+# Short sample id handed to the requester on submit. It is the first
+# characters of the NOMAD upload_id, so the same code appears on the operator's
+# board card and can be matched back to the full upload id in NOMAD.
+# Written on the crucible, so keep it short enough to write by hand.
+SAMPLE_ID_LEN = 5
+
 
 # ── Per-session state (multi-user safe) ─────────────────────────────────────
 def st() -> dict:
@@ -370,6 +376,12 @@ async def submit():
                     ui.icon('check_circle', color='#10b981').classes('text-4xl')
                     ui.label('Measurement request created!').classes('tga-success-title')
                     ui.label(f'Sample: {sample}').classes('text-sm')
+                    # The requester writes this code on the crucible; the
+                    # operator sees the same code on the board card.
+                    with ui.element('div').classes('tga-sampleid'):
+                        ui.label('Sample ID - write this on the crucible') \
+                            .classes('tga-sampleid-hint')
+                        ui.label(uid[:SAMPLE_ID_LEN]).classes('tga-sampleid-code')
                     ui.label(f'Upload ID: {uid}').classes('tga-mono')
                     if ps:
                         ui.label(f'Status: {ps}').classes('text-sm')

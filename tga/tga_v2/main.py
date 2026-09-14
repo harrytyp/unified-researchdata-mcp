@@ -56,6 +56,11 @@ STRINGS = {
     'samples': {'en': 'samples', 'de': 'Proben'},
     'click_sort': {'en': 'Click to sort', 'de': 'Klicken zum Sortieren'},
     'details_tooltip': {'en': 'Click for details', 'de': 'Klicken für Details'},
+    'sample_id_label': {'en': 'Sample ID', 'de': 'Proben-ID'},
+    # Short sample id (first chars of the upload_id) shown on every card
+    'sample_id_tooltip': {
+        'en': 'Sample ID - write this on the crucible',
+        'de': 'Proben-ID - auf den Tiegel schreiben'},
     'metadata': {'en': 'Metadata', 'de': 'Metadaten'},
     'segments': {'en': 'Segments', 'de': 'Segmente'},
     'no_segments': {'en': 'No segments defined.', 'de': 'Keine Segmente hinterlegt.'},

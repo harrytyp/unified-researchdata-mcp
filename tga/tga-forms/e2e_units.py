@@ -48,7 +48,7 @@ from nomad.auth.tokens import generate_simple_token  # noqa: E402
 
 
 def call(method, path, token, data=None, headers=None, timeout=180):
-    h = {'Authorization': token}
+    h = {'Authorization': token if token.lower().startswith('bearer ') else 'Bearer ' + token}
     h.update(headers or {})
     req = urllib.request.Request(API + path, data=data, headers=h, method=method)
     try:

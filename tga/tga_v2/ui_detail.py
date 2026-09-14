@@ -4,7 +4,7 @@ from pathlib import Path
 from nicegui import ui
 
 from backend import Backend, STATUS_LABELS, STATUSES, i18n
-from ui_common import _
+from ui_common import _, sample_id
 
 on_status_changed = None
 on_close_detail = None  # fn() — collapse the detail panel (set by main.py)
@@ -99,6 +99,12 @@ def nomad_entry_url(backend: Backend, uid: str) -> str | None:
 
 
 def meta_rows(backend: Backend, r: dict):
+    # The id written on the crucible - first row on purpose, in mono so it can
+    # be read and typed into TRIOS. Short form of the upload id.
+    with ui.row().classes('gap-2 w-full items-center'):
+        ui.label(_('sample_id_label')).classes('text-xs text-grey-5 tga-sub w-24')
+        ui.label(sample_id(r['upload_id'])).classes('text-sm tga-code flex-1') \
+            .tooltip(_('sample_id_tooltip'))
     for label, value in (
         ('Procedure', r['procedure'] or '—'),
         ('Author', r['author']),
