@@ -287,6 +287,22 @@ def main():
         tprc = [n for n in names if n.endswith('.tprc')]
         check('2. .tprc vom Worker generiert', bool(tprc), f'files={names} status={status}')
 
+        # 2b) Die .tprc muss die Kurzform der Upload-ID im Probennamen tragen:
+        #     die Kennung, die auf den Tiegel geschrieben wird, reist damit mit
+        #     der Probe und kommt aus TRIOS zurueck (Sample.Name).
+        if tprc:
+            tdir = staging_raw_dir(upload_id)
+            tpath = os.path.join(tdir, tprc[0]) if tdir else None
+            try:
+                from tprc_builder import parse_tprc
+                tname = parse_tprc(tpath).get('sample_name') if tpath else None
+            except Exception as e:  # noqa: BLE001
+                tname = f'parse-error: {e}'
+            check('2b. .tprc traegt die Sample-ID im Probennamen',
+                  bool(tname) and str(tname).startswith(upload_id[:5]),
+                  f'{tprc[0]}: sample_name={tname!r} erwartet Praefix '
+                  f'{upload_id[:5]!r}')
+
         # 3) Messung als plain .json in den Upload legen + reprocess -> PRUEFEN.
         #    (PUT + anschliessender Upload-Reprocess, wie die EXE es macht.)
         #    NOTE: der PUT stoesst selbst einen MINI-Prozess an (nur

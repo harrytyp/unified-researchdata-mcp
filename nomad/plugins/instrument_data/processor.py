@@ -861,6 +861,26 @@ def _to_unit(value: Any, target_unit: str) -> float | None:
         return None
 
 
+def _tprc_sample_name(upload_id: Any, sample_name: Any) -> str:
+    """Prefix the short sample id to the name that goes into the .tprc.
+
+    The requester writes this code on the crucible; putting it into the
+    procedure's sample name makes TRIOS report it back with the measurement
+    (Sample.Name -> result_sample_name), so a result can be traced to its
+    request automatically. Sample names are not unique, the code is.
+
+    The .tprc's sample-name field holds 66 characters, so code + name fits
+    comfortably.
+    """
+    name = (sample_name or "Sample").strip() or "Sample"
+    try:
+        from instrument_data.sample_id import sample_id
+    except ImportError:
+        return name
+    code = sample_id(upload_id)
+    return f"{code} {name}" if code else name
+
+
 def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
     """Build a .tprc procedure file from the TgaMeasurement ELN parameters.
 
@@ -891,6 +911,13 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         sample_name = getattr(entry.sample, "sample_name", None)
     procedure_name = getattr(entry, "procedure_name", None)
     gas = getattr(entry, "gas_atmosphere", None)
+
+    # The upload this .tprc is generated for. The TgaMeasurement entry lives in
+    # the upload that the request created, so this is the same id the requester
+    # was given as sample code and that NOMAD and the operator app display.
+    mctx = getattr(archive, "m_context", None)
+    upload_id = (getattr(mctx, "upload_id", None)
+                 or getattr(entry, "source_upload_id", None))
 
     # Temperature program: build the full ordered segment list (not just
     # one representative rate/temperature) so every segment the user entered
@@ -947,7 +974,7 @@ def _generate_tprc_from_entry(entry: Any, archive: Any, logger: Any) -> None:
         return
 
     params = {
-        "sample_name": sample_name or "Sample",
+        "sample_name": _tprc_sample_name(upload_id, sample_name),
         "procedure_name": procedure_name or "TGA procedure",
         "gas_atmosphere": gas_map.get(gas, gas) if gas else "Nitrogen",
     }
