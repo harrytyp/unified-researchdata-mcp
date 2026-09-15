@@ -56,6 +56,9 @@ services:
       - ./econversion/data:/app/data
     mem_limit: 2g
     stop_grace_period: 30s
+    networks:
+      - default
+      - nomad_oasis_network
 
   # ── elab-app (Streamlit-Frontend fuer elabFTW) ────────────────────────────
   elab-app:

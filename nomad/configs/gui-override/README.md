@@ -53,3 +53,10 @@ aus der gemounteten (gepatchten) Datei neu erzeugt.
 - Playwright gegen https://researchmcp.duckdns.org/nomad-oasis/gui/:
   Karte „TGA Measurement Requests" vorhanden, kein JS-Fehler, Link ok.
 - GUI-Startseite inhaltlich identisch bis auf die neue Karte (kein weiterer Eingriff).
+
+## Everse-Karte (DIT-19, 2026-09-15)
+
+- Zweite Karte, gleiches Muster: Teal-Gradient, Titel **Everse Chatbot**,
+  Link https://researchmcp.duckdns.org/nomad-oasis/api/everse/
+- Skript: `patch_gui4_everse.py` (liest das TGA-gepatchte Bundle, kein Original noetig)
+- Reihenfolge auf der Seite: TGA-Karte, Everse-Karte, dann InfoCards.

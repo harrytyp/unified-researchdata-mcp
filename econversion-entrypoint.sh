@@ -48,4 +48,4 @@ if [ ! -f /app/data/cache/proposal_summary.md ]; then
 fi
 
 echo "[entrypoint] Starting Streamlit app..."
-exec streamlit run src/app.py
+exec streamlit run src/app.py --server.baseUrlPath=/nomad-oasis/api/everse
