@@ -15,6 +15,8 @@ import uuid
 from nicegui import app, ui
 from starlette.requests import Request
 
+from session_email import email_from_token
+
 import nomad_api
 from style_css import CSS
 
@@ -85,11 +87,21 @@ RUNTIME_CONSULT_H = 24    # runs longer than a day have to be agreed first
 PEDRO = 'p.braun@tum.de'
 LUCA = 'luca.reichert@tum.de'
 CONTACTS = f'Pedro Braun ({PEDRO}) or Luca Reichert ({LUCA})'
+# Where the samples go - the requester only learns this together with the
+# sample ID, so it is shown in the confirmation and nowhere else.
+LAB_ADDRESS = (
+    'TUM School of Engineering and Design',
+    'Department of Materials Engineering',
+    'Lehrstuhl für Werkstoffwissenschaften',
+    'Boltzmannstr. 15',
+    '85748 Garching',
+    'Room MW 2228',
+)
 # Unit options per quantity: exactly the units NOMAD's unit system accepts for
 # these quantities. The user enters the value in whichever of these they think
 # in; nomad_api.build_archive converts it into the schema's canonical unit, so
 # the NOMAD entry and the generated .tprc always carry canonical units.
-UNIT_MASS = ['mg', 'g']
+UNIT_MASS = ['mg']  # the field takes mg only - no unit switching for mass
 UNIT_TEMP = ['°C', 'K']
 UNIT_RATE = ['°C/min', 'K/min']
 UNIT_TIME = ['min', 's', 'h']
@@ -125,10 +137,13 @@ def default_form() -> dict:
         # units the user enters values in (converted to canonical on submit)
         'mass_unit': 'mg', 'temp_unit': '°C', 'rate_unit': '°C/min',
         'time_unit': 'min', 'flow_unit': 'mL/min',
-        # Sample rules: the two declarations are required, the two flags switch
-        # the rules that follow from them (alumina crucible / consultation).
-        'rules_ack': False, 'no_acid': False,
+        # Sample rules: one statement that the sample fulfils them (what the
+        # software cannot check), plus the metallic flag that switches the
+        # crucible rule and the consultation.
+        'rules_ack': False,
         'metallic': False, 'ms_coupling': False, 'consulted': False,
+        # where the result should go - prefilled from the NOMAD session
+        'requester_email': '',
     }
 
 
@@ -184,6 +199,32 @@ async def fresh_token() -> str:
 def current_user() -> dict | None:
     tok = auth_token()
     return nomad_api.user_from_token(tok) if tok else None
+
+
+async def prefill_session_fields():
+    """Fill in what the session already knows - the requester can override it.
+
+    Whether this finds an address depends on the login token: NOMAD's realm
+    hands out a claim only if the Keycloak client includes the email scope. If
+    it does not, the field simply stays empty for the requester to fill in.
+    """
+    try:
+        tok = await fresh_token()
+    except Exception:
+        return
+    email = email_from_token(tok)
+    if not email:
+        return
+    form = get_form()
+    if (form.get('requester_email') or '').strip():
+        return  # the user typed one already, do not overwrite it
+    form['requester_email'] = email
+    field = unit_refs.get('requester_email')
+    if field is not None:
+        try:
+            field.value = email
+        except Exception:
+            pass
 
 
 # ── Segment card UI ──────────────────────────────────────────────────────────
@@ -253,8 +294,6 @@ def change_unit(kind: str, new_unit: str, seg_keys=None, form_keys=None):
         rebuild_segments()
     else:
         update_method_suggestion()
-    if kind == 'mass':
-        update_mass_hint()
 
 
 def set_segment_type(idx: int, seg_type: str):
@@ -317,26 +356,22 @@ def on_sample_name_change(value):
     update_consult_box()
 
 
-def update_mass_hint():
-    """Live check of the 100 mg limit, so the user sees it before submitting."""
-    label = rules_refs.get('mass')
-    if label is None:
-        return
-    mg = mass_in_mg()
-    if mg is None:
-        label.set_text(f'Limit {MASS_MAX_MG:.0f} mg, optimum {MASS_OPT_MG:.0f} mg.')
-        label.classes(remove='tga-rules-warn')
-    elif mg > MASS_MAX_MG:
-        label.set_text(f'{mg:.0f} mg is above the {MASS_MAX_MG:.0f} mg limit.')
-        label.classes(add='tga-rules-warn')
-    else:
-        label.set_text(f'{mg:.0f} mg - within the limit (optimum {MASS_OPT_MG:.0f} mg).')
-        label.classes(remove='tga-rules-warn')
+def _mass_ok(value) -> bool:
+    """Field rule for the sample mass: 0..100 mg, not enforced by clamping.
+
+    Quasar's own max= would silently rewrite 150 to 100; the point is that the
+    field turns red and the request cannot be sent, so the value stays as typed.
+    """
+    if value in (None, ''):
+        return True
+    try:
+        return 0 <= float(value) <= MASS_MAX_MG
+    except (TypeError, ValueError):
+        return False
 
 
 def on_mass_change(value):
     get_form()['sample_mass'] = value if value not in (None, '') else None
-    update_mass_hint()
 
 
 def update_runtime_label():
@@ -567,16 +602,21 @@ def validate() -> list:
     form = get_form()
     if not form['sample_name'].strip():
         errs.append('Please enter a sample name.')
-    # Sample rules the form can enforce (the rest are declarations below).
+    email = (form.get('requester_email') or '').strip()
+    if not email:
+        errs.append('Please enter the email address the result should go to.')
+    elif '@' not in email or '.' not in email.split('@')[-1]:
+        errs.append('That does not look like an email address.')
+    # The mass limit is enforced by the field itself (it turns red and refuses
+    # the value) - this is the net for anything that bypasses the field.
     mass = mass_in_mg()
-    if mass is not None and mass > MASS_MAX_MG:
+    if mass is None:
+        errs.append('Please enter the sample mass.')
+    elif mass > MASS_MAX_MG:
         errs.append(f'Sample mass {mass:.0f} mg is above the {MASS_MAX_MG:.0f} mg limit '
                     f'(aim for {MASS_OPT_MG:.0f} mg).')
     if not form.get('rules_ack'):
-        errs.append('Please confirm that your sample meets the sample requirements.')
-    if not form.get('no_acid'):
-        errs.append('Samples containing acids or bases cannot be measured - '
-                    'please confirm that yours contains none.')
+        errs.append('Please confirm that your sample fulfils the sample requirements.')
     if form.get('metallic') and form.get('crucible_type') != 'Alumina':
         errs.append('Metallic samples can only be measured in an alumina crucible.')
     reasons = consultation_reasons()
@@ -732,6 +772,16 @@ async def submit():
                     ui.label(f'Upload ID: {uid}').classes('tga-mono')
                     if ps:
                         ui.label(f'Status: {ps}').classes('text-sm')
+                    # The requester gets the code and the drop-off address in
+                    # the same place - that is the moment they need both.
+                    with ui.element('div').classes('tga-dropoff-box'):
+                        ui.label('Bring the sample to the lab - after agreeing the '
+                                 'drop-off with Pedro or Luca by email:') \
+                            .classes('tga-dropoff-lead')
+                        ui.label('\n'.join(LAB_ADDRESS)).classes('tga-dropoff-addr')
+                    if get_form().get('requester_email'):
+                        ui.label(f'Contact address for this request: '
+                                 f'{get_form()["requester_email"]}').classes('tga-hint')
                     ui.button(
                         'Open this upload in NOMAD',
                         on_click=lambda: ui.navigate.to(
@@ -741,8 +791,6 @@ async def submit():
                              'The result files and the plots are added to this same '
                              'upload after the run, so everything stays in one place '
                              'and remains visible to you.').classes('text-grey-5 text-sm')
-                    ui.label(f'Bring your sample after emailing {CONTACTS}.') \
-                        .classes('tga-dropoff')
             else:
                 ui.label('Request submitted. The operator app will pick it up shortly.') \
                     .classes('text-grey-5')
@@ -833,19 +881,17 @@ def index(request: Request):
                     ui.label('1 · Sample').classes('tga-section-title')
                     ui.label('Name the sample and check it against the sample '
                              'requirements.').classes('tga-section-sub')
-            # The lab's sample rules. Shown, not hidden behind a click: most of
-            # them cannot be checked by software (piece size, volatility, how
-            # long the sample waits on the pan), so the requester declares them
-            # in the checkboxes below.
+            # The lab's sample rules. Only what the software cannot check is
+            # written out here - the mass limit is enforced by the field, and
+            # what the requester has to confirm is one statement below.
             with ui.element('div').classes('tga-rules'):
                 ui.label('Sample requirements').classes('tga-rules-title')
                 for what, text in (
                     ('Size', f'max {PAN_MAX_MM} x {PAN_MAX_MM} mm - it has to fit the pan'),
                     ('Form', 'pieces or powder'),
-                    ('Mass', f'max {MASS_MAX_MG:.0f} mg, aim for {MASS_OPT_MG:.0f} mg'),
+                    ('Mass', f'aim for {MASS_OPT_MG:.0f} mg'),
                     ('Liquid', 'only if not volatile'),
-                    ('Metal', 'alumina crucible only - the crucible may have to be '
-                              'ordered, ask first'),
+                    ('Metal', 'alumina crucible only'),
                     ('Acids/bases', 'cannot be measured'),
                     ('Waiting', 'samples run in sequence, so yours may sit on the pan for '
                                 'more than a day at room conditions'),
@@ -853,26 +899,22 @@ def index(request: Request):
                     with ui.row().classes('tga-rules-row'):
                         ui.label(what).classes('tga-rules-what')
                         ui.label(text).classes('tga-rules-text')
-                ui.label(f'Bring your sample after emailing {CONTACTS}.').classes('tga-rules-foot')
             with ui.row().classes('w-full gap-4 mt-1'):
                 with ui.column().classes('gap-1 flex-1'):
                     ui.label('Sample name *').classes('tga-label')
                     ui.input(value=get_form()['sample_name'],
                              on_change=lambda e: on_sample_name_change(e.value)) \
                         .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-44'):
-                    ui.label('Sample mass').classes('tga-label')
+                with ui.column().classes('gap-1 w-52'):
+                    ui.label(f'Sample mass (mg) *').classes('tga-label')
+                    # The 100 mg limit is not written down anywhere - the field
+                    # refuses to take it (red + message) and the submit button
+                    # would not get past validate() either.
                     unit_refs['sample_mass'] = ui.number(
                         value=get_form()['sample_mass'],
+                        precision=3,
+                        validation={f'Between 0 and {MASS_MAX_MG:.0f} mg': _mass_ok},
                         on_change=lambda e: on_mass_change(e.value)) \
-                        .props('outlined dense').classes('w-full')
-                    # live check against the 100 mg limit / 50 mg optimum
-                    rules_refs['mass'] = ui.label('').classes('tga-hint')
-                with ui.column().classes('gap-1 w-28'):
-                    ui.label('Unit').classes('tga-label')
-                    ui.select(UNIT_MASS, value=get_form()['mass_unit'],
-                              on_change=lambda e: change_unit(
-                                  'mass', e.value, form_keys=['sample_mass'])) \
                         .props('outlined dense').classes('w-full')
             # Crucible is optional: the instrument records the crucible it
             # actually used, so this is only the requester's preference.
@@ -894,18 +936,17 @@ def index(request: Request):
                                  on_change=lambda e: get_form().update(pan_number=e.value)) \
                             .props('outlined dense').classes('w-full')
 
-            # What the form cannot check by itself, the requester declares. The
-            # two statements are required; the two flags switch the rules that
-            # follow from them (alumina crucible / consultation).
+            # Everything the software cannot check is stated once. If the sample
+            # does not fulfil the requirements, the way to go is the consultation
+            # above the submit button, not a submission.
             with ui.column().classes('gap-1 w-full mt-3'):
-                ui.checkbox('My sample meets the requirements above '
-                            '(size, form, non-volatile, waiting time).',
+                ui.checkbox('My sample fulfils the requirements above.',
                             value=get_form()['rules_ack'],
                             on_change=lambda e: get_form().update(rules_ack=bool(e.value)))
-                ui.checkbox('My sample contains no acids or bases.',
-                            value=get_form()['no_acid'],
-                            on_change=lambda e: get_form().update(no_acid=bool(e.value)))
-                ui.checkbox('Metallic sample - has to be measured in an alumina crucible.',
+                ui.label('If it does not, or you are unsure, clarify it with the lab by '
+                         'email first - the form asks for that above the submit button.')\
+                    .classes('tga-hint')
+                ui.checkbox('Metallic sample (alumina crucible).',
                             value=get_form()['metallic'],
                             on_change=lambda e: on_metallic_change(e.value))
 
@@ -995,13 +1036,27 @@ def index(request: Request):
             # the >1 day rule depends on the program, so show the estimate
             rules_refs['runtime'] = ui.label('').classes('tga-hint')
 
-        # 4. Method & notes
+        # 4. Method & contact
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
                 ui.icon('edit_note', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0 flex-1'):
-                    ui.label('4 · Method & notes').classes('tga-section-title')
-                    ui.label('Anything the operator should know.').classes('tga-section-sub')
+                    ui.label('4 · Method & contact').classes('tga-section-title')
+                    ui.label('Anything the operator should know, and where the result '
+                             'should go.').classes('tga-section-sub')
+            # Prefilled from the NOMAD session (the email is in the login token,
+            # NOMAD reads it the same way) and stored with the request, because
+            # NOMAD's own user record does not carry an address here - without
+            # this the requester cannot be reached when the measurement is done.
+            with ui.column().classes('gap-1 w-full mt-1'):
+                ui.label('Your email *').classes('tga-label')
+                unit_refs['requester_email'] = ui.input(
+                    value=get_form()['requester_email'],
+                    on_change=lambda e: get_form().update(
+                        requester_email=(e.value or '').strip())) \
+                    .props('outlined dense').classes('w-full')
+                ui.label('Taken from your NOMAD login - change it if the result should '
+                         'go somewhere else.').classes('tga-hint')
             # Method name is optional and pre-filled from the segments: it is
             # patched into the .tprc and becomes the procedure name in TRIOS.
             with ui.expansion('Method name (optional)', icon='label').classes('tga-adv w-full mt-1'):
@@ -1032,9 +1087,10 @@ def index(request: Request):
         result_box = ui.column().classes('w-full items-center gap-2')
 
         # initial state of the live rule hints
-        update_mass_hint()
         update_runtime_label()
         update_consult_box()
+        # the email sits in the login token; read it once the page exists
+        ui.timer(0.6, prefill_session_fields, once=True)
 
 
 ui.run(host='0.0.0.0', port=int(os.environ.get('PORT', '8090')),

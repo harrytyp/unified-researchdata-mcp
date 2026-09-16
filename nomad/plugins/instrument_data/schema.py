@@ -265,6 +265,13 @@ class TgaMeasurement(PlotSection, EntryData):
     pan_number = Quantity(
         type=str, description="Pan / crucible identifier",
         a_eln=ELNAnnotation(component="StringEditQuantity"))
+    requester_email = Quantity(
+        # Stored with the request because NOMAD's own user record carries no
+        # address in this Oasis (User.email is unset), so this is the only way
+        # to reach the person who asked for the measurement.
+        type=str,
+        description="Email address the requester wants the result to go to",
+        a_eln=ELNAnnotation(component="StringEditQuantity"))
 
     # ── Method ──
     procedure_name = Quantity(

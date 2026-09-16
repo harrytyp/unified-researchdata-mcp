@@ -2,7 +2,7 @@
 
 Verifies in a real browser:
   - the form renders for a signed-in user
-  - the unit dropdowns exist (sample mass, gas flows, temperature program)
+  - the unit dropdowns exist (gas flows, temperature program); mass is mg only
   - switching a unit rescales the value already entered (change_unit)
   - submitting through the UI creates the upload with the readable name,
     generates the .tprc and adds the operator group
@@ -102,43 +102,27 @@ with sync_playwright() as p:
     segtext = page.inner_text('.tga-seg')
     check('Segment-Label nennt die Einheit (z.B. [°C])', '°C' in segtext, segtext[:120])
 
-    # mass value + unit switch (rescale check): enter 0.5, switch unit to g,
-    # the displayed number must become 500 (the stored value stays 0.5 mg *1000)
+    # mass: mg only (no gram option any more), value is taken as entered
     mass_field = page.locator(
-        'xpath=//div[contains(@class,"tga-label") and normalize-space()="Sample mass"]'
+        'xpath=//div[contains(@class,"tga-label") and normalize-space()="Sample mass (mg) *"]'
         '/following::input[1]').first
-    mass_field.fill('0.5')
+    mass_field.fill('12.333')
     mass_field.press('Tab')
     page.wait_for_timeout(800)
-    before = mass_field.input_value()
-    # open the mass unit dropdown: it is the FIRST select on the page
-    # (order: mass unit, crucible, purge gas, flow unit, temp/rate/time units, ...)
-    unit_sel = page.locator('.q-select').nth(0)
-    unit_sel.click()
-    page.wait_for_timeout(700)
-    opts = page.locator('.q-menu .q-item__label')
-    labels_seen = [opts.nth(i).inner_text() for i in range(opts.count())]
-    print('  Einheiten-Optionen:', labels_seen)
-    (opts.nth(1) if opts.count() > 1 else opts.last).click()
-    page.wait_for_timeout(1200)
-    after = mass_field.input_value()
-    # 0.5 mg shown in g is 0.0005 g - the physical value must be preserved
-    check('Masse mg -> g rechnet um (0.5 -> 0.0005)',
-          abs(float(after or 0) - 0.0005) < 1e-12, f'{before!r} -> {after!r}')
-    # and back to mg: 0.0005 g -> 0.5 mg
-    unit_sel.click()
-    page.wait_for_timeout(700)
-    page.locator('.q-menu .q-item__label').nth(0).click()
-    page.wait_for_timeout(1200)
-    back = mass_field.input_value()
-    check('Masse g -> mg zurueck (0.0005 -> 0.5)',
-          abs(float(back or 0) - 0.5) < 1e-12, f'{after!r} -> {back!r}')
+    check('Masse nimmt mg an, ohne Einheitenwechsel',
+          abs(float(mass_field.input_value() or 0) - 12.333) < 1e-9,
+          mass_field.input_value())
 
     # fill a valid request and submit through the UI
     sample = 'UI-' + str(int(time.time()))[-6:]
     page.locator(
         'xpath=//div[contains(@class,"tga-label") and normalize-space()="Sample name *"]'
         '/following::input[1]').first.fill(sample)
+    # the requester address is a mandatory field (prefilled from the login
+    # token when it carries one - a minted test token does not)
+    page.locator(
+        'xpath=//div[contains(@class,"tga-label") and normalize-space()="Your email *"]'
+        '/following::input[1]').first.fill('tga-test@tum.de')
     ramp_end = page.locator(
         'xpath=//input[contains(@aria-label,"Target temperature")]').first
     ramp_end.fill('600')
@@ -157,9 +141,8 @@ with sync_playwright() as p:
     check('Methodenname wird aus den Segmenten gefuellt',
           'Ramp' in suggested and '600' in suggested and 'N2' in suggested, suggested)
 
-    # the sample rules require two declarations before a request can be sent
-    page.get_by_text('My sample meets the requirements', exact=False).first.click()
-    page.get_by_text('contains no acids or bases', exact=False).first.click()
+    # the sample rules require one statement before a request can be sent
+    page.get_by_text('My sample fulfils the requirements', exact=False).first.click()
     page.wait_for_timeout(700)
 
     page.get_by_role('button', name='Create measurement request').first.click()

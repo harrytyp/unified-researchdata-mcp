@@ -1,16 +1,20 @@
 """Browser test: the lab's sample rules in the TGA form.
 
-Covers what the form can enforce (mass limit, metallic -> alumina, acids,
-consultation for metallic / MS coupling / runs above a day) and the two
-declarations the requester has to make. Ends with a real submit and checks the
-notes the operator gets to see in NOMAD.
+Covers what the form enforces (the 100 mg limit sits in the mass field,
+metallic -> alumina, consultation for metallic / MS coupling / runs above a
+day), the single requirements statement, the email prefilled from the login
+token and the drop-off address in the confirmation. Ends with a real submit and
+checks what the operator gets to see in NOMAD.
 
 How to run (token is minted server-side and never printed):
 
   docker exec nomad_oasis_app python3 -c "from nomad.auth.tokens import \
-generate_simple_token as g; open('/tmp/tok.txt','w').write(g('<user_id>', 3600))"
+generate_simple_token as g; open('/tmp/tok.txt','w').write(g('<user_id>', 7200))"
   docker cp nomad_oasis_app:/tmp/tok.txt /tmp/tok.txt
   TGA_UI_TOKEN=$(ssh <host> 'cat /tmp/tok.txt') python rules_test.py
+
+The email prefill cannot be checked with a minted token (see section 1b); the
+token decode itself is covered by test_session_email.py.'
 """
 import json
 import os
@@ -24,6 +28,8 @@ URL = 'https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/'
 API = 'https://researchmcp.duckdns.org/nomad-oasis/api/v1'
 TOK = os.environ['TGA_UI_TOKEN']
 SAMPLE = 'UI-RULES-' + str(int(time.time()))[-6:]
+# the email the test token carries; the form must prefill it by itself
+EXPECT_EMAIL = os.environ.get('TGA_TEST_EMAIL', 'tga-test@tum.de')
 FAILS = []
 
 
@@ -83,27 +89,23 @@ def submit_and_read_errors(page):
 
 
 def submit_and_wait(page, seconds=45):
+    """Click submit and watch for the outcome - collecting toasts as they come.
+
+    A failure toast lives ~5 s; reading them only after a 45 s wait would miss
+    exactly the error we are looking for.
+    """
     click_submit(page)
     body = ''
+    seen = []
     for _ in range(seconds):
         page.wait_for_timeout(1000)
         body = page.inner_text('body')
+        note = toasts(page)
+        if note and note not in seen:
+            seen.append(note)
         if 'Measurement request created' in body or 'Request submitted' in body:
             break
-    return body
-
-
-def switch_mass_unit(page, label):
-    """The mass unit is the first select on the page (see ui_units_test)."""
-    page.locator('.q-select').nth(0).click()
-    page.wait_for_timeout(700)
-    opts = page.locator('.q-menu .q-item__label')
-    for i in range(opts.count()):
-        if opts.nth(i).inner_text().strip() == label:
-            opts.nth(i).click()
-            page.wait_for_timeout(1200)
-            return True
-    return False
+    return body, ' | '.join(seen)
 
 
 uid = None
@@ -127,10 +129,12 @@ with sync_playwright() as p:
     atmo_panel = (panels[1] if len(panels) > 1 else '').lower()
     temp_panel = (panels[2] if len(panels) > 2 else '').lower()
 
-    for needle in ('sample requirements', '5 x 5 mm', '100 mg', '50 mg',
+    for needle in ('sample requirements', '5 x 5 mm', 'aim for 50 mg',
                    'pieces or powder', 'not volatile', 'alumina crucible only',
-                   'acids or bases', 'sit on the pan'):
+                   'acids/bases', 'sit on the pan'):
         check(f'Sample-Panel: "{needle}"', needle in sample_panel)
+    check('Sample-Panel schreibt die 100-mg-Grenze NICHT mehr hin',
+          '100 mg' not in sample_panel)
     check('Atmosphaere-Regel steht im Atmosphaere-Panel',
           'nitrogen and air' in atmo_panel)
     check('Laufzeit-Regel steht im Programm-Panel',
@@ -143,33 +147,50 @@ with sync_playwright() as p:
           'longer than 1 day' not in sample_panel)
 
     print()
-    print('=== 2. Pflicht-Erklaerungen blockieren ===')
+    print('=== 1b. E-Mail des Senders ===')
+    email_field = labelled_input(page, 'Your email *')
+    check('E-Mail-Feld vorhanden', email_field.count() > 0)
+    prefill = email_field.input_value() if email_field.count() else ''
+    # A minted test token is a NOMAD simple token and cannot carry an email:
+    # NOMAD treats any JWT with more than {user, exp} as a Keycloak token and
+    # then demands a key it can verify against the realm. So no prefill here -
+    # the token decode itself is covered by test_session_email.py, and the
+    # real login token is the one that carries the claim.
+    check('kein Fantasiewert ohne E-Mail-Claim', prefill == '', prefill)
+    set_input(page, 'Your email *', EXPECT_EMAIL)
+    check('E-Mail laesst sich eintragen und bleibt stehen',
+          labelled_input(page, 'Your email *').input_value() == EXPECT_EMAIL)
+
+    print()
+    print('=== 2. Pflichtfelder blockieren ===')
     set_input(page, 'Sample name *', SAMPLE)
     set_aria_input(page, 'Target temperature', '600')
     set_aria_input(page, 'Rate', '10')
     t = submit_and_read_errors(page)
-    check('ohne Erklaerung kein Submit',
+    check('ohne Masse/Erklaerung kein Submit',
           'measurement request created' not in page.inner_text('body').lower())
-    check('Meldung zu den Sample-Vorgaben', 'sample requirements' in t.lower(), t[:170])
-    check('Meldung zu Saeuren/Basen', 'acids or bases' in t.lower(), t[:170])
+    check('Meldung zur fehlenden Masse', 'sample mass' in t.lower(), t[:200])
+    check('Meldung zur Erklaerung',
+          'fulfils the sample requirements' in t.lower(), t[:200])
 
     print()
-    print('=== 3. Massengrenze ===')
-    set_input(page, 'Sample mass', '150')
+    print('=== 3. Massengrenze sitzt im Feld, nicht im Text ===')
+    set_input(page, 'Sample mass (mg) *', '150')
     txt = page.inner_text('body')
-    check('Hinweis ueber der 100-mg-Grenze', 'above the 100 mg limit' in txt,
-          [ln for ln in txt.splitlines() if 'limit' in ln.lower()][:2])
+    check('Feld meldet die Grenze', 'between 0 and 100 mg' in txt.lower(),
+          [ln for ln in txt.splitlines() if '100' in ln][:2])
+    check('Feld ist rot markiert', page.locator('.q-field--error').count() > 0)
+    check('Wert wird nicht still geklemmt',
+          labelled_input(page, 'Sample mass (mg) *').input_value() == '150',
+          labelled_input(page, 'Sample mass (mg) *').input_value())
     t = submit_and_read_errors(page)
-    check('Submit ueber 100 mg blockiert', '100 mg limit' in t, t[:170])
-    set_input(page, 'Sample mass', '50')
-    check('50 mg gilt als im Limit', 'within the limit' in page.inner_text('body'))
-    ok_unit = switch_mass_unit(page, 'g')
-    check('Masseneinheit laesst sich auf g stellen', ok_unit)
-    check('0.05 g bleibt im Limit',
-          'within the limit' in page.inner_text('body'),
-          [ln for ln in page.inner_text('body').splitlines() if 'limit' in ln.lower()][:2])
-    switch_mass_unit(page, 'mg')
-    set_input(page, 'Sample mass', '50')
+    check('Submit ueber 100 mg blockiert', '100 mg' in t, t[:170])
+    set_input(page, 'Sample mass (mg) *', '50')
+    check('50 mg wird angenommen', page.locator('.q-field--error').count() == 0)
+    select_texts = [s.strip() for s in page.eval_on_selector_all(
+        '.q-select', 'els => els.map(e => e.innerText)')]
+    check('keine Gramm-Einheit mehr',
+          not any(s == 'g' for s in select_texts), select_texts[:6])
 
     print()
     print('=== 4. Metallische Probe -> Alumina + Ruecksprache ===')
@@ -181,7 +202,12 @@ with sync_playwright() as p:
     check('Kontakte stehen im Block', 'p.braun@tum.de' in txt)
     page.get_by_text('Crucible (optional)').first.click()   # expand to look inside
     page.wait_for_timeout(900)
-    cruc = page.locator('.q-select').nth(1).inner_text()
+    # the crucible select is addressed by its label (NiceGUI renders ui.select
+    # as a <label class="q-select">, and the select indices moved when the mass
+    # unit dropdown was dropped)
+    cruc = page.locator(
+        'xpath=//div[contains(@class,"tga-label") and normalize-space()="Crucible"]'
+        '/following::*[contains(@class,"q-select")][1]').first.inner_text()
     check('Tiegel im Formular auf Alumina festgelegt', 'Alumina' in cruc, cruc[:40])
     page.get_by_text('Crucible (optional)').first.click()
     page.wait_for_timeout(600)
@@ -213,17 +239,25 @@ with sync_playwright() as p:
     check('Grund "run time above 1 day" im Block', 'run time above 1 day' in txt.lower())
 
     print()
-    print('=== 7. Mit Erklaerungen + Ruestprache-Bestaetigung ===')
-    page.get_by_text('My sample meets the requirements', exact=False).first.click()
-    page.get_by_text('contains no acids or bases', exact=False).first.click()
-    page.wait_for_timeout(700)
+    print('=== 7. Erklaerung + Rucksprache-Bestaetigung -> Submit ===')
+    page.get_by_text('My sample fulfils the requirements', exact=False).first.click()
+    page.wait_for_timeout(600)
     page.get_by_text('I have contacted', exact=False).first.click()
     page.wait_for_timeout(900)
-    body = submit_and_wait(page)
+    body, submit_notes = submit_and_wait(page)
+    if 'Measurement request created' not in body and 'Request submitted' not in body:
+        print('   Was der Submit gemeldet hat:', submit_notes[:500] or '(nichts)')
     check('Submit gelingt', ('Measurement request created' in body
                              or 'Request submitted' in body))
-    check('Abgabe-Hinweis im Erfolgsdialog',
-          'Bring your sample after emailing' in body)
+    check('Sample-Code im Erfolgsdialog', 'write this on the sample' in body)
+    for line in ('TUM School of Engineering and Design',
+                 'Department of Materials Engineering',
+                 'Lehrstuhl für Werkstoffwissenschaften',
+                 'Boltzmannstr. 15', '85748 Garching', 'MW 2228'):
+        check(f'Adresse im Erfolgsdialog: "{line}"', line in body)
+    check('Adresse nur nach Absprache',
+          'agreeing the drop-off' in body.lower())
+    check('Kontaktadresse im Erfolgsdialog', EXPECT_EMAIL in body, EXPECT_EMAIL)
     m = re.search(r'Upload ID: (\S+)', body)
     uid = m.group(1) if m else None
     check('Upload-ID im Erfolgsdialog', bool(uid), uid)
@@ -248,6 +282,9 @@ with sync_playwright() as p:
             check('Gas bleibt N2/Air',
                   inner.get('gas_atmosphere') in ('N2', 'Air'),
                   inner.get('gas_atmosphere'))
+            check('E-Mail des Senders im Eintrag gespeichert',
+                  inner.get('requester_email') == EXPECT_EMAIL,
+                  inner.get('requester_email'))
         except Exception as e:
             FAILS.append(f'Eintrag nicht pruefbar: {e}')
             print('   Fehler beim Auslesen:', e)

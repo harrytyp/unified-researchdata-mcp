@@ -120,7 +120,8 @@ body.body--light .tga-seg-title { color: #1f2430; }
 body.body--light .tga-success { color: #374151; }
 .tga-success-title { font-size: 1.15rem; font-weight: 600; color: #f2f3f5; }
 body.body--light .tga-success-title { color: #111827; }
-.tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #8a8f98; }
+.tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #b6bcc6; }
+body.body--light .tga-mono { color: #475569; }
 
 /* Short sample id in the confirmation: the code the requester has to write on
    the crucible, so it has to stand out enough to copy by hand. */
@@ -191,10 +192,21 @@ body.body--light .tga-hint { color: #6b7280; }
     border-radius: 0.7rem;
     background: rgba(245, 158, 11, 0.08);
 }
-.tga-dropoff {
-    font-size: 0.8rem; font-weight: 600; color: #a5b4fc;
+/* Where the sample goes: sits with the sample code in the confirmation, the
+   one moment the requester needs both. Address keeps its line breaks. */
+.tga-dropoff-box {
+    display: flex; flex-direction: column; gap: 0.35rem; align-items: center;
+    margin-top: 0.9rem; padding: 0.85rem 1.1rem;
+    border: 1px solid rgba(165, 180, 252, 0.35); border-radius: 10px;
+    background: rgba(99, 102, 241, 0.07); max-width: 46rem;
 }
-body.body--light .tga-dropoff { color: #4338ca; }
+.tga-dropoff-lead { font-size: 0.82rem; font-weight: 600; color: #a5b4fc; text-align: center; }
+body.body--light .tga-dropoff-lead { color: #4338ca; }
+.tga-dropoff-addr {
+    font-size: 0.85rem; line-height: 1.5; white-space: pre-line;
+    text-align: center; color: #cbd5e1;
+}
+body.body--light .tga-dropoff-addr { color: #334155; }
 .tga-consult-link { font-size: 0.82rem; font-weight: 600; color: #a5b4fc !important; }
 body.body--light .tga-consult-link { color: #4338ca !important; }
 

@@ -365,7 +365,11 @@ def build_archive(form: Dict[str, Any]) -> Dict[str, Any]:
             value = to_canonical(kind, form.get(key), flow_unit)
             if value is not None:
                 data[key] = value
-    for key in ('crucible_type', 'pan_number', 'gas_atmosphere', 'comments'):
+    # requester_email is stored with the request: NOMAD's user record
+    # carries no address in this Oasis, so this is the only way to reach
+    # the person who asked for the measurement.
+    for key in ('crucible_type', 'pan_number', 'gas_atmosphere', 'comments',
+                'requester_email'):
         if form.get(key) not in (None, ''):
             data[key] = form[key]
     if segments:
