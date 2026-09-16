@@ -10,6 +10,7 @@ from ui_common import (STATUS_COLORS,
 on_open_detail = None       # fn(upload_id)
 on_selection_change = None  # fn() — selection changed (action bar update)
 on_status_changed = None    # fn()
+on_assign_slots = None      # fn() — hand out the crucible slots (see main.py)
 
 
 def build_board(backend: Backend, container: ui.column):
@@ -55,7 +56,8 @@ def build_column_header(backend: Backend, status: str):
                          if backend.slot_for(r['upload_id']))
             ui.linear_progress(value=filled / NUM_SLOTS, show_value=False) \
                 .classes('w-16 shrink-0').props('color=deep-purple')
-            ui.label(f'{filled}/{NUM_SLOTS}').classes('text-xs text-grey-6 tga-sub shrink-0')
+            ui.label(f'{filled}/{NUM_SLOTS}').classes('text-xs text-grey-6 tga-sub shrink-0')\
+                .tooltip(_('slots_external_hint'))
 
 
 def build_column_body(backend: Backend, status: str, col_body=None):
@@ -69,6 +71,13 @@ def build_column_body(backend: Backend, status: str, col_body=None):
         ctx = None  # use the ambient slot (during initial build)
 
     if status == 'assigned':
+        # The slot button lives here as well as in the action bar: the action bar
+        # only shows up with a selection, and the lab wants one button that puts
+        # every waiting sample into the pan (no selection needed).
+        if on_assign_slots:
+            ui.button(_('assign_slots'), on_click=on_assign_slots) \
+                .props('flat dense no-caps').classes('text-xs self-start tga-sub px-1') \
+                .tooltip(_('slots_external_hint'))
         # Queue first (assigned but no slot yet), then slotted cards sorted.
         queued = [r for r in backend.uploads
                   if backend.display_status(r['upload_id'], r['has_result']) == 'assigned'

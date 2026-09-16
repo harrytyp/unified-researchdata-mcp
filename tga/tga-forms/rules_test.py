@@ -361,20 +361,6 @@ with sync_playwright() as p:
     page.keyboard.press('Escape')
     page.wait_for_timeout(400)
 
-    print()
-    print('=== 7. Slot-Vergabe (Operatoren) ===')
-    page.goto(URL + 'admin')
-    page.wait_for_timeout(2500)
-    admin_body = page.inner_text('body')
-    if 'Not enabled for this account' in admin_body:
-        print('  [SKIP] Admin-Panel (der Token gehoert zu keinem Admin-Konto)')
-    else:
-        check('Admin: Slot-Panel vorhanden', 'Crucible slots' in admin_body)
-        check('Admin: Button vergibt nach Eingangsdatum',
-              'assign by registration date' in admin_body.lower())
-        page.goto(URL)
-        page.wait_for_timeout(2000)
-
     check('keine JS-Fehler', not errors, errors[:2])
     page.screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                       'rules_test.png'), full_page=True)

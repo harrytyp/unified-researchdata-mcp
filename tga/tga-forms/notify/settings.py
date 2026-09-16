@@ -40,11 +40,6 @@ SENT_FILE = os.path.join(DATA_DIR, "sent.jsonl")
 # (z. B. einmal fuer die .json und einmal fuer die .gz), und jede
 # Verarbeitung meldet sich. Nur ein geaenderter Stand verschickt erneut.
 NOTIFIED_FILE = os.path.join(DATA_DIR, "notified.json")
-# Welcher Antrag in welchem Tiegel-Slot steckt. Der Antragsteller waehlt das
-# nicht selbst - die Operatoren vergeben die Nummern in der Reihenfolge des
-# Eingangs (die ersten Slots sind fuer externe Analysen reserviert).
-PAN_SLOTS_FILE = os.path.join(DATA_DIR, "pan_slots.json")
-
 # The account that may open the admin page. Only Kolja Knodel for now - the page
 # writes mail credentials and API keys, so it is not for everyone. Listed by
 # name, user name, email and NOMAD user id: a login token may carry some of them
@@ -90,9 +85,6 @@ DEFAULTS: Dict[str, Any] = {
         "moved_to_elabftw": True,
         "processing_failed_operator": True,
     },
-    # Wie viele Slots fuer externe Analysen reserviert sind. Die Vergabe
-    # nummeriert darueber hinaus weiter, damit nichts unbemerkt liegen bleibt.
-    "pan_slots": {"external": 5},
     "elabftw": {
         "instance_url": "",
         "api_key": "",
@@ -311,59 +303,6 @@ def log_sent(record: Dict[str, Any], path: str = SENT_FILE) -> None:
 
 def sent_read(limit: int = 50, path: str = SENT_FILE) -> list:
     return outbox_read(path)[-limit:]
-
-
-def pan_slots_read(path: str = PAN_SLOTS_FILE) -> Dict[str, Any]:
-    """{upload_id: slot number} - who sits in which crucible slot."""
-    data = _read_json(path, {})
-    return data if isinstance(data, dict) else {}
-
-
-def pan_slot_get(upload_id: str, path: str = PAN_SLOTS_FILE) -> Optional[int]:
-    value = pan_slots_read(path).get(str(upload_id))
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def pan_slots_assign(upload_ids: List[str], start: int = 1,
-                     path: str = PAN_SLOTS_FILE) -> Dict[str, int]:
-    """Number the given uploads in the order they are passed in.
-
-    The caller passes them sorted by registration date, which is what makes the
-    slot numbers follow the order the requests arrived. Already assigned
-    requests keep their number, so running it again only fills the gaps.
-    """
-    current = pan_slots_read(path)
-    assigned: Dict[str, int] = {}
-    for upload_id in upload_ids:
-        key = str(upload_id)
-        if current.get(key) is not None:
-            assigned[key] = int(current[key])
-            continue
-        taken = {int(value) for value in current.values()
-                 if str(value).lstrip("-").isdigit()}
-        while start in taken:
-            start += 1
-        current[key] = start
-        assigned[key] = start
-        start += 1
-    _write_json(path, current)
-    return assigned
-
-
-def pan_slots_clear(path: str = PAN_SLOTS_FILE) -> None:
-    """Forget the assignment (the requests themselves are untouched)."""
-    _write_json(path, {})
-
-
-def external_slots() -> int:
-    """How many crucible slots the lab keeps for external analyses."""
-    try:
-        return int((load_settings().get("pan_slots") or {}).get("external") or 0)
-    except (TypeError, ValueError):
-        return 0
 
 
 def was_notified(key: str, path: str = NOTIFIED_FILE) -> str:

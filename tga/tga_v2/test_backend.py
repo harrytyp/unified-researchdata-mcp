@@ -289,4 +289,24 @@ assert getattr(b6.client, 'triggers', []) == ['AAA111'], \
 assert b6.client.busy_calls >= 1, 'wait_until_idle muss vor dem Trigger laufen'
 print('E2E-RACE: upload_result → wait_until_idle + async trigger_process OK')
 
+# 5c. Slots folgen dem Eingangsdatum, nicht der Reihenfolge der Liste
+# (AAA111 kam am 2026-08-01, BBB222 am 2026-08-02 - der aeltere Antrag bekommt
+# die kleinere Nummer, auch wenn die Liste umgekehrt uebergeben wird).
+b.config['slot_assignments'] = {}
+ok3, failed3 = b.save_slot_files([{'upload_id': 'BBB222', 'sample': 'Probe B'},
+                                  {'upload_id': 'AAA111', 'sample': 'Probe A'}], import_dir)
+assert b.slot_for('AAA111') == '01', f'Probe A (01.08.) muss Slot 01 bekommen, hat {b.slot_for("AAA111")}'
+assert b.slot_for('BBB222') == '02', f'Probe B (02.08.) muss Slot 02 bekommen, hat {b.slot_for("BBB222")}'
+assert not failed3, failed3
+from backend import by_registration, EXTERNAL_SLOTS
+rows_sorted = by_registration([
+    {'upload_id': 'C', 'upload_create_time': '2026-08-03T10:00:00'},
+    {'upload_id': 'A', 'upload_create_time': '2026-08-01T10:00:00'},
+    {'upload_id': 'B', 'upload_create_time': '2026-08-02T10:00:00'},
+])
+assert [r['upload_id'] for r in rows_sorted] == ['A', 'B', 'C'], rows_sorted
+assert EXTERNAL_SLOTS == 5, f'fuenf Slots fuer externe Analysen, nicht {EXTERNAL_SLOTS}'
+print('Slots: Reihenfolge nach Eingangsdatum ok, externe Slots =', EXTERNAL_SLOTS)
+
+
 print('\nALLE ISSUE-FIX-TESTS BESTANDEN')

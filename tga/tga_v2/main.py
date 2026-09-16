@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from nicegui import ui, run
 
-from backend import Backend, STATUS_LABELS, save_config
+from backend import Backend, by_registration, STATUS_LABELS, save_config
 from nomad_client import NomadClient, NomadApiError
 import ui_board
 import ui_list
@@ -49,6 +49,12 @@ STRINGS = {
     'selected': {'en': 'selected', 'de': 'ausgewählt'},
     'dl_tprc': {'en': '⬇ Load .tprc', 'de': '⬇ .tprc laden'},
     'assign_slots': {'en': '◫ Assign slots', 'de': '◫ Slots zuweisen'},
+    # The button numbers every waiting sample; the order is the registration
+    # date, and the first five slots are the external ones.
+    'slots_assigned': {'en': 'slots assigned (registration order)',
+                       'de': 'Slots zugewiesen (nach Eingang)'},
+    'slots_external_hint': {'en': 'Slots 01-05 are kept for external analyses',
+                            'de': 'Slots 01-05 sind fuer externe Analysen reserviert'},
     'up_tri': {'en': '⬆ Upload .tri', 'de': '⬆ .tri hochladen'},
     'no_tga': {'en': 'No TGA uploads yet — click Sync.', 'de': 'Noch keine TGA-Uploads — Sync klicken.'},
     'filter_ph': {'en': 'Filter (Sample, Procedure, Author)…', 'de': 'Filter (Sample, Procedure, Author)…'},
@@ -244,11 +250,25 @@ async def action_download_tprc():
 
 
 async def action_assign_slots():
-    """Auto-assign lowest free slots to all received/pending selection."""
+    """Hand out the crucible slots by registration date.
+
+    With a selection that selection; without one, every sample that is waiting
+    for a measurement - one button for the whole lab. The lowest free slot goes
+    to the request that arrived first, because the crucible positions are
+    counted in that order (slots 01-05 are the ones kept for external analyses).
+    """
     set_actions_enabled(False)
     try:
-        rows = [r for r in backend.uploads if r['upload_id'] in selected
-                and backend.display_status(r['upload_id'], r['has_result']) != 'measured']
+        if selected:
+            rows = [r for r in backend.uploads if r['upload_id'] in selected]
+        else:
+            rows = [r for r in backend.uploads
+                    if backend.display_status(r['upload_id'], r['has_result'])
+                    in ('pending', 'received')
+                    or (backend.display_status(r['upload_id'], r['has_result']) == 'assigned'
+                        and not backend.slot_for(r['upload_id']))]
+        rows = [r for r in rows
+                if backend.display_status(r['upload_id'], r['has_result']) != 'measured']
         # Only samples WITH a .tprc can get a slot — others would fail inside
         # save_slot_files anyway AND burn a slot number (the "3-4 statt 1-2"
         # bug). Filter here + tell the user what was skipped.
@@ -258,11 +278,12 @@ async def action_assign_slots():
             names = ', '.join((r.get('sample') or r['upload_id'][:8]) for r in no_tprc[:3])
             more = f' +{len(no_tprc) - 3} weitere' if len(no_tprc) > 3 else ''
             ui.notify(f'Ohne .tprc übersprungen: {names}{more}', type='warning')
+        rows = by_registration(rows)
         assignments = [{'upload_id': r['upload_id'], 'sample': r['sample']} for r in rows]
         # Slots are handed out inside save_slot_files (atomic with the file
         # work — no race with the watcher assigning slots concurrently).
         ok, failed = await run.io_bound(backend.save_slot_files, assignments)
-        ui.notify(f'{len(ok)} Proben → Slots zugewiesen', type='positive')
+        ui.notify(f'{_("slots_assigned")}: {len(ok)}', type='positive')
         if failed:
             ui.notify(f'{len(failed)} fehlgeschlagen: {failed[0]}', type='negative')
         clear_selection()
@@ -510,6 +531,7 @@ def index():
     ui_board.on_open_detail = open_detail
     ui_board.on_selection_change = update_action_bar
     ui_board.on_status_changed = redraw_all
+    ui_board.on_assign_slots = action_assign_slots
     ui_list.on_open_detail = open_detail
     ui_list.on_selection_change = update_action_bar
     ui_detail.on_status_changed = redraw_all

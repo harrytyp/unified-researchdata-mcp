@@ -147,6 +147,24 @@ def patch_tprc_slot_guid(data, slot_label):
     return bytes(raw)
 
 
+# Slots 01-05 are the positions the lab keeps for external analyses. The
+# numbering continues beyond that (nothing is silently left out), but a sample
+# above 05 is one of the lab's own.
+EXTERNAL_SLOTS = 5
+
+
+def by_registration(rows):
+    """Sort samples by the date their request arrived, oldest first.
+
+    The crucible number follows the registration order (the first request gets
+    slot 01), so the order must come from the upload's creation time - not from
+    the order in which cards happened to be selected or dropped.
+    """
+    return sorted(rows or [],
+                  key=lambda r: (str(r.get('upload_create_time') or ''),
+                                 str(r.get('upload_id') or '')))
+
+
 def slot_filename(sample, slot, uid):
     """Filename convention: {Sample}_{Slot}.tprc (unique .tri names via stem)."""
     base = sample if sample else f'exp{uid[:8]}'
@@ -407,6 +425,13 @@ class Backend:
         """
         import_dir = Path(import_dir or self.config.get('trios_import_dir', ''))
         import_dir.mkdir(parents=True, exist_ok=True)
+        # Hand out the slots in registration order, whatever order the caller
+        # passed: the lowest free slot goes to the request that arrived first.
+        times = {r['upload_id']: str(r.get('upload_create_time') or '')
+                 for r in self.uploads}
+        assignments = sorted(assignments,
+                             key=lambda a: (times.get(a.get('upload_id'), ''),
+                                            str(a.get('upload_id') or '')))
         used = {self.slot_for(r['upload_id'])
                 for r in self.uploads if self.slot_for(r['upload_id'])}
         free = [f'{n:02d}' for n in range(1, 31) if f'{n:02d}' not in used]
