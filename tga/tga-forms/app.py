@@ -82,8 +82,9 @@ PAN_MAX_MM = 5            # the sample has to fit the pan: max 5 x 5 mm
 MASS_MAX_MG = 100.0       # hard upper limit for the weighed sample
 MASS_OPT_MG = 50.0        # weight the lab aims for
 RUNTIME_CONSULT_H = 24    # runs longer than a day have to be agreed first
-CONTACTS = ('Pedro Braun (p.braun@tum.de) or Luca Reichert '
-            '(luca.reichert@tum.de)')
+PEDRO = 'p.braun@tum.de'
+LUCA = 'luca.reichert@tum.de'
+CONTACTS = f'Pedro Braun ({PEDRO}) or Luca Reichert ({LUCA})'
 # Unit options per quantity: exactly the units NOMAD's unit system accepts for
 # these quantities. The user enters the value in whichever of these they think
 # in; nomad_api.build_archive converts it into the schema's canonical unit, so
@@ -310,6 +311,12 @@ def update_method_suggestion():
             pass
 
 
+def on_sample_name_change(value):
+    get_form()['sample_name'] = value
+    # the consultation mail prefills the sample name, so it has to follow
+    update_consult_box()
+
+
 def update_mass_hint():
     """Live check of the 100 mg limit, so the user sees it before submitting."""
     label = rules_refs.get('mass')
@@ -374,6 +381,11 @@ def update_consult_box():
                 ui.label('- ' + reason).classes('tga-rules-text')
             ui.label(f'Please contact {CONTACTS} before submitting.') \
                 .classes('tga-rules-text')
+            ui.label('Write to them and say what has to be agreed - the sample name is '
+                     'enough, the request does not exist yet. The link opens a mail with '
+                     'what the form already knows.').classes('tga-rules-text')
+            ui.link('Open the prefilled email to Pedro and Luca', consultation_mailto()) \
+                .classes('tga-consult-link')
             ui.checkbox(f'I have contacted {CONTACTS} about this.',
                         value=bool(get_form().get('consulted')),
                         on_change=lambda e: get_form().update(consulted=bool(e.value)))
@@ -521,6 +533,33 @@ def consultation_reasons() -> list:
     if hours is not None and hours > RUNTIME_CONSULT_H:
         reasons.append(f'run time above 1 day (estimated ~{hours:.0f} h)')
     return reasons
+
+
+def consultation_mailto() -> str:
+    """A prefilled mail, so 'arrange a consultation' is one click and not a guess.
+
+    The form asks for the consultation *before* the request is sent, so there is
+    no sample id yet - the mail carries the sample name and the reason instead.
+    """
+    form = get_form()
+    sample = (form.get('sample_name') or '').strip()
+    subject = 'TGA measurement - consultation needed'
+    if sample:
+        subject += f' - {sample}'
+    reasons = '; '.join(consultation_reasons()) or 'to be agreed'
+    body = (
+        'Hello,\n\n'
+        'I would like to register a TGA measurement and need a consultation.\n\n'
+        f'Sample: {sample or "(name not set yet)"}\n'
+        f'Reason: {reasons}\n'
+        f'Atmosphere: {form.get("gas_atmosphere") or "N2"}\n'
+        f'Estimated run time: {estimated_runtime_h() or 0:.1f} h\n\n'
+        'What I want to measure:\n\n\n'
+        'Best regards\n'
+    )
+    return ('mailto:' + urllib.parse.quote(PEDRO) + ',' + urllib.parse.quote(LUCA)
+            + '?subject=' + urllib.parse.quote(subject)
+            + '&body=' + urllib.parse.quote(body))
 
 
 def validate() -> list:
@@ -810,9 +849,6 @@ def index(request: Request):
                     ('Acids/bases', 'cannot be measured'),
                     ('Waiting', 'samples run in sequence, so yours may sit on the pan for '
                                 'more than a day at room conditions'),
-                    ('Atmosphere', 'nitrogen or air'),
-                    ('Run time', 'longer than 1 day needs a consultation first'),
-                    ('MS coupling', 'possible, needs a consultation first'),
                 ):
                     with ui.row().classes('tga-rules-row'):
                         ui.label(what).classes('tga-rules-what')
@@ -822,7 +858,7 @@ def index(request: Request):
                 with ui.column().classes('gap-1 flex-1'):
                     ui.label('Sample name *').classes('tga-label')
                     ui.input(value=get_form()['sample_name'],
-                             on_change=lambda e: get_form().update(sample_name=e.value)) \
+                             on_change=lambda e: on_sample_name_change(e.value)) \
                         .props('outlined dense').classes('w-full')
                 with ui.column().classes('gap-1 w-44'):
                     ui.label('Sample mass').classes('tga-label')
@@ -872,9 +908,6 @@ def index(request: Request):
                 ui.checkbox('Metallic sample - has to be measured in an alumina crucible.',
                             value=get_form()['metallic'],
                             on_change=lambda e: on_metallic_change(e.value))
-                ui.checkbox('Mass-spectrometer coupled measurement.',
-                            value=get_form()['ms_coupling'],
-                            on_change=lambda e: on_coupling_change(e.value))
 
         # 2. Atmosphere
         with ui.element('div').classes('tga-panel'):
@@ -883,6 +916,8 @@ def index(request: Request):
                 with ui.column().classes('gap-0'):
                     ui.label('2 · Atmosphere & gases').classes('tga-section-title')
                     ui.label('Choose the purge gas and set the flow rates.').classes('tga-section-sub')
+                    ui.label('Only nitrogen and air are set up - any other atmosphere '
+                             'needs a consultation first.').classes('tga-hint')
             with ui.row().classes('w-full gap-4 mt-1'):
                 with ui.column().classes('gap-1 w-48'):
                     ui.label('Purge gas').classes('tga-label')
@@ -912,6 +947,15 @@ def index(request: Request):
                                   form_keys=['gas_flow_rate', 'balance_flow_rate'])) \
                         .props('outlined dense').classes('w-full')
 
+            # MS coupling belongs to the gas path: it analyses the purge gas
+            # leaving the instrument. It is possible, but only after a
+            # consultation - which the block above the submit button collects.
+            with ui.column().classes('gap-1 w-full mt-2'):
+                ui.checkbox('Mass-spectrometer coupled measurement '
+                            '(measures the evolved gas).',
+                            value=get_form()['ms_coupling'],
+                            on_change=lambda e: on_coupling_change(e.value))
+
         # 3. Temperature program
         with ui.element('div').classes('tga-panel'):
             with ui.row().classes('items-start gap-3 w-full'):
@@ -921,6 +965,9 @@ def index(request: Request):
                     ui.label('Segments run in the order shown. Add as many as you need: ramps, '
                              'holds, and gas flow steps. Pick the units you want to enter '
                              'values in.').classes('tga-section-sub')
+                    ui.label('A run longer than 1 day needs a consultation first '
+                             '(the estimate below the segments shows where you are).') \
+                        .classes('tga-hint')
             with ui.row().classes('w-full gap-3 items-end mt-2'):
                 with ui.column().classes('gap-1 w-32'):
                     ui.label('Temperature').classes('tga-label')

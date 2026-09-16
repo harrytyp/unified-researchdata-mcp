@@ -120,13 +120,27 @@ with sync_playwright() as p:
     page.wait_for_timeout(2500)
     body = page.inner_text('body').lower()
 
-    print('=== 1. Regel-Panel sichtbar ===')
+    print('=== 1. Regeln an der richtigen Stelle ===')
+    panels = page.eval_on_selector_all('.tga-panel', 'els => els.map(e => e.innerText)')
+    print(f'   {len(panels)} Panels gefunden')
+    sample_panel = (panels[0] if len(panels) > 0 else '').lower()
+    atmo_panel = (panels[1] if len(panels) > 1 else '').lower()
+    temp_panel = (panels[2] if len(panels) > 2 else '').lower()
+
     for needle in ('sample requirements', '5 x 5 mm', '100 mg', '50 mg',
                    'pieces or powder', 'not volatile', 'alumina crucible only',
-                   'acids or bases', 'sit on the pan', 'nitrogen or air',
-                   'longer than 1 day', 'ms coupling',
-                   'p.braun@tum.de', 'luca.reichert@tum.de'):
-        check(f'Regel "{needle}" steht im Formular', needle in body)
+                   'acids or bases', 'sit on the pan'):
+        check(f'Sample-Panel: "{needle}"', needle in sample_panel)
+    check('Atmosphaere-Regel steht im Atmosphaere-Panel',
+          'nitrogen and air' in atmo_panel)
+    check('Laufzeit-Regel steht im Programm-Panel',
+          'longer than 1 day' in temp_panel)
+    check('MS-Kopplung steht im Atmosphaere-Panel (Gasweg)',
+          'mass-spectrometer' in atmo_panel)
+    check('Sample-Panel wiederholt die Atmosphaere-Regel nicht',
+          'nitrogen or air' not in sample_panel)
+    check('Sample-Panel wiederholt die Laufzeit-Regel nicht',
+          'longer than 1 day' not in sample_panel)
 
     print()
     print('=== 2. Pflicht-Erklaerungen blockieren ===')
@@ -173,11 +187,22 @@ with sync_playwright() as p:
     page.wait_for_timeout(600)
 
     print()
-    print('=== 5. MS-Kopplung als zweiter Grund ===')
+    print('=== 5. MS-Kopplung als zweiter Grund + How-to der Rucksprache ===')
     page.get_by_text('Mass-spectrometer coupled', exact=False).first.click()
-    page.wait_for_timeout(1200)
-    check('Grund "mass-spectrometer" genannt',
-          'mass-spectrometer' in page.inner_text('body').lower())
+    page.wait_for_timeout(1400)
+    body = page.inner_text('body')
+    check('Grund "mass-spectrometer" genannt', 'mass-spectrometer' in body.lower())
+    check('Rucksprache: Anleitung steht im Block', 'write to them' in body.lower())
+    check('Rucksprache: Kontakte stehen im Block', 'p.braun@tum.de' in body)
+    link = page.get_by_role('link', name=re.compile('prefilled email', re.I))
+    check('Rucksprache: prefilled-Mail-Link vorhanden', link.count() > 0)
+    if link.count():
+        href = link.first.get_attribute('href') or ''
+        check('Link geht an beide Kontakte',
+              'p.braun' in href and 'luca.reichert' in href, href[:80])
+        check('Link nennt den Probennamen', SAMPLE in href, SAMPLE)
+        check('Link nennt den Grund', 'mass-spectrometer' in href or
+              'mass-spectrometer' in href.lower(), href[:120])
 
     print()
     print('=== 6. Laufzeit > 1 Tag aus dem Programm ===')

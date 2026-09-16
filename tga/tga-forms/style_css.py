@@ -195,6 +195,8 @@ body.body--light .tga-hint { color: #6b7280; }
     font-size: 0.8rem; font-weight: 600; color: #a5b4fc;
 }
 body.body--light .tga-dropoff { color: #4338ca; }
+.tga-consult-link { font-size: 0.82rem; font-weight: 600; color: #a5b4fc !important; }
+body.body--light .tga-consult-link { color: #4338ca !important; }
 
 /* ── Quasar input harmonization ── */
 body.body--dark .q-field--outlined .q-field__control { background: rgba(255,255,255,0.02); }
