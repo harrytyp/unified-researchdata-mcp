@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from .entry_data import segment_lines
+
 Message = tuple          # (subject, text, html)
 
 
@@ -43,25 +45,13 @@ def _parameter_lines(params: Optional[Dict[str, Any]]) -> List[str]:
 
     segments = params.get("segments") or []
     if segments:
-        lines.append("")
-        lines.append("Temperature program")
-        for index, segment in enumerate(segments, start=1):
-            start = segment.get("start")
-            end = segment.get("end")
-            rate = segment.get("rate")
-            hold = segment.get("hold")
-            parts = []
-            if start not in (None, ""):
-                parts.append(f"from {start}")
-            if end not in (None, ""):
-                parts.append(f"to {end}")
-            if rate not in (None, ""):
-                parts.append(f"at {rate}")
-            if hold not in (None, ""):
-                parts.append(f"hold {hold}")
-            detail = ", ".join(parts) if parts else "(no values)"
-            lines.append(f"  {index}. {detail}")
-    return lines
+        program = ["Temperature program"] + [
+            "  " + line for line in segment_lines(segments)]
+        lines.append("\n".join(program))
+    # Liste zurueckgeben, nicht einen fertigen Text: der Aufrufer haengt die
+    # Bloecke selbst zusammen (ein zurueckgegebener String wurde hier schon
+    # einmal Zeichen fuer Zeichen ausgegeben).
+    return [line for line in lines if line]
 
 
 def _esc(value: Any) -> str:

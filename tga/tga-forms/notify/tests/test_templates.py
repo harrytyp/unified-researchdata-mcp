@@ -82,7 +82,23 @@ check("Operator: was auf die Probe geschrieben wird",
       "Write this code on the sample and on the crucible" in op_text
       and "AB12C" in op_text)
 check("Operator: Parameteruebersicht", "Temperature program" in op_text
-      and "10.00 °C/min" in op_text and "Nitrogen" in op_text)
+      and "Nitrogen" in op_text)
+
+# Das Temperaturprogramm kommt aus typisierten Schritten (Ramp/Hold/Gasfluss).
+# Ein blosser Index ("1. at 0") war hier schon einmal der Fehler, deshalb wird
+# die Formulierung jetzt festgehalten.
+program_ctx = dict(CTX, parameters=dict(CTX["parameters"], segments=[
+    {"kind": "ramp", "end_temp": 600, "rate": 10},
+    {"kind": "hold", "duration_min": 30},
+    {"kind": "sample_flow", "flow_rate": 20},
+    {"kind": "balance_flow", "flow_rate": 10},
+]))
+_, program_body, _ = templates.request_created_operator(program_ctx)
+check("Programm: Rampe mit Rate", "Ramp to 600 C at 10 C/min" in program_body)
+check("Programm: Haltezeit", "Hold for 30 min" in program_body)
+check("Programm: beide Gasfluesse",
+      "Sample purge flow 20 mL/min" in program_body
+      and "Balance purge flow 10 mL/min" in program_body)
 check("Operator: Link zum NOMAD-Eintrag", CTX["entry_url"] in op_text)
 check("Operator: Ruecksprache genannt", "alumina crucible" in op_text)
 check("Operator: Auftraggeber mit Adresse",

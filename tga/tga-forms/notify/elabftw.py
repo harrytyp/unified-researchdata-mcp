@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
+from .entry_data import segment_lines, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import requests
@@ -268,15 +270,8 @@ def experiment_body(ctx: Dict[str, Any]) -> str:
     segments = params.get("segments") or []
     program = ""
     if segments:
-        items = []
-        for segment in segments:
-            parts_ = []
-            for label, key in (("from", "start"), ("to", "end"),
-                               ("at", "rate"), ("hold", "hold")):
-                if segment.get(key) not in (None, ""):
-                    parts_.append(f"{label} {segment[key]}")
-            items.append(f"<li>{_esc(', '.join(parts_))}</li>")
-        program = "<h3>Temperature program</h3><ol>" + "".join(items) + "</ol>"
+        items = "".join("<li>" + _esc(line) + "</li>" for line in segment_lines(segments))
+        program = "<h3>Temperature program</h3><ol>" + items + "</ol>"
 
     links = []
     if ctx.get("entry_url"):
@@ -285,6 +280,9 @@ def experiment_body(ctx: Dict[str, Any]) -> str:
     if ctx.get("upload_url") and ctx.get("upload_url") != ctx.get("entry_url"):
         links.append(f"<li>NOMAD upload: <a href='{_esc(ctx['upload_url'])}'>"
                      f"{_esc(ctx['upload_url'])}</a></li>")
+    if ctx.get("download_url"):
+        links.append(f"<li>Download package for the ELN: "
+                     f"<a href='{_esc(ctx['download_url'])}'>{_esc(ctx['download_url'])}</a></li>")
 
     parts = [f"<h2>TGA measurement {_esc(ctx.get('code', ''))} - "
              f"{_esc(ctx.get('sample_name', ''))}</h2>",

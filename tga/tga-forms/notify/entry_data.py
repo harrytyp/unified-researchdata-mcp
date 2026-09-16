@@ -194,31 +194,89 @@ def results(fields: Dict[str, Any]) -> Dict[str, str]:
     return {key: value for key, value in values.items() if value}
 
 
+# The procedure is a list of typed steps (RampSegment, IsothermalSegment,
+# MassFlowSegment, BalanceFlowSegment); the type sits in the item's m_def and
+# each type carries its own fields. Rendering them by type is what makes the
+# program readable in a mail - a bare index tells nobody anything.
+_SEGMENT_KINDS = {
+    "RampSegment": "ramp",
+    "IsothermalSegment": "hold",
+    "MassFlowSegment": "sample_flow",
+    "BalanceFlowSegment": "balance_flow",
+}
+
+
+def _segments(raw_segments: Any) -> List[Dict[str, Any]]:
+    """The temperature program as typed steps, in order."""
+    segments: List[Dict[str, Any]] = []
+    for raw in raw_segments or []:
+        if not isinstance(raw, dict):
+            continue
+        kind = "ramp"
+        for name, mapped in _SEGMENT_KINDS.items():
+            if str(raw.get("m_def", "")).endswith(name):
+                kind = mapped
+                break
+        segments.append({
+            "kind": kind,
+            "end_temp": _unwrap(raw.get("end_temp")),
+            "rate": _unwrap(raw.get("rate")),
+            "duration_min": _unwrap(raw.get("duration_min")),
+            "flow_rate": _unwrap(raw.get("flow_rate")),
+        })
+    return segments
+
+
+def _plain(value: Any) -> str:
+    """A number for a sentence: no trailing ".0", no unit (the unit is in the text)."""
+    text = _fmt(value, "", 1).strip()
+    return text[:-2] if text.endswith(".0") else text
+
+
+def segment_lines(segments: Any) -> List[str]:
+    """One readable line per program step (English, no dashes as punctuation)."""
+    lines: List[str] = []
+    for index, segment in enumerate(segments or [], start=1):
+        kind = segment.get("kind") or "ramp"
+        if kind == "ramp":
+            target = _plain(segment.get("end_temp"))
+            rate = _plain(segment.get("rate"))
+            text = f"Ramp to {target} C"
+            if rate:
+                text += f" at {rate} C/min"
+        elif kind == "hold":
+            text = f"Hold for {_plain(segment.get('duration_min'))} min"
+        elif kind == "sample_flow":
+            text = f"Sample purge flow {_plain(segment.get('flow_rate'))} mL/min"
+        else:
+            text = f"Balance purge flow {_plain(segment.get('flow_rate'))} mL/min"
+        lines.append(f"{index}. {text}")
+    return lines
+
+
 def parameters(fields: Dict[str, Any]) -> Dict[str, Any]:
     """What was requested, in the words the form used."""
-    segments = []
-    raw_segments = fields.get("temperature_segments") or []
-    if isinstance(raw_segments, dict):                # single segment
-        raw_segments = [raw_segments]
+    segments = _segments(fields.get("temperature_segments"))
+
+    # Die Laufzeit schaetzt das Formular; im Archiv steht sie nicht. Also aus dem
+    # Programm ableiten (Rampen plus Haltezeiten) - sonst bleibt in der Mail eine
+    # leere Zeile, wo der Nutzer seine eigene Schaetzung erwartet.
     ramp_minutes = 0.0
     hold_minutes = 0.0
-    for item in raw_segments:
-        if not isinstance(item, dict):
-            continue
-        segments.append({
-            "start": _fmt(item.get("start_temp"), "°C", 1),
-            "end": _fmt(item.get("end_temp"), "°C", 1),
-            "rate": _fmt(item.get("rate"), "°C/min", 2),
-            "hold": _fmt(item.get("duration_min"), "min", 1),
-        })
-        rate = item.get("rate")
-        end = item.get("end_temp")
-        start = item.get("start_temp") or fields.get("start_temp")
-        if isinstance(rate, (int, float)) and rate and isinstance(end, (int, float)):
-            if isinstance(start, (int, float)):
-                ramp_minutes += max(end - start, 0.0) / rate
-        if isinstance(item.get("duration_min"), (int, float)):
-            hold_minutes += float(item["duration_min"])
+    previous = fields.get("start_temp")
+    for segment in segments:
+        if segment["kind"] == "ramp":
+            rate = segment.get("rate")
+            end = segment.get("end_temp")
+            begin = previous if isinstance(previous, (int, float)) else fields.get("start_temp")
+            if (isinstance(rate, (int, float)) and rate
+                    and isinstance(end, (int, float)) and isinstance(begin, (int, float))):
+                ramp_minutes += max(end - begin, 0.0) / rate
+            if isinstance(end, (int, float)):
+                previous = end
+        elif segment["kind"] == "hold":
+            if isinstance(segment.get("duration_min"), (int, float)):
+                hold_minutes += float(segment["duration_min"])
 
     gas = fields.get("gas_atmosphere") or fields.get("atmosphere")
     flows = []
@@ -227,10 +285,6 @@ def parameters(fields: Dict[str, Any]) -> Dict[str, Any]:
     if fields.get("balance_flow_rate"):
         flows.append(f"{_fmt(fields.get('balance_flow_rate'), 'mL/min', 1)} balance gas")
     ms = fields.get("ms_coupling")
-    # The estimated run time is computed by the form and is not stored in the
-    # archive, so it is derived from the program here (ramps plus holds) -
-    # otherwise the mail would show an empty line where the user expects their
-    # own estimate.
     runtime = fields.get("estimated_runtime_h")
     if not isinstance(runtime, (int, float)) and (ramp_minutes or hold_minutes):
         runtime = (ramp_minutes + hold_minutes) / 60.0
