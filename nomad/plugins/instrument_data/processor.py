@@ -263,20 +263,82 @@ def _gradient_vs(values: np.ndarray, axis: np.ndarray):
     return np.gradient(values[keep], axis[keep])
 
 
+def dtg_clean_parameters(temperature, dtg, span: Optional[int] = None,
+                         delta: Optional[float] = None):
+    """Window and threshold for clean_dtg, derived from the curve itself.
+
+    Both depend on the measurement: sampling density, heating rate, noise level
+    and how wide the degradation peak is. The notebook's fixed values (a window
+    of 50 points, delta 0.01) only fit its own export - on a denser one the same
+    50 points are a much narrower temperature window, and an absolute threshold
+    does not know whether the signal is 0.1 or 10 units tall.
+
+    Derived here:
+      * window  - a tenth of the main peak's half-width, i.e. small compared to
+        the feature it must not distort, expressed in points via the actual
+        spacing.
+      * threshold - the larger of three robust noise sigmas (1.4826 x MAD of the
+        residual of a short smoothing) and 2% of the peak height. The noise term
+        keeps a noisy run from being over-smoothed, the peak term keeps the
+        peak itself from being flagged as an outlier (a smoother attenuates a
+        peak slightly; that attenuation must stay below the threshold).
+
+    Returns (span_points, delta); both None-safe: without usable input it falls
+    back to the notebook's values.
+    """
+    curve = np.asarray([v for v in np.asarray(dtg, dtype=float)
+                        if np.isfinite(v)], dtype=float)
+    if curve.size < 5:
+        return (span or DTG_SPAN), (delta if delta is not None else DTG_DELTA)
+    # Robust peak: a 99.5th percentile instead of the maximum, so a handful of
+    # spikes at the start of a run cannot set the scale (and with it delta).
+    peak = float(np.percentile(np.abs(curve), 99.5)) or 1.0
+
+    if span is None:
+        base = _ewma_forward_backward(curve, max(int(round(0.02 * len(curve))), 3))
+        peak_idx = int(np.argmax(np.abs(curve)))
+        half = peak / 2.0
+        # Half-width of the main peak: walk out from its tip until the curve
+        # drops below half height (either side, in samples).
+        left = peak_idx
+        while left > 0 and abs(curve[left]) >= half:
+            left -= 1
+        right = peak_idx
+        while right < len(curve) - 1 and abs(curve[right]) >= half:
+            right += 1
+        fwhm = max(right - left, 3)
+        span = int(min(max(round(fwhm / 10.0), 5), 200))
+
+    if delta is None:
+        short = max(int(round(0.02 * len(curve))), 3)
+        resid = curve - _ewma_forward_backward(curve, short)
+        mad = float(np.median(np.abs(resid - np.median(resid))))
+        noise = 1.4826 * mad
+        delta = max(3.0 * noise, 0.02 * peak)
+    return span, delta
+
+
 def dtg_for_plot(sig: Dict[str, Any]):
     """The DTG curve to clean and plot, or None.
 
-    Prefer the instrument's own derivative (the export carries "Abl. Masse" /
-    "Deriv. Weight"); fall back to differentiating the mass signal, because some
-    exports ship without the DTG column. The fallback differentiates against
-    time first (monotonic by construction, and d%/dt is the usual TGA
-    definition) and only then against the temperature axis.
+    The curve is differentiated from the mass against time (d%/dt), not taken
+    from the export's "Deriv. Weight_% / °C" column. Measured on a real export,
+    the instrument column is unusable as a DTG curve: a derivative with respect
+    to temperature has no meaning while the temperature is held, and this run
+    holds at 400 °C (values -368 ... +155 there, robust peak 117 against 6.2 for
+    the derived curve; cleaning it kept 26% of the peak and put it at 400 °C
+    instead of 336 °C). Per minute is also the comparable unit: the lab compares
+    runs at 1/5/10 K/min in one figure, and a per-°C curve shifts with the
+    heating rate. The instrument's own column stays in the entry as
+    result_dtg_signal.
+
+    Time is preferred as the axis because it is monotonic by construction;
+    against the temperature axis np.gradient divides by zero on the isotherms.
+    If the export has no mass signal, the instrument's DTG is used as it is.
     """
     temp = sig.get("temperature") or []
     time = sig.get("time") or []
     dtg = sig.get("dtg") or []
-    if len(dtg) > 2 and len(dtg) == len(temp):
-        return np.asarray(dtg, dtype=float)
     if len(temp) > 2:
         for key in ("mass_pct", "mass_mg"):
             mass = sig.get(key) or []
@@ -290,6 +352,8 @@ def dtg_for_plot(sig: Dict[str, Any]):
                     grad = _gradient_vs(m, np.asarray(axis, dtype=float))
                     if grad is not None:
                         return grad
+    if len(dtg) > 2 and len(dtg) == len(temp):
+        return np.asarray(dtg, dtype=float)
     return None
 
 
@@ -903,10 +967,21 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
         if sig.get("dtg"):
             entry.result_dtg_signal = sig["dtg"]
         # The cleaned curve is the one the plots show (and the one the manual
-        # workflow produced) - store it next to the raw signal.
-        cleaned_dtg, _ = clean_dtg(dtg_for_plot(sig))
+        # workflow produced) - store it next to the raw signal. Window and
+        # threshold come from the curve itself; both are stored as well, so the
+        # curve can be reproduced and compared with older figures.
+        raw_dtg = dtg_for_plot(sig)
+        temp_sig = np.asarray(sig.get("temperature") or [], dtype=float)
+        span, delta = dtg_clean_parameters(temp_sig, raw_dtg)
+        cleaned_dtg, _ = clean_dtg(raw_dtg, span=span, delta=delta)
         if cleaned_dtg is not None:
             entry.result_dtg_cleaned_signal = cleaned_dtg.tolist()
+            entry.result_dtg_clean_delta = float(delta)
+            if temp_sig.size > 2:
+                steps = np.abs(np.diff(temp_sig))
+                steps = steps[steps > 0]
+                if steps.size:
+                    entry.result_dtg_clean_window_c = float(span * np.median(steps))
     except Exception as e:
         logger.warning(f"Could not set TRIOS JSON signals: {e}")
 

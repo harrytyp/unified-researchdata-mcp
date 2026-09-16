@@ -383,9 +383,21 @@ class TgaMeasurement(PlotSection, EntryData):
     result_dtg_cleaned_signal = Quantity(
         type=np.float64, shape=['*'],
         description="DTG curve after the lab's cleaning recipe (forward-backward "
-                    "EWMA, span 50; points deviating more than ±0.01 from the "
-                    "smoothed curve dropped as noise, gaps interpolated and "
-                    "filled) - this is the curve the plots show")
+                    "EWMA, then points deviating more than the threshold from "
+                    "the smoothed curve dropped as noise, gaps interpolated and "
+                    "filled) - this is the curve the plots show. Window and "
+                    "threshold are derived per measurement, see "
+                    "result_dtg_clean_window_c / result_dtg_clean_delta")
+    result_dtg_clean_window_c = Quantity(
+        type=float, unit="degree_Celsius",
+        description="Smoothing window the DTG cleaning used, in °C (derived from "
+                    "the width of the main peak, so it adapts to sampling "
+                    "density and heating rate)")
+    result_dtg_clean_delta = Quantity(
+        type=float,
+        description="Outlier threshold the DTG cleaning used, in the DTG's own "
+                    "units (derived from the curve's noise level and peak "
+                    "height)")
 
     # ── Signal data (parsed curves) ──
     time_signal = Quantity(

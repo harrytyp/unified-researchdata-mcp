@@ -31,6 +31,7 @@ try:                                          # run from the plugins dir
         _ewma_forward_backward,
         _fill_gaps,
         clean_dtg,
+        dtg_clean_parameters,
         dtg_for_plot,
     )
 except ImportError:                           # run from inside the package
@@ -41,6 +42,7 @@ except ImportError:                           # run from inside the package
         _ewma_forward_backward,
         _fill_gaps,
         clean_dtg,
+        dtg_clean_parameters,
         dtg_for_plot,
     )
 
@@ -151,17 +153,63 @@ check('Luecken in der Eingabe werden verkraftet', np.isfinite(fixed).all())
 print()
 print('=== Welche Kurve wird geplottet? ===')
 temp = list(np.linspace(25, 600, 20))
-check('eigene DTG-Spalte hat Vorrang',
-      np.allclose(dtg_for_plot({'temperature': temp, 'dtg': [1.0] * 20,
-                                'mass_pct': [50.0] * 20}), [1.0] * 20))
-grad = dtg_for_plot({'temperature': temp, 'mass_pct': list(np.linspace(100, 40, 20))})
-check('ohne DTG-Spalte wird die Masse abgeleitet',
-      grad is not None and abs(grad[5] - (40 - 100) / (600 - 25)) < 0.01,
-      None if grad is None else round(float(grad[5]), 4))
+# Die abgeleitete d%/dt-Kurve hat Vorrang: eine Spalte in %/°C ist auf
+# Haltephasen undefiniert und verschiebt sich mit der Heizrate.
+derived = dtg_for_plot({'temperature': temp, 'dtg': [1.0] * 20,
+                        'mass_pct': list(np.linspace(100, 40, 20))})
+check('abgeleitete Kurve hat Vorrang vor der Instrumentenspalte',
+      derived is not None and abs(derived[5] - (40 - 100) / (600 - 25)) < 0.01
+      and not np.allclose(derived, 1.0),
+      None if derived is None else round(float(derived[5]), 4))
+check('ohne Masse wird die DTG-Spalte genommen',
+      np.allclose(dtg_for_plot({'temperature': temp, 'dtg': [1.0] * 20}),
+                  [1.0] * 20))
 mg = dtg_for_plot({'temperature': temp, 'mass_mg': list(np.linspace(10, 4, 20))})
 check('mg-Fallback wird auf Prozent normiert und abgeleitet', mg is not None)
+check('Zeitachse wird der Temperaturachse vorgezogen',
+      dtg_for_plot({'temperature': temp, 'time': list(np.linspace(0, 100, 20)),
+                    'mass_pct': list(np.linspace(100, 40, 20))}) is not None)
 check('nichts Brauchbares -> None', dtg_for_plot({'temperature': temp}) is None)
 check('leere Signale -> None', dtg_for_plot({}) is None)
+
+print()
+print('=== Fenster und Schwelle kommen aus der Kurve, nicht aus dem Notebook ===')
+# Gleiche Peakform, aber unterschiedliche Amplitude und Abtastdichte: die
+# abgeleiteten Werte muessen sich mitbewegen, sonst passt es nur fuer einen Fall.
+def peak_curve(points, amplitude, sigma_points, noise=0.004):
+    rng = np.random.default_rng(7)
+    x = np.linspace(0.0, 1.0, points)
+    curve = -amplitude * np.exp(-0.5 * ((x - 0.45) / (sigma_points / points)) ** 2)
+    return curve + rng.normal(scale=noise, size=points)
+
+big = peak_curve(2000, 10.0, 120)
+small = peak_curve(2000, 1.0, 120)
+coarse = peak_curve(400, 10.0, 24)
+
+for label, curve in (('Amplitude 10', big), ('Amplitude 1', small),
+                     ('grob abgetastet', coarse)):
+    span, delta = dtg_clean_parameters(np.linspace(25, 800, len(curve)), curve)
+    cleaned, smooth = clean_dtg(curve, span=span, delta=delta)
+    flagged = 100.0 * np.sum(np.abs(curve - smooth) > delta) / len(curve)
+    kept = 100.0 * np.min(cleaned) / np.min(curve)
+    check(f'{label}: Peak bleibt erhalten', kept > 90.0, f'{kept:.0f}% erhalten')
+    check(f'{label}: wenige Punkte gewertet', flagged < 15.0, f'{flagged:.1f}%')
+    print(f'    {label}: Fenster {span:3d} Pkt, delta {delta:.4f}, '
+          f'{flagged:.1f}% gewertet, Peak {kept:.0f}%')
+
+span_big, delta_big = dtg_clean_parameters(np.linspace(25, 800, 2000), big)
+span_small, delta_small = dtg_clean_parameters(np.linspace(25, 800, 2000), small)
+check('Schwelle skaliert mit der Signalamplitude (10x kleiner -> ~10x kleiner)',
+      2.0 < delta_big / delta_small < 50.0,
+      f'delta {delta_big:.4f} vs {delta_small:.4f}')
+span_coarse, delta_coarse = dtg_clean_parameters(np.linspace(25, 800, 400), coarse)
+check('Fenster in Punkten wird bei groeberer Abtastung kleiner (gleiche °C-Breite)',
+      span_coarse < span_big,
+      f'{span_coarse} Pkt grob vs {span_big} Pkt fein')
+span_fixed, delta_fixed = dtg_clean_parameters(np.linspace(25, 800, 2000), big,
+                                               span=77, delta=0.5)
+check('vorgegebene Werte werden nicht ueberschrieben',
+      (span_fixed, delta_fixed) == (77, 0.5))
 
 print()
 print('ERGEBNIS:', 'ALLE DTG-CHECKS BESTANDEN' if not FAILS
