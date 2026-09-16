@@ -157,6 +157,11 @@ with sync_playwright() as p:
     check('Methodenname wird aus den Segmenten gefuellt',
           'Ramp' in suggested and '600' in suggested and 'N2' in suggested, suggested)
 
+    # the sample rules require two declarations before a request can be sent
+    page.get_by_text('My sample meets the requirements', exact=False).first.click()
+    page.get_by_text('contains no acids or bases', exact=False).first.click()
+    page.wait_for_timeout(700)
+
     page.get_by_role('button', name='Create measurement request').first.click()
     print('  Submit geklickt, warte auf Ergebnis ...')
     ok = False

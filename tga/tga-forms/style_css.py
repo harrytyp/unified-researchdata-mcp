@@ -152,6 +152,50 @@ body.body--light .tga-sampleid-code { color: #4338ca; }
 .tga-expired .tga-success-title { color: #fcd34d; }
 body.body--light .tga-expired .tga-success-title { color: #92400e; }
 
+/* ── Sample rules: the lab's requirements, shown in the form ── */
+.tga-rules {
+    width: 100%; margin-top: 0.5rem; padding: 0.75rem 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 0.6rem;
+    background: rgba(148, 163, 184, 0.06);
+}
+.tga-rules-title {
+    font-size: 0.82rem; font-weight: 600; letter-spacing: 0.02em;
+    text-transform: uppercase; color: #cbd5e1; margin-bottom: 0.35rem;
+}
+body.body--light .tga-rules-title { color: #475569; }
+.tga-rules-row { width: 100%; align-items: flex-start; gap: 0.5rem; }
+.tga-rules-what {
+    flex: 0 0 7.5rem; font-size: 0.78rem; color: #94a3b8;
+}
+body.body--light .tga-rules-what { color: #64748b; }
+.tga-rules-text { flex: 1; font-size: 0.78rem; color: #cbd5e1; line-height: 1.35; }
+body.body--light .tga-rules-text { color: #334155; }
+.tga-rules-foot {
+    margin-top: 0.5rem; padding-top: 0.5rem; font-size: 0.78rem;
+    color: #a5b4fc;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+body.body--light .tga-rules-foot { color: #4338ca; }
+/* a rule the current input violates */
+.tga-rules-warn { color: #fca5a5 !important; }
+body.body--light .tga-rules-warn { color: #b91c1c !important; }
+/* small live hint under a field (mass limit, estimated run time) */
+.tga-hint { font-size: 0.72rem; line-height: 1.3; color: #8a8f98; }
+body.body--light .tga-hint { color: #6b7280; }
+/* consultation gate: filled only when the request needs one */
+.tga-consult {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem;
+    width: 100%; margin-top: 0.6rem; padding: 0.9rem 1rem;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 0.7rem;
+    background: rgba(245, 158, 11, 0.08);
+}
+.tga-dropoff {
+    font-size: 0.8rem; font-weight: 600; color: #a5b4fc;
+}
+body.body--light .tga-dropoff { color: #4338ca; }
+
 /* ── Quasar input harmonization ── */
 body.body--dark .q-field--outlined .q-field__control { background: rgba(255,255,255,0.02); }
 body.body--light .q-field__control { background: #fff; }

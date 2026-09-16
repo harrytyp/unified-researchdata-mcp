@@ -73,7 +73,17 @@ AUTH_REFRESH_JS = '''
 
 
 CRUCIBLES = ['Alumina', 'Platinum', 'Aluminum']
-GASES = ['N2', 'Air', 'Ar', 'Synthetic Air', 'O2']
+# The lab's sample rules. Only nitrogen and air are set up; every other
+# atmosphere needs a consultation, so the form does not offer them.
+GASES = ['N2', 'Air']
+
+# ── Sample rules (the "Sample requirements" panel shows these to the user) ──
+PAN_MAX_MM = 5            # the sample has to fit the pan: max 5 x 5 mm
+MASS_MAX_MG = 100.0       # hard upper limit for the weighed sample
+MASS_OPT_MG = 50.0        # weight the lab aims for
+RUNTIME_CONSULT_H = 24    # runs longer than a day have to be agreed first
+CONTACTS = ('Pedro Braun (p.braun@tum.de) or Luca Reichert '
+            '(luca.reichert@tum.de)')
 # Unit options per quantity: exactly the units NOMAD's unit system accepts for
 # these quantities. The user enters the value in whichever of these they think
 # in; nomad_api.build_archive converts it into the schema's canonical unit, so
@@ -114,6 +124,10 @@ def default_form() -> dict:
         # units the user enters values in (converted to canonical on submit)
         'mass_unit': 'mg', 'temp_unit': '°C', 'rate_unit': '°C/min',
         'time_unit': 'min', 'flow_unit': 'mL/min',
+        # Sample rules: the two declarations are required, the two flags switch
+        # the rules that follow from them (alumina crucible / consultation).
+        'rules_ack': False, 'no_acid': False,
+        'metallic': False, 'ms_coupling': False, 'consulted': False,
     }
 
 
@@ -191,8 +205,11 @@ def set_field(idx: int, key: str, value):
         except (TypeError, ValueError):
             segs[idx][key] = None
     # the method name is derived from the segments, so it has to follow every
-    # edit of a segment value
+    # edit of a segment value - and so do the run time estimate and the
+    # consultation rule, which depend on the program
     update_method_suggestion()
+    update_runtime_label()
+    update_consult_box()
 
 
 # ── Units ────────────────────────────────────────────────────────────────────
@@ -201,6 +218,9 @@ def set_field(idx: int, key: str, value):
 # dropdown is changed, values already entered are converted so the physical
 # value stays the same (same behaviour as NOMAD's own ELN form).
 unit_refs = {}
+# Widgets that the sample rules have to reach (crucible select, consultation
+# block, run-time label). Also per page build, like unit_refs.
+rules_refs = {}
 
 
 def _convert_value(kind: str, value, old_unit: str, new_unit: str):
@@ -232,6 +252,8 @@ def change_unit(kind: str, new_unit: str, seg_keys=None, form_keys=None):
         rebuild_segments()
     else:
         update_method_suggestion()
+    if kind == 'mass':
+        update_mass_hint()
 
 
 def set_segment_type(idx: int, seg_type: str):
@@ -288,6 +310,95 @@ def update_method_suggestion():
             pass
 
 
+def update_mass_hint():
+    """Live check of the 100 mg limit, so the user sees it before submitting."""
+    label = rules_refs.get('mass')
+    if label is None:
+        return
+    mg = mass_in_mg()
+    if mg is None:
+        label.set_text(f'Limit {MASS_MAX_MG:.0f} mg, optimum {MASS_OPT_MG:.0f} mg.')
+        label.classes(remove='tga-rules-warn')
+    elif mg > MASS_MAX_MG:
+        label.set_text(f'{mg:.0f} mg is above the {MASS_MAX_MG:.0f} mg limit.')
+        label.classes(add='tga-rules-warn')
+    else:
+        label.set_text(f'{mg:.0f} mg - within the limit (optimum {MASS_OPT_MG:.0f} mg).')
+        label.classes(remove='tga-rules-warn')
+
+
+def on_mass_change(value):
+    get_form()['sample_mass'] = value if value not in (None, '') else None
+    update_mass_hint()
+
+
+def update_runtime_label():
+    """Show the estimated run time - the >1 day rule depends on it."""
+    label = rules_refs.get('runtime')
+    if label is None:
+        return
+    hours = estimated_runtime_h()
+    if hours is None:
+        label.set_text('Estimated run time: fill in the segments to see it.')
+        label.classes(remove='tga-rules-warn')
+        return
+    text = f'Estimated run time: about {hours:.1f} h'
+    if hours > RUNTIME_CONSULT_H:
+        label.set_text(text + ' - longer than 1 day, needs a consultation first.')
+        label.classes(add='tga-rules-warn')
+    else:
+        label.set_text(text + '.')
+        label.classes(remove='tga-rules-warn')
+
+
+def update_consult_box():
+    """Render the consultation gate only when the request actually needs one.
+
+    A metallic sample (the alumina crucible may have to be ordered), an
+    MS-coupled measurement and a run above a day all have to be agreed with the
+    lab first. The checkbox it contains is what validate() requires.
+    """
+    box = rules_refs.get('consult')
+    if box is None:
+        return
+    reasons = consultation_reasons()
+    box.clear()
+    with box:
+        if not reasons:
+            return
+        with ui.element('div').classes('tga-consult'):
+            ui.icon('support_agent', color='#f59e0b').classes('text-3xl')
+            ui.label('Consultation needed before this can be measured') \
+                .classes('tga-rules-title')
+            for reason in reasons:
+                ui.label('- ' + reason).classes('tga-rules-text')
+            ui.label(f'Please contact {CONTACTS} before submitting.') \
+                .classes('tga-rules-text')
+            ui.checkbox(f'I have contacted {CONTACTS} about this.',
+                        value=bool(get_form().get('consulted')),
+                        on_change=lambda e: get_form().update(consulted=bool(e.value)))
+
+
+def on_metallic_change(value):
+    """Metallic samples must run in an alumina crucible - enforce, don't hint."""
+    get_form()['metallic'] = bool(value)
+    sel = rules_refs.get('crucible')
+    if sel is not None:
+        if value:
+            get_form()['crucible_type'] = 'Alumina'
+            sel.value = 'Alumina'
+            sel.disable()
+        else:
+            sel.enable()
+        sel.update()
+    update_consult_box()
+
+
+def on_coupling_change(value):
+    get_form()['ms_coupling'] = bool(value)
+    update_consult_box()
+
+
 def rebuild_segments():
     if seg_container is None:
         return
@@ -301,6 +412,9 @@ def rebuild_segments():
         for i in range(len(segs)):
             segment_card(i)
     update_method_suggestion()
+    # the run time and the consultation rule follow the segment list
+    update_runtime_label()
+    update_consult_box()
 
 
 def segment_card(idx: int):
@@ -351,11 +465,85 @@ def segment_card(idx: int):
 
 
 # ── Validation & submit ──────────────────────────────────────────────────────
+# ── Sample rules: what the form can check by itself ─────────────────────────
+def mass_in_mg() -> float | None:
+    """The entered sample mass in mg, whatever unit the user picked."""
+    form = get_form()
+    value = form.get('sample_mass')
+    if value in (None, ''):
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value * 1000.0 if form.get('mass_unit') == 'g' else value
+
+
+def estimated_runtime_h() -> float | None:
+    """Rough run time of the entered program, in hours.
+
+    Ramps are estimated from room temperature (25 degC) to their target at the
+    entered rate, holds count in full, mass/balance flow steps add no time.
+    This is an estimate: it exists so the ">1 day needs a consultation" rule is
+    visible *before* submitting, not to predict the exact run.
+    """
+    segs = get_segments()
+    if not segs:
+        return None
+    total_min = 0.0
+    known = False
+    for seg in segs:
+        t = seg.get('type')
+        if t == 'ramp':
+            end, rate = seg.get('end_temp'), seg.get('rate')
+            if end is None or not rate:
+                continue
+            # the rate is entered in degC/min or K/min - same step size either way
+            total_min += max(0.0, (float(end) - 25.0)) / abs(float(rate))
+            known = True
+        elif t == 'isothermal':
+            dur = seg.get('duration_min')
+            if dur is not None:
+                total_min += float(dur)
+                known = True
+    return (total_min / 60.0) if known else None
+
+
+def consultation_reasons() -> list:
+    """Why this request has to be agreed with the lab before it is measured."""
+    form = get_form()
+    reasons = []
+    if form.get('metallic'):
+        reasons.append('metallic sample - the alumina crucible may have to be ordered')
+    if form.get('ms_coupling'):
+        reasons.append('mass-spectrometer coupled measurement')
+    hours = estimated_runtime_h()
+    if hours is not None and hours > RUNTIME_CONSULT_H:
+        reasons.append(f'run time above 1 day (estimated ~{hours:.0f} h)')
+    return reasons
+
+
 def validate() -> list:
     errs = []
     form = get_form()
     if not form['sample_name'].strip():
         errs.append('Please enter a sample name.')
+    # Sample rules the form can enforce (the rest are declarations below).
+    mass = mass_in_mg()
+    if mass is not None and mass > MASS_MAX_MG:
+        errs.append(f'Sample mass {mass:.0f} mg is above the {MASS_MAX_MG:.0f} mg limit '
+                    f'(aim for {MASS_OPT_MG:.0f} mg).')
+    if not form.get('rules_ack'):
+        errs.append('Please confirm that your sample meets the sample requirements.')
+    if not form.get('no_acid'):
+        errs.append('Samples containing acids or bases cannot be measured - '
+                    'please confirm that yours contains none.')
+    if form.get('metallic') and form.get('crucible_type') != 'Alumina':
+        errs.append('Metallic samples can only be measured in an alumina crucible.')
+    reasons = consultation_reasons()
+    if reasons and not form.get('consulted'):
+        errs.append('This request needs a consultation first (' + '; '.join(reasons)
+                    + f'): please confirm that you have contacted {CONTACTS}.')
     segs = get_segments()
     if not segs:
         errs.append('At least one temperature segment is required.')
@@ -446,6 +634,21 @@ async def submit():
     # value from the unit the user picked into the schema's canonical unit)
     payload = {k: v for k, v in form.items()}
     payload['segments'] = [dict(s) for s in get_segments()]
+    # Tell the operator what the requester declared beyond the raw fields -
+    # these drive work on their side (crucible ordering, MS setup, scheduling),
+    # and the operator only sees the NOMAD entry, not this form.
+    notes = []
+    if form.get('metallic'):
+        notes.append('metallic sample - alumina crucible')
+    if form.get('ms_coupling'):
+        notes.append('mass-spectrometer coupled measurement requested')
+    hours = estimated_runtime_h()
+    if hours is not None and hours > RUNTIME_CONSULT_H:
+        notes.append(f'estimated run time {hours:.1f} h')
+    if notes:
+        existing = (payload.get('comments') or '').strip()
+        payload['comments'] = ((existing + ' | ') if existing else '') \
+            + 'Request notes: ' + '; '.join(notes)
     archive = nomad_api.build_archive(payload)
     sample = form['sample_name'].strip()
     safe = re.sub(r'[^A-Za-z0-9._-]+', '_', sample)[:60] or 'TGA'
@@ -499,6 +702,8 @@ async def submit():
                              'The result files and the plots are added to this same '
                              'upload after the run, so everything stays in one place '
                              'and remains visible to you.').classes('text-grey-5 text-sm')
+                    ui.label(f'Bring your sample after emailing {CONTACTS}.') \
+                        .classes('tga-dropoff')
             else:
                 ui.label('Request submitted. The operator app will pick it up shortly.') \
                     .classes('text-grey-5')
@@ -523,6 +728,7 @@ result_box = None
 def index(request: Request):
     ui.add_head_html(CSS)
     unit_refs.clear()  # widget refs are per page build
+    rules_refs.clear()
     global method_input
     method_input = None
     cookie = request.cookies.get('Authorization', '')
@@ -586,7 +792,32 @@ def index(request: Request):
                 ui.icon('science', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0'):
                     ui.label('1 · Sample').classes('tga-section-title')
-                    ui.label('Name the sample and note who runs the measurement.').classes('tga-section-sub')
+                    ui.label('Name the sample and check it against the sample '
+                             'requirements.').classes('tga-section-sub')
+            # The lab's sample rules. Shown, not hidden behind a click: most of
+            # them cannot be checked by software (piece size, volatility, how
+            # long the sample waits on the pan), so the requester declares them
+            # in the checkboxes below.
+            with ui.element('div').classes('tga-rules'):
+                ui.label('Sample requirements').classes('tga-rules-title')
+                for what, text in (
+                    ('Size', f'max {PAN_MAX_MM} x {PAN_MAX_MM} mm - it has to fit the pan'),
+                    ('Form', 'pieces or powder'),
+                    ('Mass', f'max {MASS_MAX_MG:.0f} mg, aim for {MASS_OPT_MG:.0f} mg'),
+                    ('Liquid', 'only if not volatile'),
+                    ('Metal', 'alumina crucible only - the crucible may have to be '
+                              'ordered, ask first'),
+                    ('Acids/bases', 'cannot be measured'),
+                    ('Waiting', 'samples run in sequence, so yours may sit on the pan for '
+                                'more than a day at room conditions'),
+                    ('Atmosphere', 'nitrogen or air'),
+                    ('Run time', 'longer than 1 day needs a consultation first'),
+                    ('MS coupling', 'possible, needs a consultation first'),
+                ):
+                    with ui.row().classes('tga-rules-row'):
+                        ui.label(what).classes('tga-rules-what')
+                        ui.label(text).classes('tga-rules-text')
+                ui.label(f'Bring your sample after emailing {CONTACTS}.').classes('tga-rules-foot')
             with ui.row().classes('w-full gap-4 mt-1'):
                 with ui.column().classes('gap-1 flex-1'):
                     ui.label('Sample name *').classes('tga-label')
@@ -597,9 +828,10 @@ def index(request: Request):
                     ui.label('Sample mass').classes('tga-label')
                     unit_refs['sample_mass'] = ui.number(
                         value=get_form()['sample_mass'],
-                        on_change=lambda e: get_form().update(
-                            sample_mass=e.value if e.value not in (None, '') else None)) \
+                        on_change=lambda e: on_mass_change(e.value)) \
                         .props('outlined dense').classes('w-full')
+                    # live check against the 100 mg limit / 50 mg optimum
+                    rules_refs['mass'] = ui.label('').classes('tga-hint')
                 with ui.column().classes('gap-1 w-28'):
                     ui.label('Unit').classes('tga-label')
                     ui.select(UNIT_MASS, value=get_form()['mass_unit'],
@@ -616,14 +848,33 @@ def index(request: Request):
                 with ui.row().classes('w-full gap-4 mt-1'):
                     with ui.column().classes('gap-1 w-48'):
                         ui.label('Crucible').classes('tga-label')
-                        ui.select(CRUCIBLES, value=get_form()['crucible_type'],
-                                  on_change=lambda e: get_form().update(crucible_type=e.value)) \
+                        rules_refs['crucible'] = ui.select(
+                            CRUCIBLES, value=get_form()['crucible_type'],
+                            on_change=lambda e: get_form().update(crucible_type=e.value)) \
                             .props('outlined dense').classes('w-full')
                     with ui.column().classes('gap-1 w-48'):
                         ui.label('Crucible no.').classes('tga-label')
                         ui.input(value=get_form()['pan_number'],
                                  on_change=lambda e: get_form().update(pan_number=e.value)) \
                             .props('outlined dense').classes('w-full')
+
+            # What the form cannot check by itself, the requester declares. The
+            # two statements are required; the two flags switch the rules that
+            # follow from them (alumina crucible / consultation).
+            with ui.column().classes('gap-1 w-full mt-3'):
+                ui.checkbox('My sample meets the requirements above '
+                            '(size, form, non-volatile, waiting time).',
+                            value=get_form()['rules_ack'],
+                            on_change=lambda e: get_form().update(rules_ack=bool(e.value)))
+                ui.checkbox('My sample contains no acids or bases.',
+                            value=get_form()['no_acid'],
+                            on_change=lambda e: get_form().update(no_acid=bool(e.value)))
+                ui.checkbox('Metallic sample - has to be measured in an alumina crucible.',
+                            value=get_form()['metallic'],
+                            on_change=lambda e: on_metallic_change(e.value))
+                ui.checkbox('Mass-spectrometer coupled measurement.',
+                            value=get_form()['ms_coupling'],
+                            on_change=lambda e: on_coupling_change(e.value))
 
         # 2. Atmosphere
         with ui.element('div').classes('tga-panel'):
@@ -694,6 +945,8 @@ def index(request: Request):
             rebuild_segments()
             ui.button('+ Add segment', icon='add', on_click=add_segment) \
                 .props('outline dense').classes('self-start tga-addseg')
+            # the >1 day rule depends on the program, so show the estimate
+            rules_refs['runtime'] = ui.label('').classes('tga-hint')
 
         # 4. Method & notes
         with ui.element('div').classes('tga-panel'):
@@ -718,6 +971,11 @@ def index(request: Request):
                             on_change=lambda e: get_form().update(comments=e.value)) \
                     .props('outlined dense autogrow').classes('w-full')
 
+        # Consultation gate - stays empty unless this request needs one
+        # (metallic sample, MS coupling, run above a day). validate() requires
+        # its checkbox in exactly those cases.
+        rules_refs['consult'] = ui.column().classes('w-full')
+
         # Submit
         with ui.row().classes('w-full items-center gap-4 py-4'):
             global btn_submit
@@ -725,6 +983,11 @@ def index(request: Request):
                                    on_click=submit).props('unelevated size=lg').classes('tga-cta')
         global result_box
         result_box = ui.column().classes('w-full items-center gap-2')
+
+        # initial state of the live rule hints
+        update_mass_hint()
+        update_runtime_label()
+        update_consult_box()
 
 
 ui.run(host='0.0.0.0', port=int(os.environ.get('PORT', '8090')),
