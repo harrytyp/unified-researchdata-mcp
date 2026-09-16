@@ -170,6 +170,129 @@ def compute_tga(signals: Dict[str, List[float]],
     return result
 
 
+# ── DTG cleaning (the lab's recipe) ──────────────────────────────────────────
+# DTG is the noisy one: it is a derivative, so instrument noise on a nearly flat
+# mass signal becomes wild spikes, and ln(dα/dt) blows that up further. The lab
+# cleans it by hand in a notebook with exactly this recipe, and the figures in
+# older reports come from it. Kept here so a curve out of the pipeline is
+# comparable with those.
+DTG_SPAN = 50      # EWMA span, run forward and backward and averaged
+DTG_DELTA = 0.01   # |raw - smoothed| above this counts as noise
+
+
+def _ewma(values: np.ndarray, span: int) -> np.ndarray:
+    """pandas' Series.ewm(span=span).mean() (adjust=True) in plain numpy.
+
+    Same numbers as the notebook this comes from, without pandas becoming a
+    dependency of the plugin.
+    """
+    alpha = 2.0 / (span + 1.0)
+    out = np.empty(len(values), dtype=float)
+    num = 0.0
+    den = 0.0
+    for i, value in enumerate(values):
+        num = value + (1.0 - alpha) * num
+        den = 1.0 + (1.0 - alpha) * den
+        out[i] = num / den
+    return out
+
+
+def _ewma_forward_backward(values: np.ndarray, span: int) -> np.ndarray:
+    """Forward and backward EWMA, averaged - no phase shift to one side.
+
+    A one-sided EWMA lags the curve, which would move every peak temperature;
+    averaging both directions keeps the peaks where they are.
+    """
+    forward = _ewma(values, span)
+    backward = _ewma(values[::-1], span)[::-1]
+    return (forward + backward) / 2.0
+
+
+def _fill_gaps(values: np.ndarray) -> np.ndarray:
+    """Linear interpolation between the kept points, flat at both ends.
+
+    np.interp clamps outside the known range, which is exactly the forward-/
+    backward-fill the manual recipe does after interpolating.
+    """
+    idx = np.arange(len(values))
+    good = np.isfinite(values)
+    if not good.any():
+        return values
+    if good.sum() == 1:
+        return np.full(len(values), values[good][0])
+    filled = values.copy()
+    filled[~good] = np.interp(idx[~good], idx[good], values[good])
+    return filled
+
+
+def clean_dtg(dtg, span: int = DTG_SPAN, delta: float = DTG_DELTA):
+    """Smooth and clean a DTG curve. Returns (cleaned, smoothed) or (None, None).
+
+    Outliers are removed, not clamped: a point far off the smoothed curve *is*
+    the noise that has to go, and keeping its value would only move the spike.
+    The gaps are filled back in so the curve stays continuous.
+    """
+    if dtg is None:
+        return None, None
+    raw = np.asarray(dtg, dtype=float)
+    if raw.size < 3:
+        return None, None
+    raw = np.where(np.isfinite(raw), raw, np.nan)
+    if not np.isfinite(raw).any():
+        return None, None
+    raw = _fill_gaps(raw)          # the EWMA needs a gap-free input
+    smooth = _ewma_forward_backward(raw, span)
+    cleaned = raw.copy()
+    cleaned[np.abs(raw - smooth) > delta] = np.nan
+    return _fill_gaps(cleaned), smooth
+
+
+def _gradient_vs(values: np.ndarray, axis: np.ndarray):
+    """d(values)/d(axis) on a strictly increasing axis, or None.
+
+    The axis has to be monotonic and free of repeats: a TGA run starts with an
+    isotherm, so the temperature array holds long runs of identical values and
+    np.gradient divides by zero there. On a real export that produced a -2000
+    spike and NaNs; the repeats are dropped here instead.
+    """
+    if len(values) != len(axis) or len(values) < 3:
+        return None
+    keep = np.concatenate(([True], np.diff(axis) > 0))
+    if keep.sum() < 3:
+        return None
+    return np.gradient(values[keep], axis[keep])
+
+
+def dtg_for_plot(sig: Dict[str, Any]):
+    """The DTG curve to clean and plot, or None.
+
+    Prefer the instrument's own derivative (the export carries "Abl. Masse" /
+    "Deriv. Weight"); fall back to differentiating the mass signal, because some
+    exports ship without the DTG column. The fallback differentiates against
+    time first (monotonic by construction, and d%/dt is the usual TGA
+    definition) and only then against the temperature axis.
+    """
+    temp = sig.get("temperature") or []
+    time = sig.get("time") or []
+    dtg = sig.get("dtg") or []
+    if len(dtg) > 2 and len(dtg) == len(temp):
+        return np.asarray(dtg, dtype=float)
+    if len(temp) > 2:
+        for key in ("mass_pct", "mass_mg"):
+            mass = sig.get(key) or []
+            if len(mass) != len(temp):
+                continue
+            m = np.asarray(mass, dtype=float)
+            if key == "mass_mg" and np.nanmax(m):
+                m = m / np.nanmax(m) * 100.0
+            for axis in (time, temp):
+                if len(axis) == len(m):
+                    grad = _gradient_vs(m, np.asarray(axis, dtype=float))
+                    if grad is not None:
+                        return grad
+    return None
+
+
 # ── Plot generation ──────────────────────────────────────────────────────────
 
 
@@ -213,8 +336,14 @@ def generate_plot(signals: Dict[str, List[float]],
     onset = computed.get("summary", {}).get("onset_temperature_c")
     if onset:
         ax1.axvline(x=onset, color="gray", ls="--", alpha=0.5)
-    # DTG panel
-    ax2.plot(temp, dtg_val, "r-", lw=1.2, label="DTG")
+    # DTG panel: raw faint behind, cleaned in front - the cleaning drops
+    # points, so keeping both makes the difference visible instead of hiding it.
+    cleaned_dtg, _ = clean_dtg(dtg_val)
+    if cleaned_dtg is not None:
+        ax2.plot(temp, dtg_val, "r-", lw=0.8, alpha=0.35, label="DTG (raw)")
+        ax2.plot(temp, cleaned_dtg, "r-", lw=1.2, label="DTG (smoothed)")
+    else:
+        ax2.plot(temp, dtg_val, "r-", lw=1.2, label="DTG")
     ax2.set_xlabel("Temperature (°C)")
     ax2.set_ylabel("dm/dT (%/°C)")
     ax2.grid(True, alpha=0.3)
@@ -773,6 +902,11 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
             entry.result_mass_mg_signal = sig["mass_mg"]
         if sig.get("dtg"):
             entry.result_dtg_signal = sig["dtg"]
+        # The cleaned curve is the one the plots show (and the one the manual
+        # workflow produced) - store it next to the raw signal.
+        cleaned_dtg, _ = clean_dtg(dtg_for_plot(sig))
+        if cleaned_dtg is not None:
+            entry.result_dtg_cleaned_signal = cleaned_dtg.tolist()
     except Exception as e:
         logger.warning(f"Could not set TRIOS JSON signals: {e}")
 

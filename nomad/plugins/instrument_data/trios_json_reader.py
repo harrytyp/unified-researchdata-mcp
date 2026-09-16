@@ -119,6 +119,13 @@ def _classify_column(key: str, header: Dict[str, Any]) -> Optional[str]:
         return None
     if exact in ("temperature", "time", "step_time"):
         return exact
+    if exact == "dtg":
+        # Must come BEFORE the substring fallback below: "weight" is a substring
+        # of "Deriv. Weight" and "masse" of "Abl. Masse", so those columns were
+        # classified as a mass signal, took the mass_pct slot and the actual DTG
+        # channel was dropped. On a real export that left result_dtg_signal
+        # empty (2026-09-16, "Deriv. Weight_% / °C").
+        return "dtg"
     # Substring fallback (only for clear, unambiguous role terms)
     for role, (terms, unit_suffix) in _ROLE_TERMS.items():
         if any(t in display for t in terms):

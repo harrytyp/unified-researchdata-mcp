@@ -380,6 +380,12 @@ class TgaMeasurement(PlotSection, EntryData):
     result_dtg_signal = Quantity(
         type=np.float64, shape=['*'],
         description="DTG (derivative mass) array from TRIOS JSON (downsampled)")
+    result_dtg_cleaned_signal = Quantity(
+        type=np.float64, shape=['*'],
+        description="DTG curve after the lab's cleaning recipe (forward-backward "
+                    "EWMA, span 50; points deviating more than ±0.01 from the "
+                    "smoothed curve dropped as noise, gaps interpolated and "
+                    "filled) - this is the curve the plots show")
 
     # ── Signal data (parsed curves) ──
     time_signal = Quantity(
@@ -503,6 +509,25 @@ class TgaMeasurement(PlotSection, EntryData):
                 title='TGA — Mass vs Temperature',
             )
             self.figures.append(PlotlyFigure(label='TGA curve', figure=fig.to_plotly_json()))
+
+        # DTG curve - the plot the lab actually reads. Raw faint behind, cleaned
+        # in front: the cleaning is a judgement call, so the difference stays
+        # visible instead of being hidden by the smoothed curve.
+        dtg_clean = _first_signal(self.result_dtg_cleaned_signal, None)
+        dtg_raw = _first_signal(self.result_dtg_signal, None)
+        if (temp_arr is not None and dtg_clean is not None
+                and len(temp_arr) == len(dtg_clean)):
+            fig = px.line(
+                x=temp_arr,
+                y=dtg_clean,
+                labels={'x': 'Temperature (°C)', 'y': 'DTG'},
+                title='TGA — DTG vs Temperature',
+            )
+            fig.data[0].name = 'DTG (smoothed)'
+            if dtg_raw is not None and len(dtg_raw) == len(temp_arr):
+                fig.add_scatter(x=temp_arr, y=dtg_raw, name='DTG (raw)',
+                                line=dict(width=1), opacity=0.35)
+            self.figures.append(PlotlyFigure(label='DTG curve', figure=fig.to_plotly_json()))
 
     def _json_in_upload(self, archive) -> bool:
         """Cheap check: does this upload contain a TRIOS JSON export?

@@ -41,15 +41,16 @@ TRIOS_JSON = {
             "Time_min": {"DisplayName": "Time", "ValueType": "Number", "Unit": {"Name": "min"}},
             "Temperature_C": {"DisplayName": "Temperature", "ValueType": "Number", "Unit": {"Name": "degC"}},
             "Weight_pct": {"DisplayName": "Weight", "ValueType": "Number", "Unit": {"Name": "%"}},
+            "Deriv_Weight_pctC": {"DisplayName": "Deriv. Weight", "ValueType": "Number", "Unit": {"Name": "% / °C"}},
             "Weight_mg": {"DisplayName": "Weight", "ValueType": "Number", "Unit": {"Name": "mg"}}
         },
         "Rows": [
-            {"Time_min": 0.0, "Temperature_C": 30.0, "Weight_pct": 100.0, "Weight_mg": 12.333},
-            {"Time_min": 1.0, "Temperature_C": 130.0, "Weight_pct": 99.0, "Weight_mg": 12.209},
-            {"Time_min": 2.0, "Temperature_C": 230.0, "Weight_pct": 98.0, "Weight_mg": 12.086},
-            {"Time_min": 3.0, "Temperature_C": 330.0, "Weight_pct": 97.0, "Weight_mg": 11.963},
-            {"Time_min": 4.0, "Temperature_C": 400.0, "Weight_pct": 96.5, "Weight_mg": 11.901},
-            {"Time_min": 5.0, "Temperature_C": 400.0, "Weight_pct": 96.0, "Weight_mg": 11.840}
+            {"Time_min": 0.0, "Temperature_C": 30.0, "Weight_pct": 100.0, "Weight_mg": 12.333, "Deriv_Weight_pctC": -0.010},
+            {"Time_min": 1.0, "Temperature_C": 130.0, "Weight_pct": 99.0, "Weight_mg": 12.209, "Deriv_Weight_pctC": -0.010},
+            {"Time_min": 2.0, "Temperature_C": 230.0, "Weight_pct": 98.0, "Weight_mg": 12.086, "Deriv_Weight_pctC": -0.010},
+            {"Time_min": 3.0, "Temperature_C": 330.0, "Weight_pct": 97.0, "Weight_mg": 11.963, "Deriv_Weight_pctC": -0.007},
+            {"Time_min": 4.0, "Temperature_C": 400.0, "Weight_pct": 96.5, "Weight_mg": 11.901, "Deriv_Weight_pctC": 0.0},
+            {"Time_min": 5.0, "Temperature_C": 400.0, "Weight_pct": 96.0, "Weight_mg": 11.840, "Deriv_Weight_pctC": 0.0}
         ]
     }},
     "StartTime": "2026-09-09T08:00:00"
@@ -243,6 +244,8 @@ def verify_results(upload_id, tag, expect_gz):
     rc = int(res.get('result_row_count', 0) or 0)
     rn = str(res.get('result_sample_name', ''))
     ts = res.get('result_temperature_signal', [])
+    dtg = res.get('result_dtg_signal', [])
+    dtg_clean = res.get('result_dtg_cleaned_signal', [])
     pan_t = str(res.get('result_pan_type', ''))
     pan_n = str(res.get('result_pan_number', ''))
     mass = res.get('result_sample_mass_mg')
@@ -251,11 +254,21 @@ def verify_results(upload_id, tag, expect_gz):
     # requester's form data, so they can only come from the JSON)
     ok_pan = pan_t == 'Platinum HT' and pan_n == '3'
     ok_mass = mass is not None and abs(float(mass) - 12.333) < 1e-6
+    n_pts = len(ts) if isinstance(ts, list) else 0
+    # DTG: the instrument's own curve (the fixture carries "Deriv. Weight",
+    # which the reader used to mis-read as a mass column) plus the cleaned
+    # curve the plots show, both along the temperature axis, and the plot
+    # itself as a third figure (procedure preview + TGA + DTG).
+    ok_dtg = (isinstance(dtg, list) and len(dtg) == n_pts and n_pts > 0
+              and isinstance(dtg_clean, list) and len(dtg_clean) == n_pts
+              and not any(v != v for v in dtg_clean))
     details = (f'file={jf} sample={rn} rows={rc} '
-               f'pts={len(ts) if isinstance(ts, list) else "?"} figs={figs} '
-               f'pan={pan_t or "-"}/{pan_n or "-"} mass={mass}')
+               f'pts={n_pts} dtg={len(dtg) if isinstance(dtg, list) else "?"} '
+               f'dtg_clean={len(dtg_clean) if isinstance(dtg_clean, list) else "?"} '
+               f'figs={figs} pan={pan_t or "-"}/{pan_n or "-"} mass={mass}')
     return (ok_name and MARKER in rn and rc == 6
-            and isinstance(ts, list) and 0 < len(ts) <= 6 and figs >= 1
+            and isinstance(ts, list) and 0 < len(ts) <= 6
+            and ok_dtg and figs >= 3
             and ok_pan and ok_mass), details
 
 
