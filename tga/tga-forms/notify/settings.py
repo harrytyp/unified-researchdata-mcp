@@ -102,7 +102,10 @@ DEFAULTS: Dict[str, Any] = {
     "admins": DEFAULT_ADMINS,
     "links": {
         "nomad_base": "https://researchmcp.duckdns.org/nomad-oasis",
-        "form_app": "https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/",
+        # Oeffentliche Adresse fuer Links in Mails: die kurzen Wege
+        # (/requests, /eln/<id>) leiten in den App-Pfad um, in dem die
+        # NOMAD-Session liegt - kurz genug zum Abtippen.
+        "form_app": "https://researchmcp.duckdns.org",
     },
 }
 

@@ -55,7 +55,19 @@ proespm.researchmcp.duckdns.org {
 }
 
 researchmcp.duckdns.org {
+    # Kurze Wege zu den TGA-Seiten. Die App liegt hinter /nomad-oasis, weil sie
+    # dort die NOMAD-Session erbt (Cookie mit Path=/nomad-oasis); diese Adressen
+    # leiten dorthin um. Wichtig: "redir" wird vor "handle"/"handle_path"
+    # ausgewertet, sonst schluckt /el* die Adresse /eln.
+    redir /requests /nomad-oasis/api/tga-forms/requests permanent
+    redir /eln /nomad-oasis/api/tga-forms/eln permanent
+    # /eln/<upload_id> ist der Download des ELN-Pakets
+    redir /eln/* /nomad-oasis/api/tga-forms{uri} permanent
+    redir /admin /nomad-oasis/api/tga-forms/admin permanent
+    redir /tga /nomad-oasis/api/tga-forms/ permanent
+
     @api path /dt/* /el/*
+
     @options method OPTIONS
 
     handle @options {

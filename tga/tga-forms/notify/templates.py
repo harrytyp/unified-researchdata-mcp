@@ -214,6 +214,8 @@ def results_ready_user(ctx: Dict[str, Any]) -> Message:
     else:
         text_lines.append("  Push the entry to your eLabFTW from the request page "
                           "(choose your instance, team and API key there).")
+    if ctx.get("requests_url"):
+        text_lines.append(f"  Your requests: {ctx['requests_url']}")
     if ctx.get("download_url"):
         text_lines.append(f"  Or download the package for a manual upload: {ctx['download_url']}")
     text_lines += ["", "Questions about the measurement",

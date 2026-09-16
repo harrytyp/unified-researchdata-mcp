@@ -361,9 +361,16 @@ def _export_context(row: Dict[str, Any], summary: Dict[str, Any]) -> Dict[str, A
         "dtg_window": window,
         "dtg_delta": delta,
         "exported_at": time.strftime("%Y-%m-%d %H:%M"),
+        "requests_url": requests_url(),
         "download_url": (settings.get("links", {}).get("form_app", "").rstrip("/")
                          + f"/eln/{row['upload_id']}"),
     }
+
+
+def requests_url() -> str:
+    """Short address of the request page (for the mails)."""
+    base = settings_mod.load_settings().get("links", {}).get("form_app", "").rstrip("/")
+    return f"{base}/requests"
 
 
 def download_url(upload_id: str) -> str:
@@ -393,6 +400,7 @@ def request_context(upload_id: str, archive: Dict[str, Any], requester: Optional
                                or requester.get("email") or ""),
         "entry_url": _gui_url(upload_id),
         "upload_url": _gui_url(upload_id),
+        "requests_url": requests_url(),
         "drop_off": settings.get("recipients", {}).get("drop_off", ""),
         "contacts": settings.get("recipients", {}).get("lab_contacts", {}),
         "consultation": list(consultation or []),
