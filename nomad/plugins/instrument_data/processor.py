@@ -21,6 +21,38 @@ import numpy as np
 
 logger = logging.getLogger("instrument-processor")
 
+# ── Benachrichtigungen ───────────────────────────────────────────────────────
+# Die Mails verschickt die Antrags-App (sie kennt Mailkonto, Empfaenger und
+# Texte und kann den fertigen Eintrag lesen). Der Prozessor meldet nur, dass ein
+# Upload fertig ist - oder dass die Verarbeitung gescheitert ist.
+TGA_FORMS_URL = os.environ.get("TGA_FORMS_URL", "http://tga-forms:8090")
+TGA_INTERNAL_SECRET = os.environ.get("STORAGE_SECRET", "")
+
+
+def notify_processing_done(upload_id: str, error: str = "") -> bool:
+    """Melde der Antrags-App, dass ein Upload verarbeitet ist (best effort).
+
+    Nie blockierend und nie werfend: die Verarbeitung darf nicht daran scheitern,
+    dass die App gerade nicht erreichbar ist oder die Mails noch nicht
+    eingerichtet sind.
+    """
+    if not TGA_FORMS_URL or not upload_id:
+        return False
+    import json as _json
+    import urllib.request
+    body = _json.dumps({"upload_id": str(upload_id), "error": error or ""}).encode()
+    req = urllib.request.Request(
+        TGA_FORMS_URL.rstrip("/") + "/internal/notify/results-ready",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "X-TGA-Secret": TGA_INTERNAL_SECRET})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return response.status in (200, 202)
+    except Exception as exc:
+        logger.warning(f"Notification for {upload_id} not delivered: {exc}")
+        return False
+
 # Import from sibling modules
 from instrument_data.parser import detect_format, parse_file, extract_tga_metadata
 from instrument_data.elabftw_client import ElabftwClient
@@ -1025,8 +1057,12 @@ def _process_trios_json_in_upload(entry: Any, archive: Any, logger: Any) -> bool
                 f"downsampled to {len(sig.get('temperature') or [])}), "
                 f"residue={summary.get('residue_mass_pct')}%"
             )
+            # Der Auftraggeber und die Operatoren erfahren, dass das Ergebnis da
+            # ist. Die App wartet selbst, bis das Eintragsarchiv geschrieben ist.
+            notify_processing_done(upload_id)
     except Exception as e:
         logger.warning(f"TRIOS JSON compute failed: {e}")
+        notify_processing_done(upload_id, str(e))
 
     return True
 

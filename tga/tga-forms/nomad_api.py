@@ -103,10 +103,15 @@ def user_from_token(token: str) -> Optional[Dict[str, Any]]:
         d = json.loads(base64.urlsafe_b64decode(payload))
         if not isinstance(d, dict):
             return None
+        # NOMAD kennt zwei Token-Formen: das Keycloak-Token der GUI (sub, name,
+        # email) und das eigene Simple-Token (Nutzer-ID steht in 'user'). Beide
+        # werden hier auf dieselben Felder abgebildet, sonst haelt die App einen
+        # gueltig angemeldeten Nutzer fuer unbekannt.
         return {
             'name': d.get('name') or d.get('preferred_username') or d.get('sub'),
             'username': d.get('preferred_username'),
             'sub': d.get('sub'),
+            'user': d.get('user'),
             'email': d.get('email'),
         }
     except Exception:

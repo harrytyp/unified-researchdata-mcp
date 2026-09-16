@@ -29,6 +29,9 @@ services:
       NOMAD_SERVICES_API_PORT: 80
       NOMAD_TEMPORAL_HOST: temporal
       PYTHONPATH: /app/plugins
+      # Die Antrags-App im selben Netz verschickt die Benachrichtigungen
+      TGA_FORMS_URL: http://tga-forms:8090
+      STORAGE_SECRET: ${STORAGE_SECRET:-tga-forms-dev-secret-change-me}
     healthcheck:
       interval: 10s
       retries: 30
@@ -292,6 +295,9 @@ services:
       NOMAD_SERVICE: nomad_oasis_worker
       NOMAD_TEMPORAL_HOST: temporal
       PYTHONPATH: /app/plugins
+      # Die Antrags-App im selben Netz verschickt die Benachrichtigungen
+      TGA_FORMS_URL: http://tga-forms:8090
+      STORAGE_SECRET: ${STORAGE_SECRET:-tga-forms-dev-secret-change-me}
     healthcheck:
       interval: 10s
       retries: 5

@@ -18,6 +18,8 @@ from starlette.requests import Request
 from session_email import email_from_token
 
 import nomad_api
+import ui_notify
+from notify import settings as settings_mod
 from style_css import CSS
 
 TITLE = 'TGA Measurement Request'
@@ -752,6 +754,18 @@ async def submit():
                       type='negative')
             return
         uid = res['uid']
+        if uid:
+            # Operator und Auftraggeber erfahren vom Antrag. Bewusst nach dem
+            # Upload (die Links in der Mail muessen funktionieren) und bewusst
+            # ohne den Antrag zu gefaehrden, falls das Einreihen scheitert.
+            try:
+                for _report in ui_notify.notify_new_request(
+                        uid, archive, user, consultation_reasons()):
+                    if _report.get('status') not in ('sent', 'queued'):
+                        ui.notify(f"Notification {_report.get('event')}: "
+                                  f"{_report.get('status')}", type='warning')
+            except Exception as _notify_error:
+                ui.notify(f'Notification failed: {_notify_error}', type='warning')
         if res['group_status'] not in (200, 201) and OPERATOR_GROUP:
             ui.notify(f'Operator group not added ({res["group_status"]})', type='warning')
         result_box.clear()
@@ -811,6 +825,22 @@ result_box = None
 
 
 # ── Page ─────────────────────────────────────────────────────────────────────
+# ── Seiten rund um Benachrichtigungen und ELN ────────────────────────────────
+# Antraege (mit Ergebnissen), das eigene eLabFTW-Ziel und die Konfiguration
+# liegen in ui_notify und teilen Login, Token und Styling mit diesem Formular.
+ui_notify.register(
+    get_user=current_user,
+    get_token=auth_token,
+    accent=ACCENT,
+    css=CSS,
+    title=TITLE,
+    open_login_js=OPEN_LOGIN_JS,
+    nomad_api=nomad_api,
+    state=st,
+    navigate=lambda target: ui.navigate.to(target),
+)
+
+
 @ui.page('/')
 def index(request: Request):
     ui.add_head_html(CSS)
@@ -845,6 +875,13 @@ def index(request: Request):
             ui.label(str(user.get('name') or '?')).classes('tga-user')
             ui.button('NOMAD', on_click=lambda: ui.navigate.to('/nomad-oasis/gui', new_tab=True)) \
                 .props('flat dense outline').classes('tga-header-btn')
+            ui.button('My requests', on_click=lambda: ui.navigate.to('/requests')) \
+                .props('flat dense').classes('tga-header-btn')
+            ui.button('My ELN', on_click=lambda: ui.navigate.to('/eln')) \
+                .props('flat dense').classes('tga-header-btn')
+            if settings_mod.is_admin(user):
+                ui.button('Admin', on_click=lambda: ui.navigate.to('/admin')) \
+                    .props('flat dense').classes('tga-header-btn')
         else:
             ui.badge('Not signed in').props('color=amber-8')
             ui.button('Sign in')                 .on('click', js_handler=OPEN_LOGIN_JS)                 .props('outline dense')

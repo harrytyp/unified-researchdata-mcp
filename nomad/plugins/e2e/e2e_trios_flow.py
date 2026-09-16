@@ -382,7 +382,11 @@ def main():
             print(f'=== E2E {MARKER}: {passed.count(False)} CHECK(S) FEHLGESCHLAGEN ===')
             sys.exit(1)
     finally:
-        if upload_id:
+        if upload_id and os.environ.get('TGA_E2E_KEEP'):
+            # Kept on purpose: use it to inspect the entry (and its results)
+            # through the API, or to look at a failed run before it is gone.
+            print(f'Cleanup uebersprungen (TGA_E2E_KEEP): Upload {upload_id} bleibt')
+        elif upload_id:
             st, _ = api_raw('DELETE', f'/uploads/{upload_id}')
             print(f'Cleanup: Test-Upload {upload_id} geloescht (http={st})')
 

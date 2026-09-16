@@ -25,3 +25,6 @@ nomad/plugins/*.tar.gz
 
 # NOMAD-generated GUI runtime copy (recreated on app start)
 nomad/plugins/run/gui_configured/
+
+# Konfiguration und Warteschlange der TGA-Formular-App (enthaelt Zugangsdaten)
+tga/tga-forms/data/

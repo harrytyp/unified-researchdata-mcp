@@ -5,6 +5,13 @@ services:
     restart: unless-stopped
     environment:
       STORAGE_SECRET: ${STORAGE_SECRET:-tga-forms-dev-secret-change-me}
+    volumes:
+      # Konfiguration (Mail-Konto, Empfaenger, eLabFTW-Ziele) und die Warteschlange
+      # der noch nicht versendeten Mails. Liegt ausserhalb von Git.
+      - ./data:/data
+      # Fertig verarbeitete Eintraege liegen als Archiv auf dem Staging-Volume;
+      # gelesen wird nur, was die NOMAD-API fuer den angemeldeten Nutzer freigibt.
+      - ../../nomad/.volumes/fs:/app/.volumes/fs:ro
     networks:
       - nomad_oasis_network
 
