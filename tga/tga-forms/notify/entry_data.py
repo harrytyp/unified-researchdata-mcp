@@ -151,6 +151,22 @@ def signals(fields: Dict[str, Any]) -> Dict[str, List[float]]:
     return out
 
 
+def is_measured(fields: Dict[str, Any]) -> bool:
+    """Is this a measured sample, or still just a request?
+
+    A request carries a sample name but no measurement; a processed run has the
+    curves and the result values. The distinction drives the request list
+    ("waiting" vs "results ready") and the crucible slots, which only concern
+    samples that have not been measured yet.
+
+    Not "are there result keys": `results()` also reports the sample name, so a
+    plain request already returned a non-empty dict (found on a real request).
+    """
+    if signals(fields):
+        return True
+    return any(key.startswith("result_") for key in fields)
+
+
 def _fmt(value: Any, unit: str = "", digits: int = 2) -> str:
     if value is None or value == "":
         return ""
@@ -316,7 +332,9 @@ def request_summary(upload_id: str) -> Dict[str, Any]:
         "requester": fields.get("requester_email") or "",
         "operator": fields.get("operator") or fields.get("sample.operator") or "",
         "comment": fields.get("comments") or "",
-        "measured": bool(res),
+        # is_measured, nicht bool(res): ein Antrag liefert schon den
+        # Probennamen und galt damit faelschlich als gemessen.
+        "measured": is_measured(fields),
     }
 
 

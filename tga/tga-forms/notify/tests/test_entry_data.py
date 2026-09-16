@@ -50,8 +50,12 @@ fields = {'result_td5': 305.234, 'result_td10': 330.5, 'result_residue': 30.17,
           'result_pan_number': 3, 'result_sample_name': 'Kollidon VA64',
           'gas_atmosphere': 'Nitrogen', 'gas_flow_rate': 25.0,
           'balance_flow_rate': 10.0,
-          'temperature_segments': [{'end_temp': 600.0, 'rate': 10.0},
-                                   {'duration_min': 30.0}]}
+          # so schreibt das Formular sie: typisiert ueber m_def
+          'temperature_segments': [
+              {'m_def': 'instrument_data.schema.RampSegment',
+               'end_temp': 600.0, 'rate': 10.0},
+              {'m_def': 'instrument_data.schema.IsothermalSegment',
+               'duration_min': 30.0}]}
 res = ed.results(fields)
 check('Td5 mit Einheit', res.get('td5') == '305.2 °C', str(res.get('td5')))
 check('Mass loss aus dem Rueckstand gerechnet',
@@ -62,8 +66,15 @@ params = ed.parameters(fields)
 check('Atmosphaere', params.get('atmosphere') == 'Nitrogen')
 check('Gasmengen benannt', 'sample gas' in params.get('gas_flows', '')
       and 'balance gas' in params.get('gas_flows', ''), params.get('gas_flows'))
-check('Segmente uebersetzt', params['segments'][0].get('end') == '600.0 °C'
-      and params['segments'][1].get('hold') == '30.0 min', str(params['segments']))
+check('Segmente typisiert (Ramp/Hold)', params['segments'][0].get('kind') == 'ramp'
+      and params['segments'][1].get('kind') == 'hold', str(params['segments']))
+check('Segmentwerte uebersetzt',
+      params['segments'][0].get('end_temp') == 600.0
+      and params['segments'][1].get('duration_min') == 30.0, str(params['segments']))
+check('Programmzeilen lesbar',
+      ed.segment_lines(params['segments']) == ['1. Ramp to 600 C at 10 C/min',
+                                               '2. Hold for 30 min'],
+      ed.segment_lines(params['segments']))
 
 print()
 print('=== Kurvenauswahl ===')
@@ -100,8 +111,11 @@ else:
     check('Archiv gelesen', bool(summary['fields']), f'{len(summary["fields"])} Felder')
     check('Ergebniswerte erkannt', bool(summary['sample_name']) and bool(summary['results']),
           f'{summary["sample_name"]!r} {summary["results"]}')
-    check('Kurven vorhanden', bool(summary['signals']),
-          ', '.join(f'{k}[{len(v)}]' for k, v in summary['signals'].items()))
+    if summary['measured']:
+        check('Kurven vorhanden', bool(summary['signals']),
+              ', '.join(f'{k}[{len(v)}]' for k, v in summary['signals'].items()))
+    else:
+        print('  (Upload ist ein Antrag ohne Messung - Kurvenpruefung uebersprungen)')
     if summary['fields'].get('temperature_segments'):
         check('Programm erkannt', bool(summary['parameters']['segments']),
               str(summary['parameters']['segments']))
@@ -109,6 +123,21 @@ else:
         print('  (Programm im Archiv nicht enthalten - Parameterpruefung uebersprungen)')
 
 print()
+print()
+print("=== Antrag vs. Messung (is_measured) ===")
+# Ein Antrag traegt den Probennamen, aber keine Messung; results() ist schon
+# damit nicht leer. Genau daran hing die Antragsliste: sie zeigte fuer einen
+# nie gemessenen Antrag "results ready" und die Slot-Vergabe fand nichts
+# Wartendes mehr.
+request_fields = {"sample.sample_name": "UI-RULES-1", "requester_email": "a@b.de"}
+measured_fields = dict(request_fields)
+measured_fields["result_temperature_signal"] = [1.0, 2.0, 3.0]
+measured_fields["result_td5"] = 305.2
+check("Antrag gilt nicht als gemessen", not ed.is_measured(request_fields))
+check("Messung gilt als gemessen", ed.is_measured(measured_fields))
+check("reine Ergebniswerte zaehlen auch",
+      ed.is_measured({"result_residue_mass_pct": 30.1}))
+
 print('ERGEBNIS:', 'ALLE CHECKS BESTANDEN' if not FAILS
       else f'{len(FAILS)} FEHLER: ' + '; '.join(FAILS))
 sys.exit(1 if FAILS else 0)

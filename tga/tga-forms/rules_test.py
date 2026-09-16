@@ -64,6 +64,31 @@ def set_input(page, label, value):
     page.wait_for_timeout(900)
 
 
+def open_options(page, xpath, attempts=4):
+    """Read the options of a Quasar select.
+
+    The menu only exists in the DOM while it is open, and Quasar needs a moment
+    to mount it - so this retries instead of reading an empty list.
+    """
+    for _ in range(attempts):
+        try:
+            page.locator(xpath).first.click()
+        except Exception:
+            pass
+        page.wait_for_timeout(800)
+        items = [o.strip() for o in page.locator('.q-menu .q-item').all_inner_texts()]
+        if items:
+            return items
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(300)
+        try:
+            page.get_by_text('Crucible (optional)').first.click()
+            page.wait_for_timeout(400)
+        except Exception:
+            pass
+    return []
+
+
 def set_aria_input(page, aria, value):
     """Segment fields are addressed by their aria-label (see ui_units_test)."""
     f = page.locator(f'xpath=//input[contains(@aria-label,"{aria}")]').first
@@ -288,6 +313,67 @@ with sync_playwright() as p:
         except Exception as e:
             FAILS.append(f'Eintrag nicht pruefbar: {e}')
             print('   Fehler beim Auslesen:', e)
+
+    print()
+    print('=== 6. Vorgaben der Operatoren: Tiegel, Fluesse, Programm ===')
+    # 1. Aluminium-Tiegel werden nicht angeboten.
+    # Die Optionen stehen als Konstante in der Seite; das Menue selbst laesst
+    # sich in der zugeklappten Sektion nicht verlaesslich oeffnen.
+    source = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'app.py'), encoding='utf-8').read()
+    crucibles = re.search(r'CRUCIBLES = \[(.*?)\]', source)
+    listed = crucibles.group(1) if crucibles else ''
+    check('Tiegelauswahl ohne Aluminum', 'luminum' not in listed, listed.strip())
+    check('Alumina und Platinum bleiben waehlbar',
+          'Alumina' in listed and 'Platinum' in listed, listed.strip())
+    page.get_by_text('Crucible (optional)').first.click()
+    page.wait_for_timeout(700)
+    check('kein Aluminum im gerenderten Formular',
+          'aluminum' not in page.inner_text('body').lower())
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(400)
+    # 2. Keine Tiegel-Nummer fuer den Antragsteller.
+    check('kein Feld "Crucible no."',
+          page.locator('xpath=//div[contains(@class,"tga-label") and '
+                       'normalize-space()="Crucible no."]').count() == 0)
+    # 3. Fluesse sind Vorgabe des Labors, keine Eingabe.
+    body = page.inner_text('body')
+    check('kein Feld "Sample flow"',
+          page.locator('xpath=//div[contains(@class,"tga-label") and '
+                       'normalize-space()="Sample flow"]').count() == 0)
+    check('kein Feld "Balance flow"',
+          page.locator('xpath=//div[contains(@class,"tga-label") and '
+                       'normalize-space()="Balance flow"]').count() == 0)
+    check('Fluesse stehen als Vorgabe im Formular',
+          'Sample 20 mL/min' in body and 'Balance 10 mL/min' in body)
+    # 4. Programm: nur Rampe und Haltezeit, keine Gasfluss-Schritte.
+    check('kein Feld "Gas flow" im Programmschritt',
+          page.locator('xpath=//input[contains(@aria-label,"Gas flow")]').count() == 0)
+    seg_options = open_options(page, '[aria-label*="Segment type"]')
+    if not seg_options:
+        seg_options = open_options(page, 'xpath=//label[contains(., "Segment type")]')
+    check('Segmenttypen ohne Gasfluss',
+          bool(seg_options) and not any('flow' in o.lower() for o in seg_options),
+          seg_options)
+    check('Rampe und Haltezeit bleiben waehlbar',
+          any('Ramp' in o for o in seg_options) and any('Isothermal' in o for o in seg_options),
+          seg_options)
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(400)
+
+    print()
+    print('=== 7. Slot-Vergabe (Operatoren) ===')
+    page.goto(URL + 'admin')
+    page.wait_for_timeout(2500)
+    admin_body = page.inner_text('body')
+    if 'Not enabled for this account' in admin_body:
+        print('  [SKIP] Admin-Panel (der Token gehoert zu keinem Admin-Konto)')
+    else:
+        check('Admin: Slot-Panel vorhanden', 'Crucible slots' in admin_body)
+        check('Admin: Button vergibt nach Eingangsdatum',
+              'assign by registration date' in admin_body.lower())
+        page.goto(URL)
+        page.wait_for_timeout(2000)
 
     check('keine JS-Fehler', not errors, errors[:2])
     page.screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)),

@@ -156,11 +156,27 @@ def _request_row(upload: Dict[str, Any], token: str) -> Dict[str, Any]:
         "upload_name": name,
         "code": code,
         "sample": res.get("sample_name") or name,
-        "ready": bool(res),
+        # "ready" heisst gemessen, nicht "hat Ergebnis-Schluessel": ein Antrag
+        # liefert schon den Probennamen, galt damit aber faelschlich als fertig.
+        "ready": entry_data.is_measured(fields),
         "results": res,
         "created": str(upload.get("upload_create_time") or "")[:10],
+        "created_raw": str(upload.get("upload_create_time") or ""),
         "gui_url": _gui_url(upload_id),
     }
+
+
+def _pending_requests(token: str) -> List[Dict[str, Any]]:
+    """Requests waiting for their measurement, oldest first.
+
+    Oldest first is the order the operators work in and therefore the order the
+    crucible slots are handed out in.
+    """
+    rows = [_request_row(upload, token) for upload in _my_uploads(token)]
+    pending = [row for row in rows
+               if not row["ready"]
+               and row["upload_name"].startswith("TGA Request")]
+    return sorted(pending, key=lambda row: row["created_raw"])
 
 
 # ── my requests ─────────────────────────────────────────────────────────────
@@ -217,8 +233,10 @@ def _request_card(row: Dict[str, Any], token: str, refresh) -> None:
                     color="#16a34a" if row["ready"] else "#f59e0b").classes("text-2xl")
             with ui.column().classes("gap-0 grow"):
                 ui.label(f"{row['sample']}").classes("text-lg font-medium")
+                slot = settings_mod.pan_slot_get(row["upload_id"])
                 ui.label(f"Code {row['code']}  |  {row['created']}  |  "
                          f"{'results ready' if row['ready'] else 'waiting for the measurement'}"
+                         + (f"  |  crucible slot {slot}" if slot else "")
                          ).classes("text-sm text-grey-5")
             if row["ready"]:
                 for label, value in row["results"].items():
@@ -561,6 +579,7 @@ def page_admin(request: Request) -> None:
         _mail_panel(state)
         _recipient_panel(state)
         _notification_panel(state)
+        _pan_slot_panel(token)
         _elabftw_panel(state)
         _queue_panel(state)
         _audit_panel(state)
@@ -742,6 +761,76 @@ def _elabftw_panel(state: Dict[str, Any]) -> None:
         with ui.row().classes("gap-2"):
             ui.button("Save", icon="save", on_click=save_elabftw).props("unelevated")
             ui.button("Test connection", icon="wifi_tethering", on_click=test_elabftw).props("outline")
+
+
+def _pan_slot_panel(token: str) -> None:
+    """Crucible slots: the operators hand them out, not the requesters.
+
+    A requester cannot know which crucible their sample ends up in - that is a
+    lab decision, and the number follows the order the requests arrived. The
+    button numbers every waiting request accordingly; the first slots are the
+    ones the lab keeps for external analyses.
+    """
+    external = settings_mod.external_slots()
+    with ui.element("div").classes("tga-panel w-full"):
+        with ui.row().classes("items-center gap-2"):
+            ui.icon("grid_view", color=_accent()).classes("text-2xl")
+            ui.label("Crucible slots").classes("text-lg font-medium")
+            if external:
+                ui.badge(f"{external} for external analyses", color="grey")
+        ui.label("Requesters do not choose a crucible number. The button numbers every "
+                 "waiting request in the order it arrived, so the sample registered "
+                 "first gets the first slot. Assigned samples keep their number."
+                 ).classes("text-sm text-grey-5")
+        ui.label("The number is kept here and shown on the request page; NOMAD itself "
+                 "does not accept extra fields on an upload, and the pan the "
+                 "instrument used is recorded by the measurement anyway."
+                 ).classes("tga-hint")
+
+        box = ui.column().classes("w-full gap-1 mt-2")
+
+        def refresh() -> None:
+            assignments = settings_mod.pan_slots_read()
+            rows = _pending_requests(token)
+            box.clear()
+            with box:
+                if not rows:
+                    ui.label("No request is waiting for a measurement.").classes("text-sm text-grey-5")
+                    return
+                for row in rows:
+                    slot = assignments.get(row["upload_id"])
+                    with ui.row().classes("items-center gap-2"):
+                        ui.badge(f"slot {slot}" if slot else "not assigned",
+                                 color="green" if slot else "amber")
+                        ui.label(f"{row['sample']} ({row['code']})  |  registered {row['created']}"
+                                 ).classes("text-sm")
+                        if slot and external and int(slot) > external:
+                            ui.label("beyond the external slots").classes("text-xs text-amber-400")
+
+        def assign() -> None:
+            rows = _pending_requests(token)
+            if not rows:
+                ui.notify("Nothing is waiting", type="warning", position="top")
+                return
+            assigned = settings_mod.pan_slots_assign([row["upload_id"] for row in rows])
+            refresh()
+            ui.notify(f"Assigned {len(assigned)} slot(s) by registration date",
+                      type="positive", position="top")
+
+        def clear() -> None:
+            settings_mod.pan_slots_clear()
+            refresh()
+            ui.notify("Assignment cleared", position="top")
+
+        refresh()
+        with ui.row().classes("gap-3 mt-2 items-end"):
+            ui.button("Assign by registration date", icon="format_list_numbered",
+                      on_click=assign).props("unelevated")
+            ui.button("Clear", icon="clear", on_click=clear).props("outline")
+            ui.number("Slots for external analyses", value=external, min=0, max=50,
+                      on_change=lambda e: settings_mod.save_settings(
+                          {"pan_slots": {"external": int(e.value or 0)}})) \
+                .props("outlined dense").classes("w-56")
 
 
 def _queue_panel(state: Dict[str, Any]) -> None:

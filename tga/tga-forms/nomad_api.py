@@ -373,7 +373,10 @@ def build_archive(form: Dict[str, Any]) -> Dict[str, Any]:
     # requester_email is stored with the request: NOMAD's user record
     # carries no address in this Oasis, so this is the only way to reach
     # the person who asked for the measurement.
-    for key in ('crucible_type', 'pan_number', 'gas_atmosphere', 'comments',
+    # No pan number: the crucible slot is assigned by the operators in the
+    # order the requests arrive, and the instrument records the pan it actually
+    # used, so a requester's number would only be a guess that contradicts both.
+    for key in ('crucible_type', 'gas_atmosphere', 'comments',
                 'requester_email'):
         if form.get(key) not in (None, ''):
             data[key] = form[key]

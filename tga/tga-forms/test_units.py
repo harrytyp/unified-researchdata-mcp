@@ -124,5 +124,19 @@ if not ok5:
 print(f'  [{"OK " if ok5 else "FAIL"}] sample ohne operator: {a3.get("sample")}')
 
 print()
+print('=== Vorgaben des Labors: Fluesse ja, Tiegel-Nummer nein ===')
+# Die Fluesse sind Instrumenten-Setup des Labors und werden von der App
+# vorbelegt; sie muessen im Archiv landen, damit .tprc und Eintrag vollstaendig
+# sind. Die Tiegel-Nummer dagegen vergeben die Operatoren nach Eingangsdatum -
+# ein Wert aus dem Formular darf sie nicht mehr ueberschreiben.
+fresh = api.build_archive({'sample_name': 'X', 'gas_atmosphere': 'N2',
+                           'gas_flow_rate': 20.0, 'balance_flow_rate': 10.0,
+                           'flow_unit': 'mL/min'})['data']
+eq('Labor-Fluss Sample im Archiv', fresh.get('gas_flow_rate'), 20.0)
+eq('Labor-Fluss Balance im Archiv', fresh.get('balance_flow_rate'), 10.0)
+with_pan = api.build_archive({'sample_name': 'X', 'pan_number': '7'})['data']
+eq('Tiegel-Nummer wird nicht uebernommen', 'pan_number' in with_pan, False)
+
+print()
 print('ERGEBNIS:', 'ALLE TESTS BESTANDEN' if not FAILS else f'{len(FAILS)} FEHLER: {FAILS}')
 sys.exit(1 if FAILS else 0)

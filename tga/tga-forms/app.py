@@ -26,10 +26,10 @@ TITLE = 'TGA Measurement Request'
 ACCENT = '#5e6ad2'
 
 SEGMENT_TYPES = [
+    # Only the temperature program is the requester's to define. Gas flow steps
+    # are part of the lab's instrument setup and are not offered here.
     {'id': 'ramp', 'label': 'Ramp (heat / cool)'},
     {'id': 'isothermal', 'label': 'Isothermal (hold)'},
-    {'id': 'mass_flow', 'label': 'Gas flow (sample)'},
-    {'id': 'balance_flow', 'label': 'Gas flow (balance)'},
 ]
 SEG_LABEL = {s['id']: s['label'] for s in SEGMENT_TYPES}
 OPEN_LOGIN_JS = '(e) => { try { window.__tgaLogin = window.open("/nomad-oasis/gui", "_blank"); } catch (err) { window.location = "/nomad-oasis/gui"; } }'
@@ -76,7 +76,17 @@ AUTH_REFRESH_JS = '''
 '''
 
 
-CRUCIBLES = ['Alumina', 'Platinum', 'Aluminum']
+# The purge gas flows are part of the instrument setup the lab specifies: they
+# are the same for every measurement, and a wrong value would silently change
+# the atmosphere. The form therefore shows them as information instead of
+# offering input, and build_archive writes the lab's values.
+LAB_SAMPLE_FLOW = 20.0      # mL/min sample purge gas
+LAB_BALANCE_FLOW = 10.0     # mL/min balance purge gas
+LAB_FLOW_UNIT = 'mL/min'
+
+# Crucibles the lab uses. No aluminium: those pans react with our samples and
+# would change the result, so the form does not offer them at all.
+CRUCIBLES = ['Alumina', 'Platinum']
 # The lab's sample rules. Only nitrogen and air are set up; every other
 # atmosphere needs a consultation, so the form does not offer them.
 GASES = ['N2', 'Air']
@@ -131,14 +141,18 @@ def st() -> dict:
 def default_form() -> dict:
     return {
         'sample_name': '', 'sample_mass': None,
-        'crucible_type': 'Alumina', 'pan_number': '',
-        'gas_atmosphere': 'N2', 'gas_flow_rate': None, 'balance_flow_rate': None,
+        'crucible_type': 'Alumina',
+        # The flows belong to the lab, so they are prefilled and not editable
+        # (see LAB_SAMPLE_FLOW). The crucible slot is assigned by the operators,
+        # not by the requester, so the form carries no pan number.
+        'gas_atmosphere': 'N2',
+        'gas_flow_rate': LAB_SAMPLE_FLOW, 'balance_flow_rate': LAB_BALANCE_FLOW,
         # procedure_name is left empty on purpose: it is suggested from the
         # segments (see update_method_suggestion) unless the user edits it.
         'procedure_name': '', 'last_suggestion': '', 'comments': '',
         # units the user enters values in (converted to canonical on submit)
         'mass_unit': 'mg', 'temp_unit': '°C', 'rate_unit': '°C/min',
-        'time_unit': 'min', 'flow_unit': 'mL/min',
+        'time_unit': 'min', 'flow_unit': LAB_FLOW_UNIT,
         # Sample rules: one statement that the sample fulfils them (what the
         # software cannot check), plus the metallic flag that switches the
         # crucible rule and the consultation.
@@ -234,6 +248,8 @@ def apply_segment_visibility(seg: dict, refs: dict):
     t = seg['type']
     vis = {'ramp': {'end_temp': True, 'rate': True, 'duration_min': False, 'flow_rate': False},
            'isothermal': {'end_temp': False, 'rate': False, 'duration_min': True, 'flow_rate': False}}
+    # Unknown/legacy types keep the flow field visible: the type list no longer
+    # offers gas flow steps, but an old session may still carry one.
     vis = vis.get(t, {'end_temp': False, 'rate': False, 'duration_min': False, 'flow_rate': True})
     for k, ref in refs.items():
         ref.set_visibility(vis[k])
@@ -507,10 +523,11 @@ def segment_card(idx: int):
                                  on_change=on_field('rate')).props('outlined dense').classes('min-w-44')
             inp_dur = ui.number(f'Hold time [{_f["time_unit"]}]', value=seg.get('duration_min'),
                                 on_change=on_field('duration_min')).props('outlined dense').classes('min-w-44')
-            inp_flow = ui.number(f'Gas flow [{_f["flow_unit"]}]', value=seg.get('flow_rate'),
-                                 on_change=on_field('flow_rate')).props('outlined dense').classes('min-w-44')
+        # No gas flow field: the flow steps belong to the lab's setup, not to
+        # the requester. A legacy segment that still carries a flow step simply
+        # shows nothing extra here (the value is written on submit).
         apply_segment_visibility(seg, {'end_temp': inp_end, 'rate': inp_rate,
-                                       'duration_min': inp_dur, 'flow_rate': inp_flow})
+                                       'duration_min': inp_dur})
 
 
 # ── Validation & submit ──────────────────────────────────────────────────────
@@ -967,11 +984,10 @@ def index(request: Request):
                             CRUCIBLES, value=get_form()['crucible_type'],
                             on_change=lambda e: get_form().update(crucible_type=e.value)) \
                             .props('outlined dense').classes('w-full')
-                    with ui.column().classes('gap-1 w-48'):
-                        ui.label('Crucible no.').classes('tga-label')
-                        ui.input(value=get_form()['pan_number'],
-                                 on_change=lambda e: get_form().update(pan_number=e.value)) \
-                            .props('outlined dense').classes('w-full')
+                    # The crucible number is not the requester's to choose: the
+                    # operators assign each sample to one of the lab's crucible
+                    # slots in the order the requests arrive (see the requests
+                    # page for the current assignment).
 
             # Everything the software cannot check is stated once. If the sample
             # does not fulfil the requirements, the way to go is the consultation
@@ -993,7 +1009,8 @@ def index(request: Request):
                 ui.icon('air', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0'):
                     ui.label('2 · Atmosphere & gases').classes('tga-section-title')
-                    ui.label('Choose the purge gas and set the flow rates.').classes('tga-section-sub')
+                    ui.label('Choose the purge gas. The purge gas flows are part of '
+                             'the instrument setup and are fixed by the lab.').classes('tga-section-sub')
                     ui.label('Only nitrogen and air are set up - any other atmosphere '
                              'needs a consultation first.').classes('tga-hint')
             with ui.row().classes('w-full gap-4 mt-1'):
@@ -1003,27 +1020,17 @@ def index(request: Request):
                               on_change=lambda e: (get_form().update(gas_atmosphere=e.value),
                                                    update_method_suggestion())) \
                         .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-44'):
-                    ui.label('Sample flow').classes('tga-label')
-                    unit_refs['gas_flow_rate'] = ui.number(
-                        value=get_form()['gas_flow_rate'],
-                        on_change=lambda e: get_form().update(
-                            gas_flow_rate=e.value if e.value not in (None, '') else None)) \
-                        .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-44'):
-                    ui.label('Balance flow').classes('tga-label')
-                    unit_refs['balance_flow_rate'] = ui.number(
-                        value=get_form()['balance_flow_rate'],
-                        on_change=lambda e: get_form().update(
-                            balance_flow_rate=e.value if e.value not in (None, '') else None)) \
-                        .props('outlined dense').classes('w-full')
-                with ui.column().classes('gap-1 w-28'):
-                    ui.label('Unit').classes('tga-label')
-                    ui.select(UNIT_FLOW, value=get_form()['flow_unit'],
-                              on_change=lambda e: change_unit(
-                                  'flow', e.value, seg_keys=['flow_rate'],
-                                  form_keys=['gas_flow_rate', 'balance_flow_rate'])) \
-                        .props('outlined dense').classes('w-full')
+                # Flow rates are the lab's instrument setup, not the requester's
+                # choice (see LAB_SAMPLE_FLOW). Shown for information only, and
+                # written into the request by build_archive.
+                with ui.column().classes('gap-1'):
+                    ui.label('Purge gas flows (set by the lab)').classes('tga-label')
+                    ui.label(f'Sample {LAB_SAMPLE_FLOW:g} {LAB_FLOW_UNIT}  ·  '
+                             f'Balance {LAB_BALANCE_FLOW:g} {LAB_FLOW_UNIT}') \
+                        .classes('tga-adv-note')
+                    ui.label('Tell the lab by email if your measurement needs '
+                             'different flows.') \
+                        .classes('tga-hint')
 
             # MS coupling belongs to the gas path: it analyses the purge gas
             # leaving the instrument. It is possible, but only after a
@@ -1040,9 +1047,9 @@ def index(request: Request):
                 ui.icon('show_chart', color=ACCENT).classes('tga-section-icon')
                 with ui.column().classes('gap-0 flex-1'):
                     ui.label('3 · Temperature program').classes('tga-section-title')
-                    ui.label('Segments run in the order shown. Add as many as you need: ramps, '
-                             'holds, and gas flow steps. Pick the units you want to enter '
-                             'values in.').classes('tga-section-sub')
+                    ui.label('Segments run in the order shown. Add as many as you need: ramps '
+                             'and holds; the gas flow steps are set by the lab. Pick the '
+                             'units you want to enter values in.').classes('tga-section-sub')
                     ui.label('A run longer than 1 day needs a consultation first '
                              '(the estimate below the segments shows where you are).') \
                         .classes('tga-hint')
