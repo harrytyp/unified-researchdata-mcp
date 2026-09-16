@@ -122,6 +122,14 @@ check('Ergebnis-Mail nennt Werte und NOMAD-Link',
       'NOMAD entry' in ready.get('body', '') and 'upload' in ready.get('body', ''))
 check('Ergebnis-Mail erklaert den Weg in die ELN',
       'eLabFTW' in ready.get('body', ''))
+# NOMAD verarbeitet denselben Upload mehrfach und meldet jedes Mal: die zweite
+# Meldung darf keine neuen Mails erzeugen.
+before = len(settings_mod.outbox_read())
+asyncio.run(ui_notify._notify_when_ready(UP, '', timeout=20))
+after_second = [q for q in settings_mod.outbox_read()[before:]
+                if q['event'].startswith('results_ready')]
+check('erneute Meldung erzeugt keine zweite Mail', not after_second,
+      f'{len(after_second)} neue')
 
 print()
 print('=== 3. ELN-Download-Endpunkt ===')

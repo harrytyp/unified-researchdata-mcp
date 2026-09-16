@@ -118,6 +118,17 @@ s.log_sent({"event": "test", "to": ["a@b.c"], "status": "queued"})
 check("Protokoll wird geschrieben", s.sent_read()[0]["status"] == "queued")
 check("Protokoll ohne Geheimnisse", "streng-geheim" not in json.dumps(s.sent_read()))
 
+print()
+print("=== Merker gegen doppelte Benachrichtigungen ===")
+check("noch nichts vermerkt", s.was_notified("UP1") == "")
+s.mark_notified("UP1", "2026-09-16T12:00|5")
+check("Stand vermerkt", s.was_notified("UP1") == "2026-09-16T12:00|5")
+check("anderer Upload bleibt unberuehrt", s.was_notified("UP2") == "")
+s.mark_notified("UP1", "neuer Stand")
+check("neuer Stand ueberschreibt", s.was_notified("UP1") == "neuer Stand")
+check("Merkerdatei ist nicht oeffentlich",
+      os.name == "nt" or stat.S_IMODE(os.stat(s.NOTIFIED_FILE).st_mode) == 0o600)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print()
 print("ERGEBNIS:", "ALLE SETTINGS-CHECKS BESTANDEN" if not FAILS

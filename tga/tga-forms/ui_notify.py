@@ -18,6 +18,7 @@ so this module stays independent of app.py and can be tested on its own.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -297,6 +298,14 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                 ui.button("Cancel", on_click=dialog.close).props("flat")
         ui.button("Close", on_click=dialog.close).props("flat")
     dialog.open()
+
+
+def _results_fingerprint(results: Dict[str, Any]) -> str:
+    """Short, stable fingerprint of a result set (same values -> same string)."""
+    import hashlib
+    payload = json.dumps({k: v for k, v in sorted((results or {}).items())},
+                         ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _current_name() -> str:
@@ -875,6 +884,15 @@ async def _notify_when_ready(upload_id: str, error: str, timeout: float = 120.0)
             if summary.get("results"):
                 break
             await asyncio.sleep(5)
+        # Einmal reicht: NOMAD verarbeitet denselben Upload mehrfach (json, gz)
+        # und jede Verarbeitung meldet sich. Der Fingerabdruck beschreibt deshalb
+        # den INHALT der Ergebnisse, nicht den Zeitpunkt - sonst waere jeder
+        # zweite Durchlauf eine neue Mail.
+        fingerprint = _results_fingerprint(summary.get("results", {}))
+        if settings_mod.was_notified(upload_id) == fingerprint:
+            log.info("results for %s already notified, staying quiet", upload_id)
+            return
+        settings_mod.mark_notified(upload_id, fingerprint)
         row = {"upload_id": upload_id, "code": upload_id[:5],
                "sample": summary.get("sample_name", ""), "created": "",
                "gui_url": _gui_url(upload_id)}

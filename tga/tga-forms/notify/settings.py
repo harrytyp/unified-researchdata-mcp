@@ -36,6 +36,10 @@ SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 OUTBOX_FILE = os.path.join(DATA_DIR, "outbox.jsonl")
 SENT_FILE = os.path.join(DATA_DIR, "sent.jsonl")
+# Merker gegen doppelte Mails: NOMAD verarbeitet einen Upload mehrfach
+# (z. B. einmal fuer die .json und einmal fuer die .gz), und jede
+# Verarbeitung meldet sich. Nur ein geaenderter Stand verschickt erneut.
+NOTIFIED_FILE = os.path.join(DATA_DIR, "notified.json")
 
 # The account that may open the admin page. Only Kolja Knodel for now - the page
 # writes mail credentials and API keys, so it is not for everyone. Listed by
@@ -297,3 +301,19 @@ def log_sent(record: Dict[str, Any], path: str = SENT_FILE) -> None:
 
 def sent_read(limit: int = 50, path: str = SENT_FILE) -> list:
     return outbox_read(path)[-limit:]
+
+
+def was_notified(key: str, path: str = NOTIFIED_FILE) -> str:
+    """Fingerprint of the last notification sent for this key ("" if none).
+
+    The key is the upload; the fingerprint describes the result state, so a
+    re-processing with the same values stays silent while a new measurement in
+    the same upload still notifies.
+    """
+    return str(_read_json(path, {}).get(str(key), ""))
+
+
+def mark_notified(key: str, fingerprint: str, path: str = NOTIFIED_FILE) -> None:
+    data = _read_json(path, {})
+    data[str(key)] = str(fingerprint)
+    _write_json(path, data)
