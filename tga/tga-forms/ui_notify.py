@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import urllib.parse
 import logging
 import os
 import time
@@ -65,6 +66,12 @@ def _accent() -> str:
     return _api.get("accent", "#ff6d00")
 
 
+# Der Theme-Schalter liegt in einem eigenen Cookie: app.storage.browser laesst
+# sich nur waehrend eines Seitenaufbaus schreiben, nicht aus einem Klick heraus,
+# und state ist pro Tab - die Wahl war in einem neuen Tab wieder weg.
+DARK_COOKIE = "tga_dark"
+
+
 # ── shared pieces ───────────────────────────────────────────────────────────
 
 def _head() -> None:
@@ -107,11 +114,22 @@ def header(active: str = "", user: Optional[dict] = None) -> None:
                 .props("flat dense no-caps") \
                 .classes("tga-header-btn"
                          + (" tga-header-btn-active" if active == "Admin" else ""))
-        dark = ui.dark_mode(value=state.get("dark", True))
+        # Der Schalter gehoert zum Browser, nicht zur Seite: state ist pro Tab,
+        # und die Wahl war in einem neuen Tab wieder weg. Das Cookie steht beim
+        # naechsten Seitenaufbau schon bereit, auch in einem neuen Tab.
+        preference = ""
+        try:
+            preference = str(ui.context.client.request.cookies.get(DARK_COOKIE, "") or "")
+        except Exception as error:                      # noqa: BLE001
+            log.warning("could not read the theme preference: %s", error)
+        dark = ui.dark_mode(value=preference != "0")
 
         def toggle_dark() -> None:
-            state["dark"] = not dark.value
-            dark.value = state["dark"]
+            dark.value = not dark.value
+            state["dark"] = bool(dark.value)
+            ui.run_javascript(
+                f'document.cookie = "{DARK_COOKIE}=" + ({int(dark.value)}) + '
+                f'"; path=/nomad-oasis; max-age=31536000; SameSite=Lax"')
 
         ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense") \
             .tooltip("Toggle dark / light mode").classes("tga-darkbtn")
@@ -308,8 +326,7 @@ def _request_row(upload: Dict[str, Any], token: str) -> Dict[str, Any]:
 @ui.page("/requests")
 def page_requests(request: Request) -> None:
     _head()
-    token = _api["api"].token_from_request(request) if hasattr(_api["api"], "token_from_request") \
-        else request.cookies.get("Authorization", "")
+    token = _cookie_token(request)
     if token:
         _api["state"]()["auth"] = token
     user = _api["get_user"]()
@@ -672,7 +689,7 @@ def _remember_export(upload_id: str, report: Dict[str, Any],
 @ui.page("/eln")
 def page_eln(request: Request) -> None:
     _head()
-    token = request.cookies.get("Authorization", "")
+    token = _cookie_token(request)
     if token:
         _api["state"]()["auth"] = token
     user = _api["get_user"]()
@@ -803,7 +820,7 @@ def page_eln(request: Request) -> None:
 @ui.page("/admin")
 def page_admin(request: Request) -> None:
     _head()
-    token = request.cookies.get("Authorization", "")
+    token = _cookie_token(request)
     if token:
         _api["state"]()["auth"] = token
     user = _api["get_user"]()
@@ -841,6 +858,10 @@ def page_admin(request: Request) -> None:
 def _save(state: Dict[str, Any], patch: Dict[str, Any], note: str = "") -> None:
     state["settings"] = settings_mod.save_settings(patch)
     ui.notify(note or "Saved", type="positive", position="top")
+    # Die Panels bauen sich aus state auf, und state bleibt bis zum naechsten
+    # Aufbau stehen - sonst zeigt die Seite nach dem Speichern den alten Stand
+    # (Haken, Zeitstempel, Warteschlange).
+    ui.run_javascript("window.location.reload()")
 
 
 def _mail_panel(state: Dict[str, Any]) -> None:
@@ -955,10 +976,53 @@ def _notification_panel(state: Dict[str, Any]) -> None:
             ui.label("Which event notifies whom").classes("text-lg font-medium")
         boxes = {event: ui.checkbox(label, value=bool(toggles.get(event, True)))
                  for event, label in labels.items()}
-        ui.button("Save", icon="save",
-                  on_click=lambda: _save(state, {"notifications": {
-                      event: bool(box.value) for event, box in boxes.items()}})) \
-            .props("unelevated")
+        # Ohne Einwilligung keine Mail: die Namen und Adressen der Antragsteller
+        # sind personenbezogene Daten, und die Empfaenger muessen wissen, was
+        # ihnen geschickt wird.
+        consent_state = state["settings"].get("notifications_consent") or {}
+        consent = ui.checkbox(
+            "The recipients have been told what is sent to them and agreed - "
+            "consent (GDPR Art. 6 (1) a). Without this tick nothing is sent; "
+            "notifications wait in the queue.",
+            value=bool(consent_state.get("given")))
+        if consent_state.get("given"):
+            ui.label(f"Confirmed by {consent_state.get('by') or 'unknown'} on "
+                     f"{str(consent_state.get('at') or '')[:16]}.").classes("text-xs text-grey-6")
+
+        def consent_patch(given: bool) -> Dict[str, Any]:
+            user_now = _api["get_user"]() or {}
+            return {"given": bool(given),
+                    "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "by": _current_name() or _display_name(user_now)}
+
+        def save_notifications() -> None:
+            wanted = {event: bool(box.value) for event, box in boxes.items()}
+            # Nicht aus dem Schnappschuss vom Seitenaufbau lesen: nach dem ersten
+            # Speichern ist er veraltet, und ein Widerruf galt dann als "noch nie
+            # eingewilligt" und wurde abgelehnt.
+            was_given = bool(settings_mod.notifications_consent().get("given"))
+            now_given = bool(consent.value)
+            if not now_given and was_given:
+                # Widerruf: die Folge ist, dass keine Benachrichtigung mehr
+                # rausgeht. Ein Widerruf wird nie blockiert.
+                wanted = {event: False for event in wanted}
+                for box in boxes.values():
+                    box.value = False
+                _save(state, {"notifications": wanted,
+                              "notifications_consent": consent_patch(False)},
+                      note="Consent withdrawn - notifications are off")
+                return
+            if not now_given and any(wanted.values()):
+                ui.notify("Tick the consent box first - without it no mail goes out.",
+                          type="negative", position="top")
+                return
+            patch: Dict[str, Any] = {"notifications": wanted}
+            if now_given and not was_given:
+                patch["notifications_consent"] = consent_patch(True)
+            _save(state, patch)
+            ui.notify("Saved", type="positive", position="top")
+
+        ui.button("Save", icon="save", on_click=save_notifications).props("unelevated")
 
 
 def _queue_panel(state: Dict[str, Any]) -> None:
@@ -1034,8 +1098,21 @@ def _audit_panel(state: Dict[str, Any]) -> None:
 
 # ── endpoints: ELN download and the processing notification ─────────────────
 
+def _cookie_token(request: Request) -> str:
+    """The session token from the cookie, decoded.
+
+    NOMAD's GUI writes the Authorization cookie URL-encoded ("Bearer%20eyJ..."),
+    and sent to the API like that it answers 401 - on the request list that
+    looked like an expired session, on the download like "not allowed". The form
+    decodes it too (app.fresh_token unquotes it), so the pages do the same here.
+    """
+    raw = str(request.cookies.get("Authorization", "") or "")
+    decoded = urllib.parse.unquote(raw).strip()
+    return decoded or raw.strip()
+
+
 def _token_of(request: Request) -> str:
-    return request.cookies.get("Authorization", "")
+    return _cookie_token(request)
 
 
 def _session_page(message: str) -> str:
@@ -1076,17 +1153,23 @@ def _register_endpoints() -> None:
     def download_eln(upload_id: str, request: Request):
         """The ELN package as a download, built from the entry's own data."""
         token = _token_of(request)
+        raw_cookie = str(request.cookies.get("Authorization", "") or "").strip()
         if not token:
             return Response(_session_page("This tab has no NOMAD session."),
                             status_code=401, media_type="text/html")
         # Permission check through the API: only uploads this token may see are
         # read from disk (the staging volume has no per-user check of its own).
         status, response = _api["api"].api_json("GET", f"/uploads/{upload_id}", token)
+        if status == 401 and raw_cookie and raw_cookie != token:
+            # Zweiter Versuch mit dem Wert, wie er im Cookie steht: die GUI
+            # schreibt ihn URL-kodiert, und welche Form die Instanz erwartet,
+            # haengt an ihrer Version. Ein 401 hier heisst "Sitzung", nicht
+            # "kein Zugriff" - vorher stand das als "not allowed" auf der Seite.
+            status, response = _api["api"].api_json("GET", f"/uploads/{upload_id}", raw_cookie)
         if status == 401:
-            # Der Download oeffnet in einem neuen Tab, der Browser schickt den
-            # Cookie, den er hat - ein 401 heisst hier fast immer "Sitzung
-            # abgelaufen" und nicht "kein Zugriff". Das stand vorher als
-            # "not allowed for this account" da und fuehrte in die Irre.
+            log.warning("download %s: HTTP 401, token %s, cookie %s",
+                        upload_id, _token_hint(token),
+                        "url-encoded" if "%" in raw_cookie else "plain")
             return Response(_session_page("Your NOMAD session has expired."),
                             status_code=401, media_type="text/html")
         if status != 200:

@@ -210,9 +210,13 @@ class ElabFTWClient:
             if response.status_code != 200:
                 raise ElabFTWError(self._explain(response))
             try:
-                self._owner_id = str(response.json().get("userid") or "")
+                payload = response.json()
             except ValueError:
-                self._owner_id = ""
+                payload = {}
+            # Nicht jede Instanz antwortet hier mit einem Objekt (ein Stub oder
+            # eine aeltere Version kann eine Liste schicken).
+            self._owner_id = str(payload.get("userid") or "") \
+                if isinstance(payload, dict) else ""
         return self._owner_id
 
     def move_to_team(self, experiment_id: str, team: str) -> str:
@@ -377,8 +381,10 @@ def export_entry(ctx: Dict[str, Any], target: Dict[str, Any], *,
             try:
                 report["team"] = client.move_to_team(created["id"], wanted_team)
                 report["team_moved"] = True
-            except ElabFTWError as error:
-                report["team_error"] = str(error)
+            except Exception as error:                  # noqa: BLE001
+                # Das Experiment ist angelegt; ein misslungener Teamwechsel ist
+                # ein Hinweis, kein Fehlschlag des Exports.
+                report["team_error"] = f"{type(error).__name__}: {error}"
                 log.warning("experiment %s stays in the owner's team: %s",
                             created["id"], error)
         if figure:

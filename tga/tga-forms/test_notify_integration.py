@@ -56,6 +56,10 @@ def restore():
             pass
 
 
+# Wie viele Eintraege vor dem Test schon in der Warteschlange lagen.
+OUTBOX_BEFORE = len(settings_mod.outbox_read())
+
+
 def check(label, condition, detail=''):
     if condition:
         print(f'  [OK  ] {label}' + (f' - {detail}' if detail else ''))
@@ -63,6 +67,13 @@ def check(label, condition, detail=''):
         print(f'  [FAIL] {label}' + (f' - {detail}' if detail else ''))
         FAILS.append(label)
 
+
+if not entry_data.read_fields(UP):
+    print(f'Die Anfrage {UP} hat keine Daten (geloescht oder noch nicht '
+          f'verarbeitet). Bitte eine aktuelle Upload-ID uebergeben, z.B. aus '
+          f'GET /api/v1/uploads.')
+    restore()
+    sys.exit(2)
 
 print('=== 1. Neuer Antrag: Operator und Auftraggeber werden benachrichtigt ===')
 archive = {'data': {
@@ -88,7 +99,10 @@ by_event = {r.get('event'): r for r in reports}
 check('beide Ereignisse verarbeitet', set(by_event) == {'request_created_operator',
                                                         'request_created_user'},
       str(sorted(by_event)))
-queued = settings_mod.outbox_read()
+# Nur, was dieser Lauf einreiht: in der echten Warteschlange koennen aeltere
+# Eintraege liegen (sie wird am Ende wiederhergestellt), und die wurden hier
+# vorher mitgezaehlt.
+queued = settings_mod.outbox_read()[OUTBOX_BEFORE:]
 check('beide Mails liegen in der Warteschlange', len(queued) >= 2, str(len(queued)))
 operator_mail = next((q for q in queued if q['event'] == 'request_created_operator'), {})
 user_mail = next((q for q in queued if q['event'] == 'request_created_user'), {})

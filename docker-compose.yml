@@ -102,7 +102,7 @@ services:
     mem_limit: 512m
 
   elabftw:
-    image: elabftw/elabimg:6.0.0-beta2
+    image: elabftw/elabimg:6.0.2
     container_name: elabftw
     restart: unless-stopped
     user: "999:994"

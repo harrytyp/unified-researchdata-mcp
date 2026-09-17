@@ -77,6 +77,17 @@ def build_message(subject: str, body: str, to: Sequence[str], config: Dict[str, 
     return message
 
 
+def consent_given(config: Optional[Dict[str, Any]] = None) -> bool:
+    """Has anybody agreed to these mails? Without consent they only queue.
+
+    The rule lives here as well as in the admin page: a notification can also be
+    triggered by the plugin, and that way no mail leaves without the tick.
+    """
+    settings = config or settings_mod.load_settings()
+    consent = settings.get("notifications_consent")
+    return bool(consent.get("given")) if isinstance(consent, dict) else False
+
+
 def send_mail(subject: str, body: str, to: Any, *, html: Optional[str] = None,
               attachments: Optional[Sequence[Tuple[str, bytes]]] = None,
               config: Optional[Dict[str, Any]] = None,
@@ -91,6 +102,8 @@ def send_mail(subject: str, body: str, to: Any, *, html: Optional[str] = None,
         return "failed", "no recipients"
 
     ready, reason = is_configured(config)
+    if ready and not consent_given(config):
+        ready, reason = False, "no consent recorded for these mails (GDPR)"
     if not ready:
         settings_mod.outbox_append({
             "event": event, "subject": subject, "to": recipients,

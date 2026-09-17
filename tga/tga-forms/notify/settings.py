@@ -331,6 +331,25 @@ def exports_for(upload_id: str) -> list:
     return entries if isinstance(entries, list) else []
 
 
+def notifications_consent() -> Dict[str, Any]:
+    """Whether somebody agreed to the notification mails.
+
+    Sending personal data by mail needs a lawful basis; the backend asks for
+    consent and records who gave it and when.
+    """
+    consent = load_settings().get("notifications_consent")
+    return consent if isinstance(consent, dict) else {}
+
+
+def set_notifications_consent(given: bool, by: str = "") -> Dict[str, Any]:
+    """Record the consent, or its withdrawal, with who and when."""
+    consent = {"given": bool(given),
+               "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+               "by": str(by or "")}
+    save_settings({"notifications_consent": consent})
+    return consent
+
+
 def log_sent(record: Dict[str, Any], path: str = SENT_FILE) -> None:
     """Audit trail: who was told what, when. Never contains a secret."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
