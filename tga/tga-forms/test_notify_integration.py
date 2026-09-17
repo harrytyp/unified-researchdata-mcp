@@ -78,6 +78,9 @@ if not entry_data.read_fields(UP):
 print('=== 1. Neuer Antrag: Operator und Auftraggeber werden benachrichtigt ===')
 archive = {'data': {
     'm_def': 'instrument_data.schema.TgaMeasurement',
+    # Der Antragsteller hat im Formular zugestimmt: nur dann geht die Mail an
+    # ihn. Ohne den Haken prueft Abschnitt 1b, dass nichts rausgeht.
+    'notify_requester': True,
     'requester_email': 'kolja.knodel@tum.de',
     'gas_atmosphere': 'Nitrogen',
     'gas_flow_rate': 25.0,
@@ -120,6 +123,22 @@ check('Auftraggeber-Mail geht an die Adresse aus dem Antrag',
       user_mail.get('to') == ['kolja.knodel@tum.de'], str(user_mail.get('to')))
 check('Operator-Mail nennt die Operatoren-Empfaenger',
       'to' in operator_mail, str(operator_mail.get('to')))
+
+print()
+print('=== 1b. Ohne Zustimmung im Antrag keine Mail an den Auftraggeber ===')
+probe_ctx = {'code': 'CONS1', 'sample_name': 'Probe', 'requester_email': 'wer@example.org',
+             'entry_url': 'https://example.invalid', 'parameters': {'segments': []},
+             'results': {}}
+plain = events.notify('request_created_user', probe_ctx)
+check('ohne Zustimmung: nichts an den Auftraggeber',
+      plain['status'] in ('no-recipients', 'disabled'), str(plain))
+with_ok = events.notify('request_created_user', dict(probe_ctx, notify_requester=True))
+check('mit Zustimmung: die Mail geht raus',
+      with_ok['status'] in ('queued', 'sent') and 'wer@example.org' in str(with_ok.get('recipients')),
+      str(with_ok))
+operator_still = events.notify('request_created_operator', probe_ctx)
+check('die Operatoren bekommen ihre Mail unabhaengig davon',
+      operator_still['status'] in ('queued', 'sent'), str(operator_still))
 
 print()
 print('=== 2. Verarbeitete Messung: Ergebnisse gehen raus ===')

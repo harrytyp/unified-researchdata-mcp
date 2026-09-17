@@ -29,6 +29,21 @@ def event_enabled(event: str, config: Optional[Dict[str, Any]] = None) -> bool:
     return bool((config.get("notifications") or {}).get(event, True))
 
 
+def requester_consent(ctx: Dict[str, Any]) -> bool:
+    """Did the requester agree to be informed by email?
+
+    The consent comes with the request (the form asks for it). Without it no
+    mail goes to that address - writing to somebody who did not ask for it is
+    exactly what the rule is for.
+    """
+    value = ctx.get("notify_requester")
+    if value is None and isinstance(ctx.get("fields"), dict):
+        value = (ctx["fields"] or {}).get("notify_requester")
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in ("1", "true", "yes", "on", "ja")
+
+
 def recipients_for(event: str, ctx: Dict[str, Any],
                    config: Optional[Dict[str, Any]] = None) -> List[str]:
     """Who gets this event.
@@ -48,8 +63,12 @@ def recipients_for(event: str, ctx: Dict[str, Any],
         # configured as fallback keeps the notification from vanishing when a
         # request has no address (older requests, or a login without one).
         who = ctx.get("requester_email") or ctx.get("recipient")
-        if who:
+        if who and requester_consent(ctx):
             recipients.append(str(who).strip())
+        elif who:
+            # Adresse bekannt, aber keine Zustimmung: sie wird nicht benutzt.
+            log.info("no mail to the requester for %s: no consent (%s)",
+                     event, ctx.get("code") or "?")
         elif audience == "requester":
             recipients += [str(a).strip() for a in
                            (config.get("recipients", {}).get("operators") or []) if str(a).strip()]

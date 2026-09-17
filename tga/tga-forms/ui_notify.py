@@ -573,6 +573,7 @@ def _export_context(row: Dict[str, Any], summary: Dict[str, Any]) -> Dict[str, A
         "sample_name": row["sample"],
         "requester": _current_name() or summary.get("requester", ""),
         "requester_email": summary.get("requester", ""),
+        "notify_requester": bool(summary.get("notify_requester")),
         "entry_url": row["gui_url"],
         "upload_url": row["gui_url"],
         "measured_on": row["created"],
@@ -621,6 +622,7 @@ def request_context(upload_id: str, archive: Dict[str, Any], requester: Optional
         "requester": str(requester.get("name") or requester.get("username") or ""),
         "requester_email": str(fields.get("requester_email")
                                or requester.get("email") or ""),
+        "notify_requester": entry_data.requester_consent(fields),
         "entry_url": _gui_url(upload_id),
         "upload_url": _gui_url(upload_id),
         "requests_url": requests_url(),
@@ -976,53 +978,14 @@ def _notification_panel(state: Dict[str, Any]) -> None:
             ui.label("Which event notifies whom").classes("text-lg font-medium")
         boxes = {event: ui.checkbox(label, value=bool(toggles.get(event, True)))
                  for event, label in labels.items()}
-        # Ohne Einwilligung keine Mail: die Namen und Adressen der Antragsteller
-        # sind personenbezogene Daten, und die Empfaenger muessen wissen, was
-        # ihnen geschickt wird.
-        consent_state = state["settings"].get("notifications_consent") or {}
-        consent = ui.checkbox(
-            "The recipients have been told what is sent to them and agreed - "
-            "consent (GDPR Art. 6 (1) a). Without this tick nothing is sent; "
-            "notifications wait in the queue.",
-            value=bool(consent_state.get("given")))
-        if consent_state.get("given"):
-            ui.label(f"Confirmed by {consent_state.get('by') or 'unknown'} on "
-                     f"{str(consent_state.get('at') or '')[:16]}.").classes("text-xs text-grey-6")
-
-        def consent_patch(given: bool) -> Dict[str, Any]:
-            user_now = _api["get_user"]() or {}
-            return {"given": bool(given),
-                    "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    "by": _current_name() or _display_name(user_now)}
-
-        def save_notifications() -> None:
-            wanted = {event: bool(box.value) for event, box in boxes.items()}
-            # Nicht aus dem Schnappschuss vom Seitenaufbau lesen: nach dem ersten
-            # Speichern ist er veraltet, und ein Widerruf galt dann als "noch nie
-            # eingewilligt" und wurde abgelehnt.
-            was_given = bool(settings_mod.notifications_consent().get("given"))
-            now_given = bool(consent.value)
-            if not now_given and was_given:
-                # Widerruf: die Folge ist, dass keine Benachrichtigung mehr
-                # rausgeht. Ein Widerruf wird nie blockiert.
-                wanted = {event: False for event in wanted}
-                for box in boxes.values():
-                    box.value = False
-                _save(state, {"notifications": wanted,
-                              "notifications_consent": consent_patch(False)},
-                      note="Consent withdrawn - notifications are off")
-                return
-            if not now_given and any(wanted.values()):
-                ui.notify("Tick the consent box first - without it no mail goes out.",
-                          type="negative", position="top")
-                return
-            patch: Dict[str, Any] = {"notifications": wanted}
-            if now_given and not was_given:
-                patch["notifications_consent"] = consent_patch(True)
-            _save(state, patch)
-            ui.notify("Saved", type="positive", position="top")
-
-        ui.button("Save", icon="save", on_click=save_notifications).props("unelevated")
+        # Die Zustimmung zur Ergebnis-Mail steht im Antragsformular: sie gehoert
+        # zu einem Antrag und nicht in die Konfiguration, und ohne sie geht nur
+        # an den Antragsteller nichts raus (die Operatoren werden unabhaengig
+        # davon informiert).
+        ui.button("Save", icon="save",
+                  on_click=lambda: _save(state, {"notifications": {
+                      event: bool(box.value) for event, box in boxes.items()}})) \
+            .props("unelevated")
 
 
 def _queue_panel(state: Dict[str, Any]) -> None:

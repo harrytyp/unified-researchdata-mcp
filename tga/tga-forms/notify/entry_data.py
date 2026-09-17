@@ -314,6 +314,24 @@ def parameters(fields: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_CONSENT_TRUE = ("1", "true", "yes", "on", "ja")
+
+
+def requester_consent(fields: Dict[str, Any]) -> bool:
+    """Did the requester agree to be informed about this request by email?
+
+    Asked for in the form and stored with the request. Missing counts as no: an
+    entry from before this field existed must not be mailed.
+    """
+    value = fields.get("notify_requester")
+    if value is None:
+        value = next((item for key, item in fields.items()
+                      if key.endswith(".notify_requester")), None)
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in _CONSENT_TRUE
+
+
 def request_summary(upload_id: str) -> Dict[str, Any]:
     """Everything the notifications, the ELN package and the page need.
 
@@ -330,6 +348,7 @@ def request_summary(upload_id: str) -> Dict[str, Any]:
         "signals": signals(fields),
         "sample_name": res.get("sample_name") or "",
         "requester": fields.get("requester_email") or "",
+        "notify_requester": requester_consent(fields),
         "operator": fields.get("operator") or fields.get("sample.operator") or "",
         "comment": fields.get("comments") or "",
         # is_measured, nicht bool(res): ein Antrag liefert schon den

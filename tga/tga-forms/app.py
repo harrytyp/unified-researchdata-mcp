@@ -164,6 +164,9 @@ def default_form() -> dict:
         'metallic': False, 'ms_coupling': False, 'consulted': False,
         # where the result should go - prefilled from the NOMAD session
         'requester_email': '',
+        # Optional: ohne Haken bekommt der Antragsteller keine Mail. Die
+        # Zustimmung gehoert zum Antrag, deshalb steht sie im Formular.
+        'notify_requester': False,
     }
 
 
@@ -1088,6 +1091,17 @@ def index(request: Request):
                     .props('outlined dense').classes('w-full')
                 ui.label('Taken from your NOMAD login - change it if the result should '
                          'go somewhere else.').classes('tga-hint')
+                # Optional und bewusst nicht vorab angehakt: eine Zustimmung muss
+                # man geben, nicht wegnehmen.
+                ui.checkbox('Inform me by email when the results are ready',
+                            value=bool(get_form().get('notify_requester')),
+                            on_change=lambda e: get_form().update(
+                                notify_requester=bool(e.value))).props('dense')
+                ui.label('Optional. With this tick your address is used to tell you '
+                         'when the measurement is done and how to pull it into your '
+                         'ELN. Without it nothing is sent to you, and the operators '
+                         'still get their notifications as before.'
+                         ).classes('tga-hint')
             # Method name is optional and pre-filled from the segments: it is
             # patched into the .tprc and becomes the procedure name in TRIOS.
             with ui.expansion('Method name (optional)', icon='label').classes('tga-adv w-full mt-1'):

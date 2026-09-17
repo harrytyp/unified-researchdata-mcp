@@ -37,6 +37,9 @@ CTX = {
     "sample_name": "Kollidon VA64",
     "requester": "Kolja Knodel",
     "requester_email": "kolja.knodel@tum.de",
+    # Ohne diese Zustimmung geht an den Antragsteller keine Mail - die
+    # Adresse wird nur benutzt, wenn er sie im Formular erlaubt hat.
+    "notify_requester": True,
     "entry_url": "https://researchmcp.duckdns.org/nomad-oasis/gui/user/uploads/upload/id/AB",
     "upload_url": "https://researchmcp.duckdns.org/nomad-oasis/gui/user/uploads/upload/id/AB",
     "drop_off": "TUM School of Engineering and Design\nBoltzmannstr. 15\n85748 Garching",
@@ -155,7 +158,8 @@ check("ohne Adresse im Antrag greift der Operatoren-Fallback",
       == ["op1@tum.de", "op2@tum.de"])
 check("Doppelte Adressen werden entfernt",
       events.recipients_for("results_ready_user",
-                            {"requester_email": "op1@tum.de"}, config)
+                            {"requester_email": "op1@tum.de",
+                             "notify_requester": True}, config)
       == ["op1@tum.de"])
 
 print()
@@ -171,6 +175,11 @@ report = events.notify("gibt-es-nicht", CTX, config=config)
 check("unbekanntes Ereignis wird gemeldet", report["status"] == "unknown-event")
 config["notifications"]["request_created_user"] = True
 config["recipients"]["operators"] = []
+# Ohne Zustimmung im Antrag bleibt die Adresse unbenutzt.
+report = events.notify("request_created_user", dict(CTX, notify_requester=False),
+                       config=config)
+check("ohne Zustimmung keine Mail an den Antragsteller",
+      "kolja.knodel@tum.de" not in report.get("recipients", []), str(report))
 report = events.notify("request_created_operator", CTX, config=config)
 check("keine Empfaenger wird gemeldet, nicht verschluckt",
       report["status"] == "no-recipients")

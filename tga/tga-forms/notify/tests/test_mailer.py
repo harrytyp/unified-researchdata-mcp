@@ -137,25 +137,8 @@ check("kein Empfaenger -> failed",
       mailer.send_mail("X", "Y", "", config=config)[0] == "failed")
 
 print()
-print("=== Ohne Einwilligung: kein Versand, nur Warteschlange ===")
-config = settings_mod.load_settings()
-config["mail"].update({"host": "127.0.0.1", "port": 1, "starttls": False,
-                       "from_address": "tga@example.org"})
-config.pop("notifications_consent", None)
-before = len(settings_mod.outbox_read())
-result = mailer.send_mail("Ohne Einwilligung", "Text", "someone@example.org",
-                          config=config, event="consent_test")
-check("wird eingereiht statt gesendet", result[0] == "queued", str(result))
-check("der Grund nennt die Einwilligung", "consent" in str(result[1]).lower(), str(result[1]))
-check("steht in der Warteschlange", len(settings_mod.outbox_read()) == before + 1)
-settings_mod.outbox_replace([r for r in settings_mod.outbox_read()
-                             if r.get("event") != "consent_test"])
-
-print()
 print("=== Mit SMTP-Konto: echte Zustellung ===")
 sink = SmtpSink().start()
-config["notifications_consent"] = {"given": True, "at": "2026-09-17T12:00:00+0200",
-                                    "by": "test"}
 config["mail"].update({"host": "127.0.0.1", "port": sink.port, "starttls": False,
                        "from_address": "tga-lab@tum.de", "from_name": "TGA Lab",
                        "reply_to": "p.braun@tum.de"})

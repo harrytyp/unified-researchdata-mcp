@@ -45,6 +45,12 @@ def server_settings():
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
+def page_goto(page, url):
+    page.goto(url, wait_until='networkidle')
+    page.wait_for_timeout(5000)
+    return page.inner_text('body')
+
+
 def set_server_state(notifications=None, consent="keep"):
     """Put the settings into a known state before the checks."""
     code = ('import sys, json; sys.path.insert(0, "/app"); '
@@ -113,71 +119,50 @@ with sync_playwright() as playwright:
     other.close()
     page.close()
 
-    # ── 3) Einwilligung fuer E-Mail-Benachrichtigungen ───────────────────────
-    # Bekannter Ausgangszustand: Ereignisse an, keine Einwilligung.
-    set_server_state(notifications={key: True for key in (
-        'request_created_operator', 'request_created_user', 'results_ready_user',
-        'results_ready_operator', 'moved_to_elabftw', 'processing_failed_operator')},
-        consent=None)
+    # ── 3) Zustimmung im Antragsformular (optional, pro Antrag) ─────────────
     page = context.new_page()
-    page.goto(FORMS + '/admin', wait_until='networkidle')
+    page.goto(FORMS + '/', wait_until='networkidle')
     page.wait_for_timeout(5000)
-    consent = page.locator('.q-checkbox:has-text("GDPR")').first
-    events = page.locator('.q-checkbox:has-text("operators"), '
-                          '.q-checkbox:has-text("requester")')
-    check('Der Einwilligungs-Haken steht im Backend', consent.count() > 0)
-    check('Die Ereignis-Haken sind da', events.count() >= 5, str(events.count()))
-    check('Er startet ungesetzt', 'true' not in (consent.get_attribute('aria-checked') or ''),
-          consent.get_attribute('aria-checked'))
-
-    # Die Seite hat mehrere SAVE-Knoepfe - dieser gehoert zu den Benachrichtigungen.
-    save_button = page.locator(
-        '.tga-panel:has-text("Which event notifies whom") button:has-text("SAVE")').first
-
-    before = server_settings()
-    events.first.click()                          # ein Ereignis umschalten
-    page.wait_for_timeout(400)
-    save_button.click()
-    page.wait_for_timeout(3000)
-    after = server_settings()
-    check('Ohne Haken aendert sich nichts',
-          after['notifications'] == before['notifications'],
-          f"{before['notifications']} -> {after['notifications']}")
-    check('und die Einwilligung bleibt aus', not after['consent'].get('given'))
-
-    consent.click()                               # Haken setzen
+    box = page.locator('.q-checkbox:has-text("Inform me by email")').first
+    check('Der Haken steht im Antragsformular', box.count() > 0)
+    check('Er ist nicht vorab angehakt',
+          'true' not in (box.get_attribute('aria-checked') or ''),
+          box.get_attribute('aria-checked'))
+    form_text = page.inner_text('body')
+    check('Der Text nennt es optional und sagt, wofuer es ist',
+          'optional' in form_text.lower() and 'results are ready' in form_text.lower())
+    # Das Formular ist lang: erst hinscrollen, sonst wartet der Klick auf die
+    # Sichtbarkeit und laeuft in den Timeout.
+    box.scroll_into_view_if_needed()
     page.wait_for_timeout(500)
-    check('Der Haken ist jetzt gesetzt',
-          'true' in (consent.get_attribute('aria-checked') or ''),
-          consent.get_attribute('aria-checked'))
-    save_button.click()
-    page.wait_for_timeout(3000)
-    stored = server_settings()
-    check('Mit Haken wird die Einwilligung festgehalten',
-          stored['consent'].get('given') is True, str(stored['consent']))
-    check('Zeitpunkt und Name stehen dabei',
-          bool(stored['consent'].get('at')) and bool(stored['consent'].get('by')),
-          str(stored['consent']))
+    box.click(timeout=10000)
+    page.wait_for_timeout(600)
+    check('Er laesst sich setzen', 'true' in (box.get_attribute('aria-checked') or ''),
+          box.get_attribute('aria-checked'))
+    # Erst danach weg navigieren - der Backend-Check laedt eine andere Seite.
+    backend = page_goto(page, FORMS + '/admin')
+    check('Die Einwilligung steht nicht mehr im Backend', 'GDPR' not in backend)
     page.screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                      'consent_box.png'), full_page=True)
-
-    consent.click()                               # Widerruf
-    page.wait_for_timeout(500)
-    save_button.click()
-    page.wait_for_timeout(3000)
-    revoked = server_settings()
-    check('Ein Widerruf geht durch', not revoked['consent'].get('given'), str(revoked['consent']))
-    check('und schaltet die Benachrichtigungen ab',
-          not any(revoked['notifications'].values()), str(revoked['notifications']))
-
-    # Ausgangszustand wiederherstellen - ohne die Einwilligung zu behaupten, die
-    # Entscheidung darueber gehoert dem Betreiber.
-    set_server_state(notifications=before['notifications'], consent=None)
-    restored = server_settings()
-    check('Ereignisse stehen wieder wie vorher',
-          restored['notifications'] == before['notifications'], str(restored['notifications']))
+                                      'consent_in_form.png'), full_page=True)
     page.close()
     browser.close()
+
+# Der Eintrag muss die Zustimmung tragen - einmal mit, einmal ohne Haken.
+code = ('import sys, json; sys.path.insert(0, "/app"); '
+        'import nomad_api; '
+        'base = {"sample_name": "X", "segments": []}; '
+        'mit = nomad_api.build_archive(dict(base, notify_requester=True))["data"]; '
+        'ohne = nomad_api.build_archive(dict(base))["data"]; '
+        'print(json.dumps({"mit": mit.get("notify_requester"), '
+        '"ohne": ohne.get("notify_requester")}))')
+out = subprocess.run(['docker', 'exec', 'tga-forms', 'python3', '-c', code],
+                     capture_output=True, text=True, check=False)
+try:
+    values = json.loads(out.stdout.strip().splitlines()[-1])
+except Exception:
+    values = {}
+check('Mit Haken steht die Zustimmung im Eintrag', values.get('mit') is True, str(values))
+check('Ohne Haken steht ausdruecklich False darin', values.get('ohne') is False, str(values))
 
 print()
 print('ERGEBNIS:', 'ALLE DREI OK' if not fails else f'{len(fails)} FEHLER: {fails}')

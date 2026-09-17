@@ -272,6 +272,13 @@ class TgaMeasurement(PlotSection, EntryData):
         type=str,
         description="Email address the requester wants the result to go to",
         a_eln=ELNAnnotation(component="StringEditQuantity"))
+    notify_requester = Quantity(
+        # The requester decides this in the form (optional, off by default).
+        # Without it no mail is sent to them: the address is only used when the
+        # person asked for it (consent, GDPR Art. 6 (1) a).
+        type=bool,
+        description="Requester agreed to be informed about this request by email",
+        a_eln=ELNAnnotation(component="BoolEditQuantity"))
 
     # ── Method ──
     procedure_name = Quantity(

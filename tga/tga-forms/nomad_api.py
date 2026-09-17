@@ -380,6 +380,10 @@ def build_archive(form: Dict[str, Any]) -> Dict[str, Any]:
                 'requester_email'):
         if form.get(key) not in (None, ''):
             data[key] = form[key]
+    # Der Antragsteller entscheidet im Formular, ob er per Mail informiert
+    # werden will. Ohne Haken steht das ausdruecklich als False im Eintrag,
+    # damit die Benachrichtigungen es unterscheiden koennen.
+    data['notify_requester'] = bool(form.get('notify_requester'))
     if segments:
         data['temperature_segments'] = segments
     return {'data': data}
