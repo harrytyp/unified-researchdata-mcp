@@ -861,6 +861,7 @@ ui_notify.register(
     # aus dem Browser lesen und eine abgelaufene Sitzung gleich erklaeren.
     fresh_token=fresh_token,
     show_session_expired=show_session_expired,
+    auth_poll_js=AUTH_POLL_JS,
     accent=ACCENT,
     css=CSS,
     title=TITLE,

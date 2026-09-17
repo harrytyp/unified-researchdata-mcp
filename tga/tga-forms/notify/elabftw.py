@@ -71,6 +71,7 @@ class ElabFTWClient:
         if not api_key:
             raise ElabFTWError("no API key given")
         self.web_base, self.api_base = normalize_instance(instance)
+        self._owner_id: Optional[str] = None
         self.api_key = api_key
         self.team = str(team or "")
         self.verify_tls = bool(verify_tls)
@@ -202,6 +203,41 @@ class ElabFTWClient:
             return location.rstrip("/").split("/")[-1].split("?")[0]
         return ""
 
+    def owner_id(self) -> str:
+        """The userid of the key's owner - needed to move an experiment."""
+        if self._owner_id is None:
+            response = self._request("GET", "/users/me")
+            if response.status_code != 200:
+                raise ElabFTWError(self._explain(response))
+            try:
+                self._owner_id = str(response.json().get("userid") or "")
+            except ValueError:
+                self._owner_id = ""
+        return self._owner_id
+
+    def move_to_team(self, experiment_id: str, team: str) -> str:
+        """Put the experiment into ``team``; returns the team that now holds it.
+
+        eLabFTW's v2 has no team field on create: the experiment lands in the
+        team of the key's owner, and the only way to move it is the ownership
+        transfer action. It is allowed here because the owner is a member of
+        every team the key can list - GET /teams only returns those, which is
+        also why the page can offer exactly this list as a choice.
+        """
+        if not experiment_id or not str(team).strip():
+            return ""
+        try:
+            target_team = int(str(team).strip())
+        except ValueError:
+            raise ElabFTWError(f"team must be a number, got {team!r}")
+        response = self._request(
+            "PATCH", f"/experiments/{experiment_id}",
+            json={"action": "updateowner", "userid": int(self.owner_id() or 0),
+                  "team": target_team})
+        if response.status_code >= 400:
+            raise ElabFTWError(self._explain(response))
+        return str(target_team)
+
     def add_tags(self, experiment_id: str, tags: List[str]) -> bool:
         """Best effort: a missing tag must not fail an export."""
         for tag in tags:
@@ -299,20 +335,23 @@ def experiment_body(ctx: Dict[str, Any]) -> str:
 def export_entry(ctx: Dict[str, Any], target: Dict[str, Any], *,
                  figure: Optional[bytes] = None,
                  filename: Optional[str] = None,
-                 client: Optional[ElabFTWClient] = None) -> Dict[str, Any]:
+                 client: Optional[ElabFTWClient] = None,
+                 team: Optional[str] = None) -> Dict[str, Any]:
     """Push one measurement into eLabFTW.
 
     ``target`` is the user's eLabFTW configuration (instance, API key, team,
     category); the caller resolves it, so this function stays independent of
-    where the values came from.
+    where the values came from. ``team`` overrides the configured team for this
+    one export (the UI offers a choice).
 
     Returns a report with the experiment id and URL, or an error string - the
     caller decides what to do with it (the UI shows it, the notification says
     whether the export worked).
     """
+    wanted_team = str(team if team is not None else target.get("team", "") or "").strip()
     report: Dict[str, Any] = {"ok": False, "id": "", "url": "", "attached": False,
-                              "instance": "", "team": target.get("team", ""),
-                              "error": ""}
+                              "instance": "", "team": wanted_team,
+                              "team_moved": False, "team_error": "", "error": ""}
     instance = (target or {}).get("instance_url", "")
     api_key = (target or {}).get("api_key", "")
     if not instance or not api_key:
@@ -321,7 +360,7 @@ def export_entry(ctx: Dict[str, Any], target: Dict[str, Any], *,
 
     try:
         client = client or ElabFTWClient(
-            instance, api_key, team=target.get("team", ""),
+            instance, api_key, team=wanted_team,
             verify_tls=bool(target.get("verify_tls", True)))
         report["instance"] = client.web_base
         title = f"TGA {ctx.get('code', '')} - {ctx.get('sample_name', '')}".strip(" -")
@@ -331,6 +370,17 @@ def export_entry(ctx: Dict[str, Any], target: Dict[str, Any], *,
                                            tags=tags)
         report["id"] = created["id"]
         report["url"] = created["url"]
+        # Das Team setzt eLabFTW beim Anlegen selbst (das des Key-Eigentuemers);
+        # nur der Besitzerwechsel kann es danach aendern. Scheitert er, ist das
+        # Experiment trotzdem da - also kein Fehlschlag, sondern ein Hinweis.
+        if wanted_team:
+            try:
+                report["team"] = client.move_to_team(created["id"], wanted_team)
+                report["team_moved"] = True
+            except ElabFTWError as error:
+                report["team_error"] = str(error)
+                log.warning("experiment %s stays in the owner's team: %s",
+                            created["id"], error)
         if figure:
             try:
                 client.upload_attachment(created["id"], filename or "dtg_curve.png",

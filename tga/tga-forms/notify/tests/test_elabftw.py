@@ -73,7 +73,24 @@ class Stub:
                                             "elabftw_version": "6.0.0-beta2"})
                 if self.path.startswith("/api/v2/teams"):
                     return self._send(200, [{"id": 1, "name": "Materials"}, {"id": 7, "name": "TGA"}])
+                if self.path.startswith("/api/v2/users/me"):
+                    return self._send(200, {"userid": 1, "email": "key@example.org"})
                 return self._send(404, {"message": "Not found"})
+
+            def do_PATCH(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length) if length else b""
+                stub.requests.append({
+                    "method": self.command, "path": self.path,
+                    "auth": self.headers.get("Authorization", ""),
+                    "body": raw,
+                })
+                if self.headers.get("Authorization") != KEY:
+                    return self._send(401, {"code": 401, "message": "Authentication required"})
+                if stub.mode == "team_denied":
+                    return self._send(403, {"code": 403,
+                                            "message": "You are not allowed to do that"})
+                return self._send(200, [])
 
             def do_POST(self):
                 length = int(self.headers.get("Content-Length") or 0)
@@ -184,7 +201,21 @@ check("Titel traegt Kennung und Probennamen",
       "AB12C" in payload["title"] and "Kollidon VA64" in payload["title"], payload["title"])
 check("Kategorie gesetzt", payload.get("category") == "TGA")
 check("Tags gesetzt", "AB12C" in payload.get("tags", []), str(payload.get("tags")))
-check("Team als Query-Parameter", "team=7" in created["path"], created["path"])
+# Das Team laesst sich nicht beim Anlegen setzen: eLabFTW ignoriert ein
+# "team" im Body und in der URL (auf der echten Instanz geprueft, 6.0.0-beta2),
+# und PATCH mit team antwortet "Use the 'action:updateowner'". Der Test stand
+# vorher auf dem Query-Parameter und war damit gruen, ohne zu wirken.
+moved = [r for r in stub.requests
+         if r["method"] == "PATCH" and "/experiments/42" in r["path"]]
+check("Team wird per Besitzerwechsel gesetzt", bool(moved),
+      str([r["method"] + " " + r["path"] for r in stub.requests][-3:]))
+if moved:
+    action = json.loads(moved[0]["body"])
+    check("Wechsel nennt Aktion, Besitzer und Ziel-Team",
+          action.get("action") == "updateowner" and action.get("team") == 7
+          and action.get("userid") == 1, str(action))
+check("Bericht nennt das Team", report.get("team") == "7", str(report.get("team")))
+check("Bericht meldet den Wechsel", report.get("team_moved") is True)
 check("Body nennt Parameter und Ergebnisse",
       "Nitrogen" in payload["body"] and "305.2" in payload["body"]
       and "Platinum HT #3" in payload["body"])
@@ -202,6 +233,17 @@ check("Export ok", report["ok"], report["error"])
 check("ID aus dem Location-Header", report["id"] == "77", report["id"])
 tag_calls = [r for r in stub.requests if "/tags" in r["path"]]
 check("Tags nachgereicht", len(tag_calls) >= 1, str(len(tag_calls)))
+stub.stop()
+
+print()
+print("=== Teamwechsel abgelehnt: Export bleibt erfolgreich ===")
+stub = Stub("team_denied").start()
+report = elabftw.export_entry(ctx, {"instance_url": stub.url, "api_key": KEY,
+                                    "team": "7"})
+check("Experiment ist trotzdem da", report["ok"], report["error"])
+check("Der Team-Fehler wird gemeldet",
+      "403" in str(report.get("team_error")), str(report.get("team_error")))
+check("Kein Wechsel behauptet", report.get("team_moved") is False)
 stub.stop()
 
 print()

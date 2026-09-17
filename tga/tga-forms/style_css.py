@@ -129,6 +129,14 @@ body.body--light .tga-seg-title { color: #1f2430; }
 }
 body.body--light .tga-success { color: #374151; }
 .tga-success-title { font-size: 1.15rem; font-weight: 600; color: #f2f3f5; }
+/* Wohin schon exportiert wurde - bleibt auf der Karte stehen. */
+.tga-export-list {
+    margin-top: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border-left: 2px solid #16a34a;
+    background: rgba(22, 163, 74, 0.07);
+    border-radius: 0 6px 6px 0;
+}
 body.body--light .tga-success-title { color: #111827; }
 .tga-mono { font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 0.78rem; color: #b6bcc6; }
 body.body--light .tga-mono { color: #475569; }

@@ -45,7 +45,8 @@ INTERNAL_SECRET = os.environ.get("STORAGE_SECRET", "")
 def register(*, get_user: Callable[[], Optional[dict]], get_token: Callable[[], str],
              accent: str, css: str, title: str, open_login_js: str,
              nomad_api, state: Callable[[], dict], navigate,
-             fresh_token=None, show_session_expired=None) -> None:
+             fresh_token=None, show_session_expired=None,
+             auth_poll_js: str = "") -> None:
     """Take over what the pages need from the form app (called once at startup).
 
     fresh_token and show_session_expired come from the form: it solved the stale
@@ -56,7 +57,7 @@ def register(*, get_user: Callable[[], Optional[dict]], get_token: Callable[[], 
     _api.update(get_user=get_user, get_token=get_token, accent=accent, css=css,
                 title=title, open_login_js=open_login_js, api=nomad_api,
                 state=state, navigate=navigate, fresh_token=fresh_token,
-                show_session_expired=show_session_expired)
+                show_session_expired=show_session_expired, auth_poll_js=auth_poll_js)
     _register_endpoints()
 
 
@@ -296,6 +297,9 @@ def _request_row(upload: Dict[str, Any], token: str) -> Dict[str, Any]:
         "created": str(upload.get("upload_create_time") or "")[:10],
         "created_raw": str(upload.get("upload_create_time") or ""),
         "gui_url": _gui_url(upload_id),
+        # Was schon exportiert wurde, steht in unseren Einstellungen: NOMAD nimmt
+        # keine eigenen Metadaten-Schluessel an (422 "Unknown quantity").
+        "exports": settings_mod.exports_for(upload_id),
     }
 
 
@@ -326,6 +330,10 @@ def page_requests(request: Request) -> None:
                 .props("flat dense no-caps").classes("tga-header-btn")
 
         container = ui.column().classes("w-full gap-3")
+        # Dialoge haengen hier, nicht in der Liste: refresh() leert den Container,
+        # und ein Dialog darin verschwand mitten im Export ("Exported" blitzte auf
+        # und war sofort weg).
+        dialog_host = ui.column().classes("w-full")
 
         async def refresh() -> None:
             # Das Token aus dem Seitenaufbau ist hier oft abgelaufen; das Formular
@@ -358,7 +366,7 @@ def page_requests(request: Request) -> None:
                     ui.label("No requests yet.").classes("text-grey-5")
                     return
                 for row in rows:
-                    _request_card(row, token_now, refresh)
+                    _request_card(row, token_now, refresh, dialog_host)
 
         # Der erste Aufbau laeuft als Timer: das Token muss dabei aus dem Browser
         # gelesen werden, und das geht nur in einem Coroutine-Kontext.
@@ -369,7 +377,7 @@ def page_requests(request: Request) -> None:
             ui.button("Refresh", icon="refresh", on_click=refresh).props("flat dense")
 
 
-def _request_card(row: Dict[str, Any], token: str, refresh) -> None:
+def _request_card(row: Dict[str, Any], token: str, refresh, host=None) -> None:
     """One request: what it is, where it stands and what can be done with it."""
     with ui.element("div").classes("tga-panel w-full"):
         with ui.row().classes("items-center gap-3 w-full"):
@@ -395,16 +403,46 @@ def _request_card(row: Dict[str, Any], token: str, refresh) -> None:
                           on_click=lambda u=row: ui.navigate.to(
                               download_url(u["upload_id"]), new_tab=True)) \
                     .props("outline dense")
-                ui.button("Send to eLabFTW", icon="science",
-                          on_click=lambda u=row: _export_dialog(u, token, refresh)) \
+                ui.button("Send to eLabFTW" if not row.get("exports") else "Send again",
+                          icon="science",
+                          on_click=lambda u=row: _export_dialog(u, token, refresh, host)) \
                     .props("unelevated dense")
+        # Wohin schon exportiert wurde - bleibt sichtbar, statt mit dem Dialog
+        # zu verschwinden.
+        stored = row.get("exports") or []
+        if stored:
+            with ui.element("div").classes("tga-export-list w-full"):
+                ui.label("In eLabFTW").classes("text-xs uppercase text-grey-6")
+                for item in stored:
+                    with ui.row().classes("items-center gap-3 w-full"):
+                        ui.icon("science", color="#16a34a").classes("text-lg")
+                        label = f"Team {item.get('team') or '?'}"
+                        if item.get("id"):
+                            label += f"  |  experiment {item.get('id')}"
+                        if item.get("url"):
+                            ui.link(label, item["url"]).classes("text-sm") \
+                                .props("target=_blank")
+                        else:
+                            ui.label(label).classes("text-sm")
+                        ui.label(str(item.get("exported_at") or "")[:16].replace("T", " ")) \
+                            .classes("text-xs text-grey-6")
+                        if item.get("team_error"):
+                            ui.label("team not changed").classes("text-xs text-amber-400")
 
 
-def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
-    """Confirm the target, then export - the instance and key are the user's."""
+def _export_dialog(row: Dict[str, Any], token: str, refresh, host=None) -> None:
+    """Confirm the target, then export - the instance and key are the user's.
+
+    host keeps the dialog out of the list container, which the refresh after the
+    export clears.
+    """
     user = _api["get_user"]()
     target = settings_mod.user_elabftw(user)
-    with ui.dialog() as dialog, ui.card().classes("gap-3"):
+    if host is not None:
+        dialog_scope = host
+    else:                                            # pragma: no cover
+        dialog_scope = ui.column()
+    with dialog_scope, ui.dialog() as dialog, ui.card().classes("gap-3"):
         ui.label(f"Send {row['sample']} to eLabFTW").classes("text-lg font-medium")
         if not target.get("instance_url") or not target.get("api_key"):
             ui.label("No eLabFTW target is set for your account yet. Add your instance, "
@@ -413,9 +451,26 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                 .props("flat dense")
         else:
             ui.label(f"Instance: {target.get('instance_url')}").classes("text-sm")
-            ui.label(f"Team: {target.get('team') or '(default)'}").classes("text-sm")
             ui.label("This creates an experiment in your ELN with the parameters, the "
                      "results and the DTG figure.").classes("text-sm text-grey-5")
+            # Team live laden statt erst nach "Test connection": die Liste kommt
+            # aus dem Key, und der Key darf genau diese Teams beschreiben.
+            options: Dict[str, str] = {}
+            try:
+                probe = elabftw_mod.ElabFTWClient(
+                    target.get("instance_url", ""), target.get("api_key", ""), team="",
+                    verify_tls=bool(target.get("verify_tls", True)))
+                options = {str(t.get("id")): f"{t.get('id')} - {t.get('name')}"
+                           for t in probe.teams()}
+            except Exception as error:                      # noqa: BLE001
+                ui.label(f"The teams could not be loaded from the key: {error}") \
+                    .classes("text-sm text-amber-400")
+            configured = str(target.get("team") or "")
+            if options:
+                team_box = ui.select(options, value=configured if configured in options else None,
+                                     label="Team").classes("w-full")
+            else:
+                team_box = ui.input("Team", value=configured).classes("w-full")
             report_box = ui.column().classes("w-full")
 
             async def do_export() -> None:
@@ -430,8 +485,9 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                                                    f"TGA {row['code']} - {row['sample']}")
                     report = elabftw_mod.export_entry(
                         ctx, target, figure=figure,
-                        filename=f"TGA_{row['code']}_dtg.png")
-                    _remember_export(row["upload_id"], token_now, report, user)
+                        filename=f"TGA_{row['code']}_dtg.png",
+                        team=str(team_box.value or ""))
+                    _remember_export(row["upload_id"], report, user)
                     events.notify("moved_to_elabftw",
                                   {**ctx, "elabftw_url": report.get("url", ""),
                                    "elabftw_instance": report.get("instance", ""),
@@ -444,8 +500,15 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                     if report.get("ok"):
                         with ui.element("div").classes("tga-success-title"):
                             ui.icon("check_circle", color="#16a34a")
-                            ui.label("Exported")
-                        ui.link(report.get("url", ""), report.get("url", ""))
+                            ui.label(f"Exported to team {report.get('team') or '?'}")
+                        if report.get("url"):
+                            ui.link(report["url"], report["url"]).props("target=_blank")
+                        ui.label("The link stays on the request, under the buttons.") \
+                            .classes("text-sm text-grey-5")
+                        if report.get("team_error"):
+                            ui.label("The experiment was created, but could not be moved "
+                                     f"into team {report.get('team')}: {report['team_error']}") \
+                                .classes("text-sm text-amber-400")
                         if not report.get("attached"):
                             ui.label("The figure could not be attached, the experiment "
                                      "was still created.").classes("text-sm text-grey-5")
@@ -577,12 +640,14 @@ def notify_new_request(upload_id: str, archive: Dict[str, Any],
     return reports
 
 
-def _remember_export(upload_id: str, token: str, report: Dict[str, Any],
+def _remember_export(upload_id: str, report: Dict[str, Any],
                      user: Optional[dict]) -> None:
-    """Store the export with the upload, so the page shows it after a reload.
+    """Store the export so the card can show it after a reload.
 
-    Written as ordinary upload metadata: no schema change, and it is cleared with
-    the upload. The API key is never part of it.
+    Written to our own store, not to NOMAD: the upload's metadata only accepts
+    quantities with a schema definition and answers an own key with 422
+    "Unknown quantity" (reproduced on the live instance), which is why the link
+    was gone as soon as the dialog closed. The API key is never part of it.
     """
     if not report.get("ok"):
         return
@@ -590,14 +655,16 @@ def _remember_export(upload_id: str, token: str, report: Dict[str, Any],
         "url": report.get("url", ""),
         "id": report.get("id", ""),
         "instance": report.get("instance", ""),
+        "team": str(report.get("team") or ""),
+        "team_moved": bool(report.get("team_moved")),
+        "team_error": str(report.get("team_error") or ""),
         "exported_by": str((user or {}).get("name") or ""),
         "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
     try:
-        _api["api"].api_json("POST", f"/uploads/{upload_id}/edit", token,
-                             {"metadata": {"tga_elabftw": payload}})
+        settings_mod.save_export(upload_id, payload)
     except Exception as error:                     # noqa: BLE001
-        log.warning("could not store the export on the upload: %s", error)
+        log.warning("could not store the export: %s", error)
 
 
 # ── my ELN ──────────────────────────────────────────────────────────────────
@@ -632,16 +699,46 @@ def page_eln(request: Request) -> None:
                                password=True, password_toggle_button=True).classes("w-full")
             if target.get("api_key"):
                 api_key.props("hint='a key is stored - leave empty to keep it'")
-            team = ui.input("Team", value=str(target.get("team") or "")).classes("w-full")
+            # Die Teams kommen aus dem API-Key selbst - als Auswahl statt Freitext,
+            # und ohne den Umweg ueber "Test connection".
+            team = ui.select({}, label="Team", with_input=False).classes("w-full")
+            team_hint = ui.label("Enter the instance and the API key; the teams this "
+                                 "key can use load here by themselves.") \
+                .classes("text-xs text-grey-6")
             verify = ui.checkbox("Verify TLS certificate",
                                  value=bool(target.get("verify_tls", True)))
             result_box = ui.column().classes("w-full gap-1")
-
             def collect() -> Dict[str, Any]:
                 return {"instance_url": instance.value or "",
                         "api_key": api_key.value or "",
-                        "team": team.value or "",
+                        "team": str(team.value or ""),
                         "verify_tls": bool(verify.value)}
+
+            def load_teams() -> None:
+                """Fill the team list from the key - no test connection needed."""
+                values = collect()
+                values["api_key"] = values["api_key"] or target.get("api_key", "")
+                if not values["api_key"] or not values["instance_url"]:
+                    team_hint.set_text("Enter the instance and the API key; the teams "
+                                       "this key can use load here by themselves.")
+                    return
+                try:
+                    client = elabftw_mod.ElabFTWClient(
+                        values["instance_url"], values["api_key"], team="",
+                        verify_tls=values["verify_tls"])
+                    teams = client.teams()
+                except Exception as error:              # noqa: BLE001
+                    team_hint.set_text(f"Teams could not be loaded: {error}")
+                    return
+                options = {str(item.get("id")): f"{item.get('id')} - {item.get('name')}"
+                           for item in teams}
+                # Beim ersten Laden ist die Auswahl noch leer - dann zaehlt das
+                # gespeicherte Team, nicht einfach das erste aus der Liste.
+                current = str(values.get("team") or target.get("team") or "")
+                team.options = options
+                team.value = current if current in options else (next(iter(options), None))
+                team.update()
+                team_hint.set_text(f"{len(options)} team(s) available to this API key.")
 
             def save() -> None:
                 settings_mod.save_user_elabftw(user, collect())
@@ -649,6 +746,12 @@ def page_eln(request: Request) -> None:
                 with result_box:
                     ui.label("Saved.").classes("text-sm").style("color:#16a34a")
                 api_key.value = ""
+                load_teams()
+
+            # Beim Oeffnen und sobald eine der beiden Angaben fertig getippt ist.
+            ui.timer(0.3, load_teams, once=True)
+            instance.on("blur", lambda _: load_teams())
+            api_key.on("blur", lambda _: load_teams())
 
             def test() -> None:
                 values = collect()
@@ -935,6 +1038,30 @@ def _token_of(request: Request) -> str:
     return request.cookies.get("Authorization", "")
 
 
+def _session_page(message: str) -> str:
+    """A stand-alone page for a download that cannot draw a panel.
+
+    A download is an ordinary page load in a new tab, so there is no page to put
+    the session panel into. The poll script is the form's: the browser gets a
+    fresh cookie once NOMAD is opened, and this page reloads itself then. A
+    script inside a response like this one does run - unlike HTML that is added
+    to an already loaded page, which the browser drops.
+    """
+    poll = _api.get("auth_poll_js") or ""
+    return (
+        "<!doctype html><html lang='en'><meta charset='utf-8'>"
+        "<title>NOMAD session</title>"
+        "<style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e5e7eb;"
+        "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}"
+        "div{max-width:34rem;padding:2rem;border:1px solid #334155;border-radius:12px}"
+        "a{color:#a5b4fc}h2{margin-top:0;font-size:1.15rem}</style>"
+        "<div><h2>NOMAD session</h2>"
+        f"<p>{message}</p>"
+        "<p>Open <a href='/nomad-oasis/gui' target='_blank'>NOMAD</a> once to refresh "
+        "the session; this page reloads by itself afterwards.</p></div>"
+        f"<script>{poll}</script></html>")
+
+
 def _register_endpoints() -> None:
     """Two routes on the app's own FastAPI instance.
 
@@ -950,10 +1077,18 @@ def _register_endpoints() -> None:
         """The ELN package as a download, built from the entry's own data."""
         token = _token_of(request)
         if not token:
-            return Response("sign in to NOMAD first", status_code=401)
+            return Response(_session_page("This tab has no NOMAD session."),
+                            status_code=401, media_type="text/html")
         # Permission check through the API: only uploads this token may see are
         # read from disk (the staging volume has no per-user check of its own).
         status, response = _api["api"].api_json("GET", f"/uploads/{upload_id}", token)
+        if status == 401:
+            # Der Download oeffnet in einem neuen Tab, der Browser schickt den
+            # Cookie, den er hat - ein 401 heisst hier fast immer "Sitzung
+            # abgelaufen" und nicht "kein Zugriff". Das stand vorher als
+            # "not allowed for this account" da und fuehrte in die Irre.
+            return Response(_session_page("Your NOMAD session has expired."),
+                            status_code=401, media_type="text/html")
         if status != 200:
             return Response("not allowed for this account", status_code=403)
         summary = entry_data.request_summary(upload_id)

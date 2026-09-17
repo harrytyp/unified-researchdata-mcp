@@ -219,14 +219,18 @@ def is_admin(user: Optional[Dict[str, Any]]) -> bool:
 # ── Per-user eLabFTW targets ────────────────────────────────────────────────
 
 def _user_key(user: Optional[Dict[str, Any]]) -> str:
-    """Stable key for a user: prefer the email, fall back to the user name.
+    """Stable key for a user: email first, then the name, then the user id.
 
-    Both appear in the login token; the email is the one the requester
-    recognises, and the export is configured per person.
+    The email is the one the requester recognises, and the export is configured
+    per person. Not every token carries a name or an email, though (a token
+    minted on the server has neither), and an empty key would silently write to
+    the wrong place - so the user id is the last resort, it is always there.
     """
     if not user:
         return ""
-    return str(user.get("email") or user.get("username") or user.get("name") or "").lower()
+    identity = (user.get("email") or user.get("username") or user.get("name")
+                or user.get("user") or user.get("sub") or "")
+    return str(identity).lower()
 
 
 def user_elabftw(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -289,6 +293,42 @@ def outbox_replace(records: list, path: str = OUTBOX_FILE) -> None:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     os.chmod(path, 0o600)
+
+
+EXPORTS_FILE = os.path.join(DATA_DIR, "exports.json")
+
+
+def load_exports() -> Dict[str, Any]:
+    """Where each upload was exported to, keyed by upload id.
+
+    Not stored in NOMAD: the upload's metadata only accepts quantities that its
+    schema defines, an own key is answered with 422 "Unknown quantity" (tried on
+    the live instance). The entry itself is schema-validated too, so the same
+    answer would come back there. This file is the place the settings already
+    live in, so the page and the export agree on one source.
+    """
+    return _read_json(EXPORTS_FILE, {})
+
+
+def save_export(upload_id: str, entry: Dict[str, Any]) -> list:
+    """Append one export, newest first; the same experiment is not listed twice."""
+    data = load_exports()
+    entries = data.get(upload_id)
+    if not isinstance(entries, list):
+        entries = []
+    key = (str(entry.get("id", "")), str(entry.get("instance", "")))
+    entries = [item for item in entries
+               if (str(item.get("id", "")), str(item.get("instance", ""))) != key]
+    entries.insert(0, dict(entry))
+    data[upload_id] = entries[:10]
+    _write_json(EXPORTS_FILE, data)
+    return data[upload_id]
+
+
+def exports_for(upload_id: str) -> list:
+    """The exports of one upload, newest first."""
+    entries = load_exports().get(upload_id)
+    return entries if isinstance(entries, list) else []
 
 
 def log_sent(record: Dict[str, Any], path: str = SENT_FILE) -> None:
