@@ -53,8 +53,11 @@ AUTH_POLL_JS = '''
 # Same idea for a session that ran out of time: here the (expired) cookie is
 # still present, so waiting for it to appear would reload in a loop. Wait for a
 # *new* value instead - signing in again replaces the cookie.
-AUTH_REFRESH_JS = '''
-    <script>
+# Wait until the browser holds a different token, then reload this page.
+# Started with ui.run_javascript, NOT by adding this as <script> to the body:
+# HTML that arrives after the page is loaded does not execute its scripts, the
+# browser drops them. The session panel therefore never came back on its own.
+AUTH_POLL_JS = '''
     (function () {
         var find = function () {
             return (document.cookie.split('; ').find(function (c) {
@@ -72,8 +75,9 @@ AUTH_REFRESH_JS = '''
             }
         })();
     })();
-    </script>
 '''
+AUTH_REFRESH_JS = '<script>' + AUTH_POLL_JS + '</script>'
+
 
 
 # The purge gas flows are part of the instrument setup the lab specifies: they
@@ -690,7 +694,7 @@ def create_request(tok: str, archive: dict, file_name: str, display_name: str,
     return out
 
 
-def show_session_expired(detail: str = ''):
+def show_session_expired(detail: str = '', box=None, message: str = ''):
     """Explain a 401/403 as an expired session and offer the way back in.
 
     A 401 is not a problem with the form: the session token NOMAD was handed
@@ -698,13 +702,18 @@ def show_session_expired(detail: str = ''):
     was created and the entries are still in the form, so signing in again and
     pressing submit once more is all it takes. Without this the user only saw
     the raw API error and had no idea whether their data was lost.
+
+    box lets another page (the request list) draw this same panel; the wording
+    and the script that reloads the page after signing in stay in one place.
     """
-    result_box.clear()
-    with result_box:
+    target = result_box if box is None else box
+    target.clear()
+    with target:
         with ui.element('div').classes('tga-expired'):
             ui.icon('lock_clock', color='#f59e0b').classes('text-4xl')
             ui.label('NOMAD session expired').classes('tga-success-title')
-            ui.label('Your sign-in was no longer valid when the request was sent, '
+            ui.label(message or
+                     'Your sign-in was no longer valid when the request was sent, '
                      'so nothing was created. Sign in again and press submit once '
                      'more - your entries are kept.').classes('text-sm text-grey-5')
             ui.button('Sign in to NOMAD', icon='login') \
@@ -712,7 +721,7 @@ def show_session_expired(detail: str = ''):
                 .props('unelevated').classes('tga-cta')
             if detail:
                 ui.label(detail).classes('tga-mono')
-    ui.add_body_html(AUTH_REFRESH_JS)
+    ui.run_javascript(AUTH_POLL_JS)
 
 
 async def submit():
@@ -848,6 +857,10 @@ result_box = None
 ui_notify.register(
     get_user=current_user,
     get_token=auth_token,
+    # Dieselben Helfer, die das Formular beim Absenden benutzt: das Token frisch
+    # aus dem Browser lesen und eine abgelaufene Sitzung gleich erklaeren.
+    fresh_token=fresh_token,
+    show_session_expired=show_session_expired,
     accent=ACCENT,
     css=CSS,
     title=TITLE,
@@ -888,7 +901,7 @@ def index(request: Request):
                          'separate window and closes automatically once you are '
                          'signed in, returning you to this page.').classes('tga-login-sub')
                 ui.button('Sign in to NOMAD', icon='login')                     .on('click', js_handler=OPEN_LOGIN_JS)                     .props('unelevated size=lg').classes('tga-cta')
-        ui.add_body_html(AUTH_POLL_JS)
+        ui.run_javascript(AUTH_POLL_JS)
         return
 
     # ── Form ──

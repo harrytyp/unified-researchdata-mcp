@@ -18,6 +18,7 @@ so this module stays independent of app.py and can be tested on its own.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -43,11 +44,19 @@ INTERNAL_SECRET = os.environ.get("STORAGE_SECRET", "")
 
 def register(*, get_user: Callable[[], Optional[dict]], get_token: Callable[[], str],
              accent: str, css: str, title: str, open_login_js: str,
-             nomad_api, state: Callable[[], dict], navigate) -> None:
-    """Take over what the pages need from the form app (called once at startup)."""
+             nomad_api, state: Callable[[], dict], navigate,
+             fresh_token=None, show_session_expired=None) -> None:
+    """Take over what the pages need from the form app (called once at startup).
+
+    fresh_token and show_session_expired come from the form: it solved the stale
+    session already (a page keeps the token it was built with, while NOMAD's GUI
+    keeps refreshing the cookie). The pages must not grow a second answer to the
+    same problem, so both use the form's.
+    """
     _api.update(get_user=get_user, get_token=get_token, accent=accent, css=css,
                 title=title, open_login_js=open_login_js, api=nomad_api,
-                state=state, navigate=navigate)
+                state=state, navigate=navigate, fresh_token=fresh_token,
+                show_session_expired=show_session_expired)
     _register_endpoints()
 
 
@@ -165,6 +174,87 @@ def _gui_url(upload_id: str, entry_id: str = "") -> str:
     return f"{base}/gui/user/uploads/upload/id/{upload_id}"
 
 
+def _token_claims(token: str) -> Dict[str, Any]:
+    """The claims of a rejected token - no signature, no secret, read only.
+
+    A bare "401" is not actionable; "exp=1789628483" tells whether the session is
+    simply old or whether the API refuses a token that still looks valid.
+    """
+    jwt = str(token or "")
+    if jwt.lower().startswith("bearer "):
+        jwt = jwt[7:]
+    try:
+        payload = jwt.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:                                   # noqa: BLE001
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _token_hint(token: str) -> str:
+    """The claims as one log line (never put values like these on a page)."""
+    claims = _token_claims(token)
+    if not claims:
+        return f"<not a JWT, {len(str(token or ''))} chars>"
+    keys = ("iss", "azp", "typ", "sub", "email", "exp", "iat")
+    return "{" + ", ".join(f"{key}={claims[key]}" for key in keys if key in claims) + "}"
+
+
+def _session_problem(token: str) -> str:
+    """One sentence for the person on the page: why did the API say no?"""
+    claims = _token_claims(token)
+    if not claims:
+        return "Your browser does not carry a NOMAD session."
+    expires = claims.get("exp")
+    if isinstance(expires, (int, float)) and expires < time.time():
+        return "Your NOMAD session has expired."
+    return "The NOMAD API did not accept your session."
+
+
+async def _fresh_token(fallback: str) -> str:
+    """The token the browser holds right now - see app.fresh_token for why.
+
+    The pages are built with the token from the request that opened them; a page
+    open for a while then sends a token that has aged out and the API answers
+    401 "Expired token." even though the browser cookie is fine by now.
+    """
+    getter = _api.get("fresh_token")
+    if getter is None:
+        return fallback
+    try:
+        return await getter() or fallback
+    except Exception as error:                          # noqa: BLE001
+        log.warning("could not read the current token: %s", error)
+        return fallback
+
+
+def _session_panel(status: int, token: str, box, cookies: str = "") -> None:
+    """Show the form's session panel here, with the reason in the log.
+
+    The form's panel also injects the script that reloads the page once the
+    cookie changes, so signing in in the other tab brings this page back by
+    itself.
+    """
+    log.warning("uploads list: HTTP %s, token %s, cookies %s",
+                status, _token_hint(token), cookies or "-")
+    show = _api.get("show_session_expired")
+    if show is None:                                    # pragma: no cover
+        ui.label(f"{_session_problem(token)} The API answered {status}."
+                 ).classes("text-amber-400")
+        return
+    detail = f"{_session_problem(token)} The API answered {status}."
+    message = ("Sign in again - this page reloads by itself once your browser "
+               "has a fresh session. Nothing about your requests was changed.")
+    try:
+        show(detail, box=box, message=message)
+    except TypeError:                                   # aeltere Signatur
+        try:
+            show(detail, box=box)
+        except TypeError:
+            show(detail)
+
+
 def _my_uploads(token: str, limit: int = 50) -> tuple:
     """(uploads, http status) this token may see - the API decides, not this code.
 
@@ -237,15 +327,24 @@ def page_requests(request: Request) -> None:
 
         container = ui.column().classes("w-full gap-3")
 
-        def refresh() -> None:
+        async def refresh() -> None:
+            # Das Token aus dem Seitenaufbau ist hier oft abgelaufen; das Formular
+            # liest es deshalb bei jeder Aktion neu aus dem Browser.
+            token_now = await _fresh_token(token)
             container.clear()
             with container:
-                uploads, status = _my_uploads(token)
+                uploads, status = _my_uploads(token_now)
+                if status in (401, 403):
+                    # Kein "No requests yet." - das waere schlicht falsch. Das Panel
+                    # des Formulars erklaert die Sitzung und holt sie zurueck.
+                    _session_panel(status, token_now, container,
+                                   ", ".join(sorted(request.cookies.keys())))
+                    return
                 if status != 200:
-                    ui.label(f"The NOMAD API answered {status}. If your session "
-                             "expired, sign in again and reload this page."
+                    ui.label(f"The NOMAD API answered {status} for this page."
                              ).classes("text-amber-400")
-                rows = [_request_row(u, token) for u in uploads]
+                    return
+                rows = [_request_row(u, token_now) for u in uploads]
                 # Nur echte TGA-Antraege bzw. Messungen: im Oasis liegen auch
                 # Test- und Staging-Uploads des Betriebs, die hier nichts zu
                 # suchen haben und die Liste unlesbar machen.
@@ -259,9 +358,11 @@ def page_requests(request: Request) -> None:
                     ui.label("No requests yet.").classes("text-grey-5")
                     return
                 for row in rows:
-                    _request_card(row, token, refresh)
+                    _request_card(row, token_now, refresh)
 
-        refresh()
+        # Der erste Aufbau laeuft als Timer: das Token muss dabei aus dem Browser
+        # gelesen werden, und das geht nur in einem Coroutine-Kontext.
+        ui.timer(0.01, refresh, once=True)
 
         with ui.row().classes("items-center gap-2"):
             # Die ELN-Einstellungen stehen oben im Kopfbereich, hier nur Aktualisieren.
@@ -317,7 +418,8 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                      "results and the DTG figure.").classes("text-sm text-grey-5")
             report_box = ui.column().classes("w-full")
 
-            def do_export() -> None:
+            async def do_export() -> None:
+                token_now = await _fresh_token(token)
                 report_box.clear()
                 with report_box:
                     ui.spinner()
@@ -329,7 +431,7 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                     report = elabftw_mod.export_entry(
                         ctx, target, figure=figure,
                         filename=f"TGA_{row['code']}_dtg.png")
-                    _remember_export(row["upload_id"], token, report, user)
+                    _remember_export(row["upload_id"], token_now, report, user)
                     events.notify("moved_to_elabftw",
                                   {**ctx, "elabftw_url": report.get("url", ""),
                                    "elabftw_instance": report.get("instance", ""),
@@ -350,7 +452,7 @@ def _export_dialog(row: Dict[str, Any], token: str, refresh) -> None:
                     else:
                         ui.label(f"Export failed: {report.get('error', '')}") \
                             .classes("text-sm text-red-400")
-                refresh()
+                await refresh()
 
             with ui.row().classes("gap-2"):
                 ui.button("Send now", icon="send", on_click=do_export).props("unelevated")
