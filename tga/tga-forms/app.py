@@ -872,38 +872,11 @@ def index(request: Request):
         st().pop('auth', None)
     user = current_user()
 
-    dm = ui.dark_mode(value=st().get('dark', True))
-
-    def toggle_dark():
-        new = not dm.value
-        dm.value = new
-        st()['dark'] = new
-
     ui.colors(primary=ACCENT)
 
-    # Header
-    with ui.header().classes('tga-header items-center px-4 gap-3 no-shadow') as header:
-        with ui.row().classes('items-center gap-2'):
-            ui.icon('whatshot', color=ACCENT).classes('text-2xl')
-            ui.label(TITLE).classes('tga-brand')
-        ui.space()
-        if user:
-            ui.icon('account_circle').classes('text-grey-4')
-            ui.label(str(user.get('name') or '?')).classes('tga-user')
-            ui.button('NOMAD', on_click=lambda: ui.navigate.to('/nomad-oasis/gui', new_tab=True)) \
-                .props('flat dense outline').classes('tga-header-btn')
-            ui.button('My requests', on_click=lambda: ui.navigate.to('/requests')) \
-                .props('flat dense').classes('tga-header-btn')
-            ui.button('My ELN', on_click=lambda: ui.navigate.to('/eln')) \
-                .props('flat dense').classes('tga-header-btn')
-            if settings_mod.is_admin(user):
-                ui.button('Admin', on_click=lambda: ui.navigate.to('/admin')) \
-                    .props('flat dense').classes('tga-header-btn')
-        else:
-            ui.badge('Not signed in').props('color=amber-8')
-            ui.button('Sign in')                 .on('click', js_handler=OPEN_LOGIN_JS)                 .props('outline dense')
-        ui.button(icon='dark_mode', on_click=toggle_dark).props('flat round dense') \
-            .tooltip('Toggle dark / light mode').classes('tga-darkbtn')
+    # Gemeinsamer Kopf (ui_notify.header): gleiche Eintraege, gleiche Position
+    # von Dunkelmodus und Name auf jeder Seite.
+    ui_notify.header("New request", user)
 
     # ── Not signed in ──
     if not user:

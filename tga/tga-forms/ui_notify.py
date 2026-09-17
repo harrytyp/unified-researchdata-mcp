@@ -63,24 +63,59 @@ def _head() -> None:
         ui.add_head_html(_api["css"])
 
 
-def _header(active: str, user: Optional[dict]) -> None:
+# The header every page shows, in the same order and with the same controls: the
+# form itself, the request list, NOMAD, and - only for the accounts that may -
+# the settings. NOMAD is labelled NOMAD (it used to say "TGA" and jump to the
+# NOMAD GUI), the dark toggle and the user sit at the right end on every page,
+# and the current page is marked with the accent colour: white on the light
+# header was invisible.
+HEADER_ITEMS = (
+    ("New request", "/nomad-oasis/api/tga-forms/"),
+    ("My requests", "/nomad-oasis/api/tga-forms/requests"),
+    ("NOMAD", "/nomad-oasis/gui"),
+)
+
+
+def header(active: str = "", user: Optional[dict] = None) -> None:
+    """The one header for the form and all sub-pages (app.py calls this too)."""
+    state = _api["state"]()
     with ui.header().classes("tga-header items-center px-4 gap-3 no-shadow"):
         with ui.row().classes("items-center gap-2"):
             ui.icon("whatshot", color=_accent()).classes("text-2xl")
             ui.label(_api.get("title", "TGA")).classes("tga-brand")
         ui.space()
-        for label, target in (("New request", "/"),
-                              ("My requests", "/requests"),
-                              ("My ELN", "/eln"),
-                              ("TGA", "/nomad-oasis/gui")):
+        for label, target in HEADER_ITEMS:
             ui.button(label, on_click=lambda t=target: _api["navigate"](t)) \
-                .props("flat dense " + ("color=white" if label == active else "")) \
-                .classes("tga-header-btn")
-        if user and settings_mod.is_admin(user):
-            ui.button("Admin", on_click=lambda: _api["navigate"]("/admin")) \
-                .props("flat dense").classes("tga-header-btn")
-        ui.icon("account_circle").classes("text-grey-4")
-        ui.label(_display_name(user)).classes("tga-user")
+                .props("flat dense no-caps") \
+                .classes("tga-header-btn"
+                         + (" tga-header-btn-active" if label == active else ""))
+        # Settings are for the accounts listed in the settings file only, so the
+        # entry is not shown to everyone.
+        if settings_mod.is_admin(user):
+            ui.button("Admin", on_click=lambda: _api["navigate"](
+                "/nomad-oasis/api/tga-forms/admin")) \
+                .props("flat dense no-caps") \
+                .classes("tga-header-btn"
+                         + (" tga-header-btn-active" if active == "Admin" else ""))
+        dark = ui.dark_mode(value=state.get("dark", True))
+
+        def toggle_dark() -> None:
+            state["dark"] = not dark.value
+            dark.value = state["dark"]
+
+        ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense") \
+            .tooltip("Toggle dark / light mode").classes("tga-darkbtn")
+        if user and (user.get("name") or user.get("username") or user.get("email")
+                     or user.get("sub") or user.get("user")):
+            ui.icon("account_circle").classes("text-grey-4")
+            ui.label(_display_name(user)).classes("tga-user")
+        else:
+            ui.button("Sign in").on("click", js_handler=_api.get("open_login_js", "")) \
+                .props("outline dense").classes("tga-header-btn")
+
+
+# Die Seiten rufen _header(...); der gemeinsame Kopf bleibt eine Funktion.
+_header = header
 
 
 def _display_name(user: Optional[dict]) -> str:
@@ -130,19 +165,22 @@ def _gui_url(upload_id: str, entry_id: str = "") -> str:
     return f"{base}/gui/user/uploads/upload/id/{upload_id}"
 
 
-def _my_uploads(token: str, limit: int = 50) -> List[Dict[str, Any]]:
-    """The uploads this token may see - the API decides, not this code.
+def _my_uploads(token: str, limit: int = 50) -> tuple:
+    """(uploads, http status) this token may see - the API decides, not this code.
 
     Everything the pages read afterwards (the archive included) is limited to
     what comes back here, which is what keeps the file read permission-correct.
+
+    The status is returned rather than swallowed: a failed call used to look
+    exactly like "you have no requests", which the reader cannot tell apart.
     """
     status, response = _api["api"].api_json(
         "GET", f"/uploads?page_size={limit}&order=desc", token)
     if status != 200:
-        return []
+        return [], status
     data = response.get("data") if isinstance(response, dict) else None
     uploads = data.get("uploads") if isinstance(data, dict) else data
-    return [u for u in (uploads or []) if isinstance(u, dict)]
+    return [u for u in (uploads or []) if isinstance(u, dict)], status
 
 
 def _request_row(upload: Dict[str, Any], token: str) -> Dict[str, Any]:
@@ -152,6 +190,11 @@ def _request_row(upload: Dict[str, Any], token: str) -> Dict[str, Any]:
     fields = entry_data.read_fields(upload_id)
     res = entry_data.results(fields)
     return {
+        # Eine Anfrage kann auch ohne den Namen "TGA Request..." ankommen; der
+        # Eintragstyp ist das verlaesslichere Merkmal.
+        "tga": any(str(value).endswith("TgaMeasurement")
+                   for key, value in fields.items()
+                   if key == "m_def" or key.endswith(".m_def")),
         "upload_id": upload_id,
         "upload_name": name,
         "code": code,
@@ -186,18 +229,32 @@ def page_requests(request: Request) -> None:
             ui.label("Everything you submitted, with the results when the measurement "
                      "is done. From here you can push a finished measurement to your "
                      "ELN or download it.").classes("tga-hero-sub")
+            # Die ELN-Einstellungen haengen hier, nicht mehr im Kopf.
+            ui.button("My ELN settings", icon="science",
+                      on_click=lambda: _api["navigate"](
+                          "/nomad-oasis/api/tga-forms/eln")) \
+                .props("flat dense no-caps").classes("tga-header-btn")
 
         container = ui.column().classes("w-full gap-3")
 
         def refresh() -> None:
             container.clear()
             with container:
-                rows = [_request_row(u, token) for u in _my_uploads(token)]
+                uploads, status = _my_uploads(token)
+                if status != 200:
+                    ui.label(f"The NOMAD API answered {status}. If your session "
+                             "expired, sign in again and reload this page."
+                             ).classes("text-amber-400")
+                rows = [_request_row(u, token) for u in uploads]
                 # Nur echte TGA-Antraege bzw. Messungen: im Oasis liegen auch
                 # Test- und Staging-Uploads des Betriebs, die hier nichts zu
                 # suchen haben und die Liste unlesbar machen.
+                # Namenslose Alt-Uploads mit TGA-Eintrag bleiben draussen: eine
+                # Karte ohne Beschriftung hilft niemandem.
                 rows = [r for r in rows
-                        if r["upload_name"].startswith("TGA Request") or r["ready"]]
+                        if (r["tga"] and r["sample"])
+                        or r["upload_name"].startswith("TGA Request")
+                        or r["ready"]]
                 if not rows:
                     ui.label("No requests yet.").classes("text-grey-5")
                     return
@@ -207,9 +264,8 @@ def page_requests(request: Request) -> None:
         refresh()
 
         with ui.row().classes("items-center gap-2"):
+            # Die ELN-Einstellungen stehen oben im Kopfbereich, hier nur Aktualisieren.
             ui.button("Refresh", icon="refresh", on_click=refresh).props("flat dense")
-            ui.button("ELN settings", icon="settings",
-                      on_click=lambda: _api["navigate"]("/eln")).props("flat dense")
 
 
 def _request_card(row: Dict[str, Any], token: str, refresh) -> None:
@@ -451,7 +507,8 @@ def page_eln(request: Request) -> None:
     if token:
         _api["state"]()["auth"] = token
     user = _api["get_user"]()
-    _header("My ELN", user)
+    # ELN haengt unter den Antraegen, deshalb kein eigener Eintrag
+    _header("", user)
     if _needs_login(user, "The ELN settings"):
         return
 
@@ -572,7 +629,6 @@ def page_admin(request: Request) -> None:
         _mail_panel(state)
         _recipient_panel(state)
         _notification_panel(state)
-        _elabftw_panel(state)
         _queue_panel(state)
         _audit_panel(state)
 
@@ -700,61 +756,6 @@ def _notification_panel(state: Dict[str, Any]) -> None:
             .props("unelevated")
 
 
-def _elabftw_panel(state: Dict[str, Any]) -> None:
-    settings = state["settings"]
-    block = settings["elabftw"]
-    with ui.element("div").classes("tga-panel w-full"):
-        with ui.row().classes("items-center gap-2"):
-            ui.icon("science", color=_accent()).classes("text-2xl")
-            ui.label("eLabFTW default target").classes("text-lg font-medium")
-        ui.label("Users can override instance, team and API key for themselves under "
-                 "'My ELN'. What is set here is the fallback.").classes("text-sm text-grey-5")
-        instance = ui.input("Instance (URL)", value=block.get("instance_url", "")).classes("w-full")
-        key = ui.input("API key", value="", password=True,
-                       password_toggle_button=True).classes("w-full")
-        if block.get("api_key"):
-            key.props("hint='a key is stored - leave empty to keep it'")
-        team = ui.input("Team", value=str(block.get("team") or "")).classes("w-40")
-        category = ui.input("Category", value=str(block.get("category") or "")).classes("w-60")
-        box = ui.column().classes("w-full gap-1")
-
-        def save_elabftw() -> None:
-            _save(state, {"elabftw": {"instance_url": instance.value or "",
-                                      "api_key": key.value or "",
-                                      "team": team.value or "",
-                                      "category": category.value or ""}})
-            key.value = ""
-
-        def test_elabftw() -> None:
-            current = settings_mod.load_settings()["elabftw"]
-            values = {"instance_url": instance.value or current.get("instance_url", ""),
-                      "api_key": key.value or current.get("api_key", ""),
-                      "team": team.value or current.get("team", "")}
-            box.clear()
-            with box:
-                if not values["instance_url"] or not values["api_key"]:
-                    ui.label("Instance and API key are needed for the test.") \
-                        .classes("text-sm text-amber-400")
-                    return
-                ui.spinner()
-            report = elabftw_mod.ElabFTWClient(values["instance_url"], values["api_key"],
-                                               team=values["team"]).test_connection()
-            box.clear()
-            with box:
-                if report["ok"]:
-                    ui.label(f"Connected to {report['instance']} "
-                             f"(version {report['version'] or 'unknown'})") \
-                        .classes("text-sm").style("color:#16a34a")
-                    if report["teams"]:
-                        ui.label("Teams: " + ", ".join(report["teams"])).classes("text-sm text-grey-5")
-                else:
-                    ui.label(f"Not connected: {report['error']}").classes("text-sm text-red-400")
-
-        with ui.row().classes("gap-2"):
-            ui.button("Save", icon="save", on_click=save_elabftw).props("unelevated")
-            ui.button("Test connection", icon="wifi_tethering", on_click=test_elabftw).props("outline")
-
-
 def _queue_panel(state: Dict[str, Any]) -> None:
     summary = mailer.outbox_summary()
     with ui.element("div").classes("tga-panel w-full"):
@@ -781,8 +782,29 @@ def _queue_panel(state: Dict[str, Any]) -> None:
                              ).classes("text-sm")
             ui.notify("Queue processed", position="top")
 
+        def ask_delete() -> None:
+            count = mailer.outbox_summary()["count"]
+            if not count:
+                ui.notify("Nothing is queued", type="info", position="top")
+                return
+            with ui.dialog() as dialog, ui.card().classes("gap-2"):
+                ui.label(f"Delete {count} queued notification(s)?").classes("text-base")
+                ui.label("They are gone for good. The requests they belong to are "
+                         "not touched.").classes("text-sm text-grey-5")
+                with ui.row().classes("gap-2 justify-end w-full"):
+                    ui.button("Cancel", on_click=dialog.close).props("flat")
+                    ui.button("Delete",
+                              on_click=lambda: (mailer.outbox_clear(), dialog.close(),
+                                                ui.notify(f"Deleted {count}",
+                                                          type="positive", position="top"),
+                                                ui.run_javascript("window.location.reload()"))
+                              ).props("unelevated color=red")
+            dialog.open()
+
         with ui.row().classes("gap-2"):
             ui.button("Send queued now", icon="outbox", on_click=flush).props("outline")
+            ui.button("Delete queued", icon="delete_outline", on_click=ask_delete) \
+                .props("outline color=red")
         box
 
 

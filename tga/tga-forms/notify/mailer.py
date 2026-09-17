@@ -151,6 +151,17 @@ def flush_outbox(config: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
     return {"sent": sent, "kept": failed}
 
 
+def outbox_clear() -> int:
+    """Drop the queued notifications, return how many were thrown away.
+
+    The mails are gone for good afterwards; the requests they talk about are not
+    touched. Callers ask first (see the admin page).
+    """
+    count = len(settings_mod.outbox_read())
+    settings_mod.outbox_replace([])
+    return count
+
+
 def outbox_summary() -> Dict[str, Any]:
     """Small overview for the admin page: how many are waiting, since when."""
     records = settings_mod.outbox_read()

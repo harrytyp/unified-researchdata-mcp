@@ -31,6 +31,16 @@ body.body--light .tga-header {
 .tga-user { font-size: 0.9rem; color: #c6cad3; }
 body.body--light .tga-user { color: #4b5563; }
 .tga-darkbtn { color: #c6cad3; }
+.tga-header-btn { color: #c6cad3; }
+body.body--light .tga-header-btn { color: #3d4048; }
+/* Die aktuelle Seite: Akzentfarbe statt Weiss, sonst unsichtbar auf
+   dem hellen Kopf. */
+.tga-header-btn-active {
+    color: #9aa1ff !important;
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 currentColor;
+}
+body.body--light .tga-header-btn-active { color: #4f46e5 !important; }
 
 /* ── Login gate ── */
 .tga-login-wrap { min-height: 75vh; justify-content: center; }
