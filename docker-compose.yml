@@ -43,6 +43,10 @@ services:
     build:
       context: .
       dockerfile: ./econversion.Dockerfile
+      args:
+        # Deploy sets these: ECONVERSION_GIT_SHA=$(git -C econversion rev-parse --short HEAD)
+        GIT_SHA: ${ECONVERSION_GIT_SHA:-unknown}
+        BUILD_TIME: ${ECONVERSION_BUILD_TIME:-}
     restart: unless-stopped
     expose:
       - "8501"
@@ -52,10 +56,21 @@ services:
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - LOG_DIR=/app/logs
+      # Set to 1 to log raw tool arguments (they contain the user's queries).
+      - LOG_TOOL_ARGS=${LOG_TOOL_ARGS:-0}
     volumes:
       - ./econversion/data:/app/data
+      # Logs survive rebuilds (host-side, rotated; feedback goes to data/feedback)
+      - ./econversion/logs:/app/logs
     mem_limit: 2g
     stop_grace_period: 30s
+    # Bound the docker json-file log too (the app rotates its own file)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - default
       - nomad_oasis_network

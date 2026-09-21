@@ -1,5 +1,14 @@
 FROM python:3.11-slim
 
+# Build provenance. The deploy passes the submodule commit + timestamp:
+#   ECONVERSION_GIT_SHA=$(git -C econversion rev-parse --short HEAD) docker compose build econversion
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=
+ENV GIT_SHA=${GIT_SHA} \
+    BUILD_TIME=${BUILD_TIME}
+LABEL org.opencontainers.image.revision=${GIT_SHA} \
+      org.opencontainers.image.created=${BUILD_TIME}
+
 WORKDIR /app
 
 # System dependencies for sentence-transformers / torch
@@ -13,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY econversion/ .
 
-# Create data directory for caches
-RUN mkdir -p /app/data
+# Create data + logs/reports directories (logs/reports are host volumes)
+RUN mkdir -p /app/data /app/logs
 
 # Streamlit config
 RUN mkdir -p ~/.streamlit && \

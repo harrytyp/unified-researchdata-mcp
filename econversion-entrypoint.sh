@@ -47,5 +47,6 @@ if [ ! -f /app/data/cache/proposal_summary.md ]; then
     fi
 fi
 
+mkdir -p /app/logs
 echo "[entrypoint] Starting Streamlit app..."
 exec streamlit run src/app.py --server.baseUrlPath=/nomad-oasis/api/everse
