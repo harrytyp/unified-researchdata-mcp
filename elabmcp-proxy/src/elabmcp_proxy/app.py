@@ -102,16 +102,26 @@ async def _validate_elabftw_key(base_url: str, api_key: str) -> dict:
         is_sysadmin = int(user.get("is_sysadmin", 0))
         current_team = user.get("team")
 
-        # Check per-key can_write from /apikeys
-        key_id = api_key.split("-")[0]
-        key_can_write = 0
+        # Check per-key can_write from /apikeys.
+        # elabFTW < 6.0 keys look like "<id>-<random>"; since 6.0 a key is a bare
+        # 32-hex string with no id, so the row can only be attributed when the
+        # user owns exactly one key (then it must be the one presented).
+        key_id = None
+        key_head = api_key.split("-", 1)[0]
+        if "-" in api_key and key_head.isdigit():
+            key_id = key_head
+        key_can_write = None
         try:
             keys_resp = await client.get(f"{url}/apikeys", headers=headers)
             if keys_resp.status_code == 200:
-                for k in keys_resp.json():
-                    if str(k.get("id")) == key_id:
-                        key_can_write = int(k.get("can_write", 0))
-                        break
+                keys = keys_resp.json()
+                if key_id is not None:
+                    for k in keys:
+                        if str(k.get("id")) == key_id:
+                            key_can_write = int(k.get("can_write", 0))
+                            break
+                elif len(keys) == 1:
+                    key_can_write = int(keys[0].get("can_write", 0))
         except Exception:
             pass
 
@@ -125,6 +135,7 @@ async def _validate_elabftw_key(base_url: str, api_key: str) -> dict:
                     or int(team_data.get("users_canwrite_resources", 0))
                 )
         result["can_write"] = can_write
+        result["can_write_known"] = key_can_write is not None
     except httpx.TimeoutError:
         result["error"] = f"Connection timeout for {base_url}."
     except httpx.ConnectError as e:
@@ -323,25 +334,35 @@ function toggleAllTools(checkbox) {{{{
 # ── Routes ──
 
 
-def _profile_form(base_url, api_key, user_info, can_write, error=""):
+def _profile_form(base_url, api_key, user_info, can_write, error="", can_write_known=True):
     err_html = f'<div class="alert alert-error">{error}</div>' if error else ""
     fullname = (user_info or {}).get("fullname", "Unknown") or "Unknown"
-    key_type = "write" if can_write else "read-only"
-    key_bg = "rgba(59,130,246,0.1)" if can_write else "rgba(234,179,8,0.1)"
-    key_bd = "rgba(59,130,246,0.2)" if can_write else "rgba(234,179,8,0.2)"
-    key_cl = "var(--acc)" if can_write else "#e5a500"
-    key_type_badge = f'<span style="display:inline-block;padding:2px 8px;background:{key_bg};border:1px solid {key_bd};border-radius:4px;font-size:0.72rem;font-weight:600;color:{key_cl};margin-left:10px;text-transform:uppercase;letter-spacing:0.03em">{key_type} key</span>'
-    
     if can_write:
+        key_type, key_bg, key_bd, key_cl = "write", "rgba(59,130,246,0.1)", "rgba(59,130,246,0.2)", "var(--acc)"
+        key_hint = "API key has write access"
+    elif can_write_known:
+        key_type, key_bg, key_bd, key_cl = "read-only", "rgba(234,179,8,0.1)", "rgba(234,179,8,0.2)", "#e5a500"
+        key_hint = "read-only key"
+    else:
+        # elabFTW >= 6.0 keys carry no key id, so the access level of the
+        # presented key cannot be attributed -> let the user pick the profile.
+        key_type, key_bg, key_bd, key_cl = "access unknown", "rgba(148,163,184,0.12)", "rgba(148,163,184,0.25)", "var(--muted)"
+        key_hint = "eLabFTW 6 API keys carry no key id, so the access level could not be detected &mdash; pick the profile that matches this key"
+    key_type_badge = f'<span style="display:inline-block;padding:2px 8px;background:{key_bg};border:1px solid {key_bd};border-radius:4px;font-size:0.72rem;font-weight:600;color:{key_cl};margin-left:10px;text-transform:uppercase;letter-spacing:0.03em">{key_type} key</span>'
+
+    default_preset = "h" if can_write else "r"
+    if can_write or not can_write_known:
         radios = ""
         for k, n, d in [("r","Read-only","Browse & search only"),("h","Hybrid","Read + AI suggestions, tags"),("f","Full","All tools enabled")]:
-            chk = ' checked' if k == 'h' else ''
+            chk = ' checked' if k == default_preset else ''
             radios += '<label class="preset-card"><input type="radio" name="profile" value="' + k + '" data-preset="' + k + '" ' + chk + '><span class="preset-radio"></span><span class="preset-card-text"><span class="preset-name">' + n + '</span><span class="preset-badge">' + d + '</span></span></label>'
-        info_box = '<div style="margin-bottom:20px"><p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px"><strong>' + fullname + '</strong>' + key_type_badge + ' &mdash; API key has write access</p><h3 style="font-size:0.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Profile Preset</h3><div class="preset-grid">' + radios + '</div></div>'
-        btn = "Generate MCP URL"
+        profile_field = '<h3 style="font-size:0.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Profile Preset</h3><div class="preset-grid">' + radios + '</div>'
     else:
-        info_box = '<div style="margin-bottom:20px"><p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px"><strong>' + fullname + '</strong>' + key_type_badge + ' &mdash; read-only key</p></div>'
-        btn = "Generate MCP URL"
+        # Confirmed read-only key: it still needs a profile value, otherwise
+        # step 2 of the form can never be submitted (the form is re-rendered).
+        profile_field = '<input type="hidden" name="profile" value="r">'
+    info_box = '<div style="margin-bottom:20px"><p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px"><strong>' + fullname + '</strong>' + key_type_badge + ' &mdash; ' + key_hint + '</p>' + profile_field + '</div>'
+    btn = "Generate MCP URL"
     
     read_tools = [
         ("get_connection_info","Connection details","Server URL, active user identity, team, available categories and statuses"),
@@ -392,7 +413,7 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
     
     tools_html = '<div style="margin:20px 0"><h3 style="font-size:0.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Tools</h3>'
     categories = [("read","Read",read_tools)]
-    if can_write:
+    if can_write or not can_write_known:
         categories += [("write","Write",write_tools), ("ai","AI",ai_tools)]
     for cat_id, cat_name, cat_tools in categories:
         tools_html += '<div class="tool-section"><div class="tool-section-header" onclick="toggleSection(\'' + cat_id + '\')"><label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;cursor:pointer"><div class="toggle-switch" style="width:44px;height:24px"><input type="checkbox" id="' + cat_id + '_toggle" checked onchange="event.stopPropagation();toggleCategoryCheckbox(\'' + cat_id + '\',this)" style="position:absolute;opacity:0;width:0;height:0"><span class="toggle-slider"></span></div>' + cat_name + ' <span style="color:var(--neutral);font-weight:400">(' + str(len(cat_tools)) + ')</span></label><span class="cat-arrow" id="' + cat_id + '_arrow">+</span></div><div class="tool-section-body" id="' + cat_id + '">'
@@ -401,7 +422,7 @@ def _profile_form(base_url, api_key, user_info, can_write, error=""):
         tools_html += '</div></div>'
     tools_html += '</div>'
     
-    js = "<script>function toggleSection(id){var parent=document.getElementById(id).parentElement;var arr=document.getElementById(id+'_arrow');var open=parent.classList.toggle('open');arr.textContent=open?'−':'+'}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll('.'+cid+'_item');items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){['read','write','ai'].forEach(function(id){var ct=document.getElementById(id+'_toggle');if(ct){var its=document.querySelectorAll('.'+id+'_item');ct.checked=Array.from(its).every(function(t){return t.checked})}})}function applyPreset(p){var r=document.querySelectorAll('.read_item'),w=document.querySelectorAll('.write_item'),ai=document.querySelectorAll('.ai_item');if(p==='r'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=false})}else if(p==='h'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=true})}else if(p==='f'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true});ai.forEach(function(t){t.checked=true})}updateAllToggle()}document.querySelectorAll('input[name=profile][data-preset]').forEach(function(r){r.addEventListener('change',function(){applyPreset(this.value)})});document.querySelectorAll('.toggle-switch input').forEach(function(cb){cb.addEventListener('change',function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith('_item')});if(cl){var id=cl.replace('_item','');var ct=document.getElementById(id+'_toggle');var its=document.querySelectorAll('.'+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}})});document.addEventListener('DOMContentLoaded',function(){applyPreset('h')});</script>"
+    js = "<script>function toggleSection(id){var parent=document.getElementById(id).parentElement;var arr=document.getElementById(id+'_arrow');var open=parent.classList.toggle('open');arr.textContent=open?'−':'+'}function toggleCategoryCheckbox(cid,cb){var items=document.querySelectorAll('.'+cid+'_item');items.forEach(function(t){t.checked=cb.checked});updateAllToggle()}function updateAllToggle(){['read','write','ai'].forEach(function(id){var ct=document.getElementById(id+'_toggle');if(ct){var its=document.querySelectorAll('.'+id+'_item');ct.checked=Array.from(its).every(function(t){return t.checked})}})}function applyPreset(p){var r=document.querySelectorAll('.read_item'),w=document.querySelectorAll('.write_item'),ai=document.querySelectorAll('.ai_item');if(p==='r'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=false})}else if(p==='h'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=false});ai.forEach(function(t){t.checked=true})}else if(p==='f'){r.forEach(function(t){t.checked=true});w.forEach(function(t){t.checked=true});ai.forEach(function(t){t.checked=true})}updateAllToggle()}document.querySelectorAll('input[name=profile][data-preset]').forEach(function(r){r.addEventListener('change',function(){applyPreset(this.value)})});document.querySelectorAll('.toggle-switch input').forEach(function(cb){cb.addEventListener('change',function(){var cl=Array.from(this.classList).find(function(c){return c.endsWith('_item')});if(cl){var id=cl.replace('_item','');var ct=document.getElementById(id+'_toggle');var its=document.querySelectorAll('.'+cl);ct.checked=Array.from(its).every(function(t){return t.checked})}})});document.addEventListener('DOMContentLoaded',function(){applyPreset('" + default_preset + "')});</script>"
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>elabFTW MCP Registration</title>
@@ -497,7 +518,9 @@ async def register_page(request: Request):
         api_key = str(form.get("api_key", "")).strip()
         base_url = str(form.get("base_url", "")).strip()
         validated = str(form.get("validated", "0")).strip()
-        profile = str(form.get("profile", "")).strip()
+        # Read-only keys have no preset cards -> default to "r" (also sent as a
+        # hidden field) so step 2 of the form is always submittable.
+        profile = str(form.get("profile", "")).strip() or "r"
 
         if not api_key or not base_url:
             return HTMLResponse(_create_register_form("Both fields required."), status_code=400)
@@ -532,7 +555,13 @@ async def register_page(request: Request):
 
         # Step 1: Show profile selection
         return HTMLResponse(
-            _profile_form(base_url, api_key, validation["user"], validation["can_write"])
+            _profile_form(
+                base_url,
+                api_key,
+                validation["user"],
+                validation["can_write"],
+                can_write_known=validation.get("can_write_known", True),
+            )
         )
 
     return HTMLResponse(_create_register_form())
