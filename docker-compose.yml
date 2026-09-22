@@ -57,6 +57,10 @@ services:
       - ROOT_PATH=/nomad-oasis/api/everse
       - PORT=8501
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      # Optional test accounts: the connect dialog offers a one-click sign-in for
+      # whichever of these is set. Values stay server-side (never in the browser).
+      - ELABFTW_TEST_TOKEN=${ELABFTW_TEST_TOKEN:-}
+      - DATATAGGER_TEST_TOKEN=${DATATAGGER_TEST_TOKEN:-}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
