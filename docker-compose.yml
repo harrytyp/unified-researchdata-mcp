@@ -41,8 +41,9 @@ services:
   # ── eConversion Papers MCP / Streamlit ───────────────────────────────────
   econversion:
     build:
-      context: .
-      dockerfile: ./econversion.Dockerfile
+      # The app ships its own Dockerfile (FastAPI + uvicorn, python:3.12).
+      context: ./econversion
+      dockerfile: Dockerfile
       args:
         # Deploy sets these: ECONVERSION_GIT_SHA=$(git -C econversion rev-parse --short HEAD)
         GIT_SHA: ${ECONVERSION_GIT_SHA:-unknown}
@@ -52,6 +53,9 @@ services:
       - "8501"
     environment:
       - PYTHONUNBUFFERED=1
+      # nginx forwards the full path, so the app mounts itself under this prefix.
+      - ROOT_PATH=/nomad-oasis/api/everse
+      - PORT=8501
       - MCP_JWT_SECRET=${MCP_JWT_SECRET}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
@@ -63,6 +67,8 @@ services:
       - ./econversion/data:/app/data
       # Logs survive rebuilds (host-side, rotated; feedback goes to data/feedback)
       - ./econversion/logs:/app/logs
+      # HF cache (HF_HOME=/app/.hf in the image): keeps bge-small across rebuilds.
+      - econversion_hf:/app/.hf
     mem_limit: 2g
     stop_grace_period: 30s
     # Bound the docker json-file log too (the app rotates its own file)
@@ -178,6 +184,7 @@ services:
     mem_limit: 128m
 
 volumes:
+  econversion_hf: {}
   caddy_data:
   caddy_config:
   elab_app_data: {}
