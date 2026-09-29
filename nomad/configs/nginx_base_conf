@@ -33,7 +33,10 @@ location /nomad-oasis/gui/ {
 
 location @redirect_to_index {
     rewrite ^ /nomad-oasis/gui/index.html break;
-    proxy_pass http://$nomad_app$request_uri;
+    # $request_uri would still carry the original path, so the rewrite above is
+    # lost and the app answers 404 again (the GUI root and every SPA deep link
+    # ended in nginx's own 404). $uri is the rewritten one.
+    proxy_pass http://$nomad_app$uri$is_args$args;
 }
 
 location /nomad-oasis/docs/ {
