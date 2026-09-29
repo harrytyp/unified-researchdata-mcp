@@ -17,6 +17,44 @@ services:
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
     mem_limit: 256m
 
+  # ── NOMAD MCP (read-only, registration + deployment default PAT) ─────────
+  nomad-mcp:
+    build:
+      context: .
+      dockerfile: nomad-mcp/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      # The deployment's own NOMAD (the Oasis behind the internal nginx) unless
+      # overridden; the register page lets a user point at any NOMAD instead.
+      - NOMAD_BASE_URL=${NOMAD_MCP_BASE_URL:-http://proxy:80/nomad-oasis/api/v1}
+      - NOMAD_GUI_URL=${NOMAD_MCP_GUI_URL:-}
+      # Read-only access for callers that never register.
+      - NOMAD_MCP_DEFAULT_PAT=${NOMAD_MCP_DEFAULT_PAT:-}
+      - NOMAD_MCP_ALLOW_ANONYMOUS=${NOMAD_MCP_ALLOW_ANONYMOUS:-true}
+      - NOMAD_MCP_REQUIRE_TOKEN=${NOMAD_MCP_REQUIRE_TOKEN:-false}
+      - NOMAD_MCP_RATE_LIMIT=${NOMAD_MCP_RATE_LIMIT:-120}
+      - NOMAD_MCP_MAX_RESPONSE_CHARS=${NOMAD_MCP_MAX_RESPONSE_CHARS:-60000}
+      - NOMAD_MCP_TIMEOUT_S=${NOMAD_MCP_TIMEOUT_S:-60}
+      - URL_PREFIX=/nm
+      - MCP_PORT=8000
+      - MCP_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 15s
+    networks:
+      - default
+      - nomad_oasis_network
+    mem_limit: 512m
+    stop_grace_period: 15s
+
   # ── elabFTW MCP (shared R worker, one process for all users) ──
   elabmcp-proxy:
     build:
@@ -61,6 +99,10 @@ services:
       # whichever of these is set. Values stay server-side (never in the browser).
       - ELABFTW_TEST_TOKEN=${ELABFTW_TEST_TOKEN:-}
       - DATATAGGER_TEST_TOKEN=${DATATAGGER_TEST_TOKEN:-}
+      # Public MCP endpoints the app calls. Override when the canonical
+      # hostname changes; empty = the built-in default (duckdns).
+      - ELAB_MCP_URL=${ELAB_MCP_URL:-}
+      - DATATAGGER_MCP_URL=${DATATAGGER_MCP_URL:-}
       - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
       - API_KEY=${ECONVERSION_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -170,6 +212,9 @@ services:
       - "443:443"
     environment:
       - ECONVERSION_BCRYPT_HASH=${ECONVERSION_BCRYPT_HASH}
+      # e-converse demo gate (e-converse/caddy/econverse.caddy)
+      - ECONVERSE_DEMO_HASH=${ECONVERSE_DEMO_HASH}
+      - ECONVERSE_ADMIN_HASH=${ECONVERSE_ADMIN_HASH}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv/http:ro
@@ -177,6 +222,7 @@ services:
       - caddy_config:/config
     depends_on:
       - datatagger-proxy
+      - nomad-mcp
       - elabmcp-proxy
       - econversion
       - elab-app

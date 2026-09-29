@@ -23,7 +23,7 @@ EMOJI = chr(0x1F4C1)  # file folder
 
 card_parts = [
     'Object(ve.jsx)(Xs.a,{item:!0,xs:12,children:Object(ve.jsx)("a",{',
-    'href:"https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/requests",',
+    'href:"/nomad-oasis/api/tga-forms/requests",',
     'style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,',
     'flexWrap:"wrap",background:"#eef2ff",color:"#312e81",border:"1px solid #c7d2fe",',
     'borderRadius:12,padding:"14px 20px",margin:"2px 0 10px",',

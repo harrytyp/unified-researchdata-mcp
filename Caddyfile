@@ -1,124 +1,177 @@
 elabftw.researchmcp.duckdns.org {
-    reverse_proxy elabftw:8080 {
-        flush_interval -1
-        header_up X-Forwarded-Proto https
-        header_up X-Forwarded-Host {host}
-    }
+	reverse_proxy elabftw:8080 {
+		flush_interval -1
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+	}
 
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-    }
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
 }
 
+# Legacy-Alias: der alte Kurzname zeigt auf den kanonischen Chatbot-Host.
 econversion.researchmcp.duckdns.org {
-    redir https://researchmcp.duckdns.org/nomad-oasis/api/everse/ permanent
+	redir https://econverse.e-conversion.de/ permanent
 
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-    }
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
 }
 
 elab-app.researchmcp.duckdns.org {
-    reverse_proxy elab-app:8501 {
-        flush_interval -1
-    }
+	reverse_proxy elab-app:8501 {
+		flush_interval -1
+	}
 
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-    }
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
 }
 
 proespm.researchmcp.duckdns.org {
-    reverse_proxy proespm-app:8501 {
+	reverse_proxy proespm-app:8501 {
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+}
+
+# Alles, was jeder everse-Host bedienen soll: die statische Landing-Page unter
+# /, die MCP-Proxies unter /el, /dt und /nm und NOMAD - damit auch die SSO-Session -
+# unter /nomad-oasis/*. Als Snippet, weil econverse.e-conversion.de dasselbe
+# anbietet und nur zusätzlich / in den Chatbot schickt.
+(everse_stack) {
+	# Kurze Wege zu den TGA-Seiten. Die App liegt hinter /nomad-oasis, weil sie
+	# dort die NOMAD-Session erbt (Cookie mit Path=/nomad-oasis); diese Adressen
+	# leiten dorthin um. Wichtig: "redir" wird vor "handle"/"handle_path"
+	# ausgewertet, sonst schluckt /el* die Adresse /eln.
+	redir /requests /nomad-oasis/api/tga-forms/requests permanent
+	redir /eln /nomad-oasis/api/tga-forms/eln permanent
+	# /eln/<upload_id> ist der Download des ELN-Pakets
+	redir /eln/* /nomad-oasis/api/tga-forms{uri} permanent
+	redir /admin /nomad-oasis/api/tga-forms/admin permanent
+	redir /tga /nomad-oasis/api/tga-forms/ permanent
+
+	@api path /dt/* /el/* /nm/*
+
+	@options method OPTIONS
+
+	handle @options {
+		respond 204
+	}
+
+	handle_path /nm* {
+		uri strip_prefix /nm
+		reverse_proxy nomad-mcp:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle_path /dt* {
+		uri strip_prefix /dt
+		reverse_proxy datatagger-proxy:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle_path /el* {
+		uri strip_prefix /el
+		reverse_proxy elabmcp-proxy:8081 {
+			flush_interval -1
+		}
+	}
+
+	# NiceGUI-Assets der TGA-Formular-App (app referenziert /_nicegui/ absolut)
+	handle /_nicegui* {
+		reverse_proxy proxy:80 {
+			flush_interval -1
+		}
+	}
+
+	handle /nomad-oasis/* {
+		reverse_proxy proxy:80 {
+			flush_interval -1
+		}
+	}
+
+	root * /srv/http
+	file_server browse
+
+	header @api {
+		Access-Control-Allow-Origin *
+		Access-Control-Allow-Methods GET, POST, HEAD, OPTIONS
+		Access-Control-Allow-Headers Content-Type, Authorization
+		Access-Control-Expose-Headers Content-Type
+		Cache-Control no-cache
+		Connection keep-alive
+		X-Accel-Buffering no
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# Die "Website": Landing-Page unter /, NOMAD + tga-forms unter /nomad-oasis/*.
+researchdata.e-conversion.de researchmcp.duckdns.org {
+	import everse_stack
+}
+
+# e-converse, copied from atlas/caddy/econverse.caddy; keep both equal.
+# e-converse in the Caddyfile of the researchdata host (unified-researchdata-mcp),
+# which terminates TLS for econverse.e-conversion.de. Keep the copy there equal
+# to this one. "cra" resolves over nomad_oasis_network, which both stacks join.
+# Sign-in is the application's own (password accounts, DFN-AAI when
+# configured); nothing in front of it authenticates anyone.
+econverse.e-conversion.de {
+    # the prototype lived under these paths until 2026-09; bookmarks and the
+    # NOMAD GUI card still point there
+    @legacy path /nomad-oasis/everse /nomad-oasis/everse/* /nomad-oasis/api/everse /nomad-oasis/api/everse/* /nomad-oasis/api/e-converse /nomad-oasis/api/e-converse/*
+    redir @legacy / permanent
+
+    # identity headers an older release trusted; nothing reads them now, and
+    # nothing from outside should arrive looking like one
+    request_header -X-Demo-User
+    request_header -X-Forwarded-User
+
+    reverse_proxy cra:8501 {
+        # streamed answers
         flush_interval -1
     }
 
+    # The values the app itself sends; no Content-Security-Policy here, two CSP
+    # headers are intersected and only the app knows its inline scripts.
+    # SAMEORIGIN, not DENY: the app frames its own pipeline map.
     header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        defer
+        Strict-Transport-Security "max-age=31536000"
         X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-    }
-}
-
-researchmcp.duckdns.org {
-    # Kurze Wege zu den TGA-Seiten. Die App liegt hinter /nomad-oasis, weil sie
-    # dort die NOMAD-Session erbt (Cookie mit Path=/nomad-oasis); diese Adressen
-    # leiten dorthin um. Wichtig: "redir" wird vor "handle"/"handle_path"
-    # ausgewertet, sonst schluckt /el* die Adresse /eln.
-    redir /requests /nomad-oasis/api/tga-forms/requests permanent
-    redir /eln /nomad-oasis/api/tga-forms/eln permanent
-    # /eln/<upload_id> ist der Download des ELN-Pakets
-    redir /eln/* /nomad-oasis/api/tga-forms{uri} permanent
-    redir /admin /nomad-oasis/api/tga-forms/admin permanent
-    redir /tga /nomad-oasis/api/tga-forms/ permanent
-
-    @api path /dt/* /el/*
-
-    @options method OPTIONS
-
-    handle @options {
-        respond  204
-    }
-
-    handle_path /dt* {
-        uri strip_prefix /dt
-        reverse_proxy datatagger-proxy:8000 {
-            flush_interval -1
-        }
-    }
-
-    handle_path /el* {
-        uri strip_prefix /el
-        reverse_proxy elabmcp-proxy:8081 {
-            flush_interval -1
-        }
-    }
-
-    # NiceGUI-Assets der TGA-Formular-App (app referenziert /_nicegui/ absolut)
-    handle /_nicegui* {
-        reverse_proxy proxy:80 {
-            flush_interval -1
-        }
-    }
-
-    handle /nomad-oasis/* {
-        reverse_proxy proxy:80 {
-            flush_interval -1
-        }
-    }
-
-    root * /srv/http
-    file_server browse
-
-    header @api {
-        Access-Control-Allow-Origin *
-        Access-Control-Allow-Methods GET, POST, HEAD, OPTIONS
-        Access-Control-Allow-Headers Content-Type, Authorization
-        Access-Control-Expose-Headers Content-Type
-        Cache-Control no-cache
-        Connection keep-alive
-        X-Accel-Buffering no
-    }
-
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
+        Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }

@@ -8,7 +8,7 @@ Er fügt auf der NOMAD-Startseite (About-Seite, `/nomad-oasis/gui/`) **ganz oben
 direkt unter dem `meta.description`-Markdown, eine TGA-Karte ein:
 
 - Indigo-Gradient (NOMAD-Primärfarbe), Titel **TGA Measurement Requests**
-- Link auf das TGA-Request-Formular: https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/
+- Link auf das TGA-Request-Formular: /nomad-oasis/api/tga-forms/ (relativ)
 - Eingefügt als weiteres Grid-Item (`Object(ve.jsx)(Xs.a,...)`) zwischen dem
   Markdown-Item und der InfoCard „Interactive Search" im `children`-Array
   der Home-Komponente.
@@ -57,6 +57,6 @@ aus der gemounteten (gepatchten) Datei neu erzeugt.
 ## Everse-Karte (DIT-19, 2026-09-15)
 
 - Zweite Karte, gleiches Muster: Teal-Gradient, Titel **Everse Chatbot**,
-  Link https://researchmcp.duckdns.org/nomad-oasis/api/everse/
+  Link /nomad-oasis/api/everse/ (relativ, same-origin)
 - Skript: `patch_gui4_everse.py` (liest das TGA-gepatchte Bundle, kein Original noetig)
 - Reihenfolge auf der Seite: TGA-Karte, Everse-Karte, dann InfoCards.

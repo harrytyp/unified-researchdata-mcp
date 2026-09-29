@@ -9,7 +9,7 @@ assert data.count(marker) == 1, "Marker count: %d" % data.count(marker)
 EMOJI = chr(0x1F4AC)
 card_parts = [
     'Object(ve.jsx)(Xs.a,{item:!0,xs:12,children:Object(ve.jsx)("a",{',
-    'href:"https://researchmcp.duckdns.org/nomad-oasis/api/everse/",',
+    'href:"/nomad-oasis/api/everse/",',
     'style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,',
     'flexWrap:"wrap",background:"linear-gradient(135deg,#0d9488,#115e59)",color:"#fff",',
     'borderRadius:12,padding:"16px 20px",margin:"2px 0 10px",',

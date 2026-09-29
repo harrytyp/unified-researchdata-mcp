@@ -15,7 +15,7 @@ EMOJI = chr(0x1F321) + chr(0xFE0F)
 
 card_parts = [
     'Object(ve.jsx)(Xs.a,{item:!0,xs:12,children:Object(ve.jsx)("a",{',
-    'href:"https://researchmcp.duckdns.org/nomad-oasis/api/tga-forms/",',
+    'href:"/nomad-oasis/api/tga-forms/",',
     'style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,',
     'flexWrap:"wrap",background:"linear-gradient(135deg,#5e6ad2,#4338ca)",color:"#fff",',
     'borderRadius:12,padding:"16px 20px",margin:"2px 0 10px",',
