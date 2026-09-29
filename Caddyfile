@@ -141,38 +141,9 @@ researchdata.e-conversion.de researchmcp.duckdns.org {
 	import everse_stack
 }
 
-# e-converse, copied from atlas/caddy/econverse.caddy; keep both equal.
-# e-converse in the Caddyfile of the researchdata host (unified-researchdata-mcp),
-# which terminates TLS for econverse.e-conversion.de. Keep the copy there equal
-# to this one. "cra" resolves over nomad_oasis_network, which both stacks join.
-# Sign-in is the application's own (password accounts, DFN-AAI when
-# configured); nothing in front of it authenticates anyone.
-econverse.e-conversion.de {
-    # the prototype lived under these paths until 2026-09; bookmarks and the
-    # NOMAD GUI card still point there
-    @legacy path /nomad-oasis/everse /nomad-oasis/everse/* /nomad-oasis/api/everse /nomad-oasis/api/everse/* /nomad-oasis/api/e-converse /nomad-oasis/api/e-converse/*
-    redir @legacy / permanent
-
-    # identity headers an older release trusted; nothing reads them now, and
-    # nothing from outside should arrive looking like one
-    request_header -X-Demo-User
-    request_header -X-Forwarded-User
-
-    reverse_proxy cra:8501 {
-        # streamed answers
-        flush_interval -1
-    }
-
-    # The values the app itself sends; no Content-Security-Policy here, two CSP
-    # headers are intersected and only the app knows its inline scripts.
-    # SAMEORIGIN, not DENY: the app frames its own pipeline map.
-    header {
-        defer
-        Strict-Transport-Security "max-age=31536000"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        -Server
-    }
-}
+# The econverse host block is not kept here. It lives in the atlas deployment
+# (private GitLab, caddy/econverse.caddy) and is mounted into /etc/caddy/sites
+# by the compose file, so there is exactly one copy of it. The glob matches
+# nothing when that checkout is absent, which Caddy accepts -- the host is then
+# simply not served.
+import /etc/caddy/sites/*.caddy

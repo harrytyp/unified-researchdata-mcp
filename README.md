@@ -1,24 +1,25 @@
 # Unified Research Data MCP
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2025--03--26-blue)](https://modelcontextprotocol.io/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2026--07--28-blue)](https://modelcontextprotocol.io/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![R](https://img.shields.io/badge/R-4.4.2-276DC3?logo=r&logoColor=white)](https://r-project.org)
 
-Host two MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datatagger-mcp)** and **[elabrmcp](https://github.com/MarvinLuepke/elabR/tree/main/mcp/elabrmcp)** (elabFTW) — behind a single [Caddy](https://caddyserver.com/) reverse proxy, each with mandatory **bring-your-own-API-key** registration.
+Host three MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datatagger-mcp)**, **[elabrmcp](https://github.com/MarvinLuepke/elabR/tree/main/mcp/elabrmcp)** (elabFTW) and **[nomad-oasis-mcp](https://github.com/e-conversion/nomad-oasis-mcp)** (NOMAD) — behind a single [Caddy](https://caddyserver.com/) reverse proxy. Each takes the caller's own credentials; the NOMAD server additionally ships a read-only deployment key so a demo account is connected without registering anything.
 
-> **Server admins never configure any API keys.** Every user registers their personal credentials via a web page. No secrets in `.env`, no shared tokens, no admin-managed keys.
+> **Users register their own credentials via a web page.** The one exception is the NOMAD server's read-only deployment key (`NOMAD_MCP_DEFAULT_PAT`), which serves callers that never register. It is read-only, optional, and the only shared token in `.env`.
 
 | MCP Server | Backend | Auth Mechanism |
 |---|---|---|
 | **datatagger-mcp** | [Python / FastMCP](https://github.com/modelcontextprotocol/python-sdk) | `/register` → HMAC-signed JWT (no server storage) |
 | **elabrmcp** (elabFTW) | [R / ellmer](https://cran.r-project.org/package=ellmer) + [mcptools](https://cran.r-project.org/package=mcptools) | **elabmcp-proxy** → per-user R subprocess, JWT tokens |
+| **nomad-oasis-mcp** (NOMAD) | [Python / MCP SDK](https://github.com/e-conversion/nomad-oasis-mcp) | `/register` → HMAC-signed JWT, or the deployment's read-only key |
 
 ### Web GUIs
 
 | Service | Type | Access | Source |
 |---------|------|--------|--------|
-| **eConversion Knowledge Assistant** | Streamlit chat (956 papers, 42 PIs) | `econversion.researchmcp.duckdns.org` — password-protected | [alexburg14/MCP_eConversion](https://github.com/alexburg14/MCP_eConversion) |
+| **Atlas** (e-converse) | Chat assistant over the cluster's sources, including NOMAD | `econverse.e-conversion.de` — the application's own sign-in | deployment [e-conversion/atlas](https://gitlab.lrz.de/e-conversion/atlas), software [cluster-research-assist](https://github.com/e-conversion/cluster-research-assist) |
 | **elab App** | elabFTW companion GUI | `elab-app.researchmcp.duckdns.org` | [ffelsen/elab_app](https://github.com/ffelsen/elab_app) |
 | **Proespm** | Scientific data reports | `proespm.researchmcp.duckdns.org` | [matkrin/proespm-py3](https://github.com/matkrin/proespm-py3) |
 
@@ -29,45 +30,37 @@ Host two MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datatagg
 ## Architecture
 
 ```text
-                               ┌──────────────┐
-                               │    Caddy     │
-                               └──────┬───────┘
-                                      │
-                         ┌────────────┼────────────┐
-                         ▼            ▼            │
-             ┌──────────────────┐ ┌──────────────────┐
-             │  datatagger-mcp  │ │  elabmcp-proxy   │
-             │  port 8000       │ │  port 8081       │
-             │  Python/FastMCP  │ │  Python/Starlette │
-             │  /register →     │ │  /register →     │
-             │  /mcp/?token=X   │ │  /mcp?token=X    │
-             └──────────────────┘ └────────┬─────────┘
-                                           │ spawns R subprocesses
-                                           ▼
-                               ┌──────────────────────┐
-                               │  Rscript per session  │
-                               │  elabrmcp (unmod.)    │
-                               └──────────────────────┘
+                     ┌────────────┐
+                     │   Caddy    │  TLS, one entry point for every host
+                     └──────┬─────┘
+        ┌───────────────┬───┴────────┬───────────────┬──────────────┐
+        ▼               ▼            ▼               ▼              ▼
+      /dt             /el          /nm        /nomad-oasis/*   econverse host
+  datatagger-     elabmcp-     nomad-mcp      NOMAD Oasis      cra:8501
+  proxy:8000      proxy:8081     :8000        (nginx → app)    (atlas)
+        │               │            │
+        ▼               ▼            ▼
+   DataTagger      Rscript per    NOMAD API, read-only: the caller's own
+   API             session        PAT, or the deployment's read-only key
 ```
 
 **elabR source code is never modified.** The [elabmcp-proxy](./elabmcp-proxy) spawns the unmodified `elabrmcp::elabr_mcp_server(type='stdio')` with each user's credentials injected as environment variables. You can `git pull` [elabR](https://github.com/MarvinLuepke/elabR) independently.
 
 
 
-## eConversion Knowledge Assistant
+## Atlas (e-converse)
 
-The [eConversion Knowledge Assistant](https://econversion.researchmcp.duckdns.org) is a web-based chat interface for the e-conversion research cluster (TUM / LMU / FHI / MPI FKF). It provides:
+The cluster's chat assistant, served at <https://econverse.e-conversion.de>. It
+answers over the sources a user connects: elabFTW, DataTagger and NOMAD, each
+through its MCP server.
 
-- **956 publications** from `e-conversion.de/publikationen`
-- **953 abstracts** (99.7% coverage) — 905 from EndNote library, 47 from OpenAlex, 1 from Semantic Scholar
-- **42 PI profiles** with 2,314 linked publications
-- **Semantic search** via BGE-small embeddings (384-dim)
-- **LLM-backed answers** via GWDG SAIA / Academic Cloud Chat AI endpoint
-
-> The app code lives at **[alexburg14/MCP_eConversion](https://github.com/alexburg14/MCP_eConversion)**.
-> Only the deployment infrastructure (Dockerfile, Caddy route, docker-compose entry) is in this repo.
-
-**Access:** `https://econversion.researchmcp.duckdns.org` — password-protected with HTTP Basic Auth.
+The application is public and carries no cluster-specific code
+([cluster-research-assist](https://github.com/e-conversion/cluster-research-assist)).
+Everything that makes it *this* deployment — configuration, branding, the
+library bundle — lives in the private
+[atlas](https://gitlab.lrz.de/e-conversion/atlas) repository, which also owns the
+Caddy host block for `econverse.e-conversion.de`. This stack does not copy that
+block; it imports it (see [Caddy Configuration](#caddy-configuration)).
 
 ---
 
@@ -81,10 +74,10 @@ The [eConversion Knowledge Assistant](https://econversion.researchmcp.duckdns.or
 git clone https://github.com/harrytyp/unified-researchdata-mcp.git
 cd unified-researchdata-mcp
 
-# Clone all dependencies
-git clone https://github.com/harrytyp/datatagger-mcp.git
-git clone https://github.com/MarvinLuepke/elabR.git
-git clone https://github.com/alexburg14/MCP_eConversion.git econversion
+# Registered submodules: datatagger-mcp, elabR, nomad-mcp
+git submodule update --init
+
+# Web apps, which are plain checkouts rather than submodules
 git clone https://github.com/ffelsen/elab_app.git
 git clone https://github.com/matkrin/proespm-py3.git
 ```
@@ -107,9 +100,12 @@ docker compose up -d --build
 
 | Container | Tech Stack | Role |
 |---|---|---|
-| `unified-mcp-datatagger-mcp` | [Python](https://python.org) / [FastMCP](https://github.com/modelcontextprotocol/python-sdk) | [DataTagger](https://github.com/harrytyp/datatagger-mcp) MCP server |
-| `unified-mcp-elabmcp-proxy` | [Python](https://python.org) / [FastAPI](https://fastapi.tiangolo.com) + [R](https://r-project.org) / [ellmer](https://cran.r-project.org/package=ellmer) | elabFTW auth-proxy + per-user R subprocesses |
-| `unified-mcp-caddy` | [Caddy](https://caddyserver.com) | TLS termination & reverse proxy |
+| `datatagger-proxy` | [Python](https://python.org) / [FastMCP](https://github.com/modelcontextprotocol/python-sdk) | [DataTagger](https://github.com/harrytyp/datatagger-mcp) MCP server |
+| `elabmcp-proxy` | [Python](https://python.org) / [FastAPI](https://fastapi.tiangolo.com) + [R](https://r-project.org) / [ellmer](https://cran.r-project.org/package=ellmer) | elabFTW auth-proxy + per-user R subprocesses |
+| `nomad-mcp` | [Python](https://python.org) / [MCP SDK](https://github.com/e-conversion/nomad-oasis-mcp) | NOMAD MCP server, read-only |
+| `caddy` | [Caddy](https://caddyserver.com) | TLS termination & reverse proxy |
+| `elabftw` + `elab-mysql` | [elabFTW](https://www.elabftw.net) | the ELN itself |
+| `elab-app`, `proespm-app` | Streamlit | companion GUIs |
 
 ---
 
@@ -251,7 +247,7 @@ DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
 
 | Aspect | Status | Details |
 |---|---|---|
-| No admin-managed secrets | ✅ | `.env` contains no API keys |
+| Admin-managed secrets | ⚠️ | one: the NOMAD server's read-only deployment key (`NOMAD_MCP_DEFAULT_PAT`) |
 | Per-user isolation | ✅ | Each user gets an OS-level R subprocess |
 | Session expiry | ✅ | 30-minute inactivity (R process), 30-day token lifetime |
 | In-transit encryption | ✅ | Terminated by Caddy (TLS) |
@@ -293,7 +289,8 @@ DOCKER_TESTS=1 pytest tests/test_docker_services.py -v
 |---|---|---|
 | [elabR / elabrmcp](https://github.com/MarvinLuepke/elabR) | External | elabFTW R API client + MCP server |
 | [datatagger-mcp](https://github.com/harrytyp/datatagger-mcp) | External | DataTagger MCP server |
-| [eConversion](https://github.com/alexburg14/MCP_eConversion) | External | eConversion publication search (Streamlit) |
+| [nomad-oasis-mcp](https://github.com/e-conversion/nomad-oasis-mcp) | External | NOMAD MCP server (read-only) |
+| [cluster-research-assist](https://github.com/e-conversion/cluster-research-assist) | External | the chat assistant (Atlas) |
 | [elab_app](https://github.com/ffelsen/elab_app) | External | elabFTW companion web app |
 | [proespm-py3](https://github.com/matkrin/proespm-py3) | External | Scientific data reports web app |
 | [ellmer](https://cran.r-project.org/package=ellmer) | CRAN | R MCP client library |
@@ -338,7 +335,7 @@ docker compose up -d --build elabmcp-proxy
 Registered submodules live in [`.gitmodules`](.gitmodules):
 - `datatagger-mcp` → `harrytyp/datatagger-mcp`
 - `elabR` → `MarvinLuepke/elabR`
-- `econversion` → `alexburg14/MCP_eConversion`
+- `nomad-mcp` → `e-conversion/nomad-oasis-mcp` (HTTPS, so it clones without a key)
 
 ## License
 
