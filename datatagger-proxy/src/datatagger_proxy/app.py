@@ -2,27 +2,31 @@
 
 import os
 import json
+import urllib.parse
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from typing import Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+from mcp.shared.exceptions import MCPError
 
 from datatagger_mcp.api import mcp as mcp_server
 # The datatagger_mcp LIBRARY resolves auth from ITS OWN context vars
 # (datatagger_mcp.api.session_key_var / session_base_url_var), falling
-# back to env FDM_TOKEN. We must set the library's vars in the request
-# handler (not the middleware: BaseHTTPMiddleware runs in a separate
-# task whose contextvars do not reach the handler).
+# back to env FDM_TOKEN. MCPTokenMiddleware sets them per request; it is a
+# pure ASGI middleware so the values survive into the MCP handler
+# (BaseHTTPMiddleware runs call_next in a separate task and loses them).
 from datatagger_mcp.api import (
     session_key_var as _lib_session_key_var,
     session_base_url_var as _lib_session_base_url_var,
+    transport_security_settings,
 )
 from .jwt_token import encode_token, decode_token
 
-session_key_var: ContextVar[Optional[str]] = ContextVar("session_key", default=None)
-session_base_url_var: ContextVar[Optional[str]] = ContextVar("session_base_url", default=None)
 session_enabled_tools_var: ContextVar[Optional[list]] = ContextVar("session_enabled_tools", default=None)
 
 app = FastAPI()
@@ -42,28 +46,103 @@ class URLPrefixFixMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(URLPrefixFixMiddleware)
 
-class TokenAuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if "/mcp" in request.url.path:
-            token = request.query_params.get("token", "")
-            if not token:
-                auth = request.headers.get("authorization", "")
-                if auth.startswith("Bearer "):
-                    token = auth[7:]
-            if token:
-                try:
-                    payload = decode_token(token)
-                    session_key_var.set(payload["k"])
-                    session_base_url_var.set(payload["u"])
-                    session_enabled_tools_var.set(payload.get("t"))
-                except Exception:
-                    return JSONResponse(
-                        {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Invalid token"}},
-                        status_code=401,
-                    )
-        return await call_next(request)
+class MCPTokenMiddleware:
+    """Per-request authentication for the MCP endpoint.
 
-app.add_middleware(TokenAuthMiddleware)
+    The token arrives as ``?token=…`` (the registered personal URL) or as an
+    ``Authorization: Bearer …`` header. An unreadable/expired token is refused
+    with HTTP 401 before the MCP layer sees the request; a valid one is turned
+    into the library's context vars (API key + base URL) plus the token's tool
+    scope, which ``ToolScopeMiddleware`` enforces inside the server.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http" or not str(scope.get("path", "")).startswith("/mcp"):
+            await self.app(scope, receive, send)
+            return
+
+        token = _extract_token(scope)
+        payload = decode_token(token) if token else None
+        if token and not payload:
+            body = json.dumps({
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32001, "message": "Invalid or expired token"},
+            }).encode()
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [(b"content-type", b"application/json"),
+                            (b"content-length", str(len(body)).encode())],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        if payload:
+            _lib_session_key_var.set(payload["k"])
+            _lib_session_base_url_var.set(payload["u"])
+            session_enabled_tools_var.set(payload.get("t"))
+
+        await self.app(scope, receive, send)
+
+
+def _extract_token(scope: Scope) -> str:
+    """Read the token from the query string (?token=…) or the Authorization header."""
+    query = scope.get("query_string", b"")
+    if isinstance(query, bytes):
+        query = query.decode("latin-1")
+    for part in query.split("&"):
+        if part.startswith("token="):
+            return urllib.parse.unquote_plus(part[len("token="):])
+    for name, value in scope.get("headers", []):
+        if name.lower() == b"authorization":
+            raw = value.decode("latin-1")
+            if raw.lower().startswith("bearer "):
+                return raw[len("bearer "):].strip()
+    return ""
+
+
+app.add_middleware(MCPTokenMiddleware)
+
+
+class ToolScopeMiddleware:
+    """Restrict the served tool set to the scope of the request's token.
+
+    Runs inside the MCP server (SDK v2 middleware chain), so it applies to both
+    protocol eras: tools outside a token's scope disappear from ``tools/list``
+    and are refused on ``tools/call``.
+    """
+
+    async def __call__(self, ctx, call_next):
+        enabled = session_enabled_tools_var.get()
+        if enabled is None:
+            return await call_next(ctx)
+
+        method = getattr(ctx, "method", "")
+        params = getattr(ctx, "params", None) or {}
+        if method == "tools/call" and params.get("name") not in enabled:
+            raise MCPError(
+                code=-32601,
+                message=f"Tool {params.get('name')!r} is not enabled for this token",
+            )
+
+        result = await call_next(ctx)
+        if method == "tools/list" and result is not None:
+            tools = getattr(result, "tools", None)
+            if tools is not None:  # pydantic result object
+                result.tools = [t for t in tools if t.name in enabled]
+            elif isinstance(result, dict) and isinstance(result.get("tools"), list):
+                result["tools"] = [
+                    t for t in result["tools"]
+                    if (t.get("name") if isinstance(t, dict) else t.name) in enabled
+                ]
+        return result
+
+
+mcp_server.middleware.append(ToolScopeMiddleware())
 
 REG_CSS = """<style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -127,7 +206,9 @@ def _dt_profile_form(base_url, api_key):
         ("list_folders","List folders","Browse folders within a project"),
         ("get_folder","Get folder","View a single folder and its contents"),
         ("list_datasets","List datasets","Browse datasets within a folder with filtering"),
-        ("download_fdm_file","Download file","Download a dataset file to your local machine"),
+        ("download_version_file","Download file","Download a dataset file to your local machine"),
+        ("get_folder_permissions","Folder permissions","List the users who may access a folder"),
+        ("list_metadata","List metadata","Browse the available metadata template mappings"),
     ]
     write_tools = [
         ("create_project","Create project","Create a new top-level project"),
@@ -143,6 +224,7 @@ def _dt_profile_form(base_url, api_key):
         ("compare_dataset_versions","Compare versions","View a diff between two dataset versions"),
         ("upload_dataset_file","Upload file","Upload a raw file from your computer to a dataset"),
         ("add_metadata_to_dataset","Add metadata","Attach structured metadata tags to a dataset"),
+        ("set_folder_permissions","Set permissions","Grant or revoke folder access for other users"),
     ]
 
     # Build tool HTML with toggle switches and descriptions
@@ -258,7 +340,7 @@ async def register_route(request: Request):
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
 <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em">
 <input type="checkbox" id="cat_read_toggle" checked style="accent-color:#3b82f6" onchange="toggleCategory('cat_read', this)">
-Read (7)
+Read (9)
 </label>
 </div>
 <div id="cat_read" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
@@ -287,8 +369,16 @@ Read (7)
 <span style="color:#e8edf5">List datasets</span>
 </label>
 <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
-<input type="checkbox" name="tools" value="download_fdm_file" checked class="cat_read_item" style="accent-color:#3b82f6">
+<input type="checkbox" name="tools" value="download_version_file" checked class="cat_read_item" style="accent-color:#3b82f6">
 <span style="color:#e8edf5">Download file</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="get_folder_permissions" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Folder permissions</span>
+</label>
+<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
+<input type="checkbox" name="tools" value="list_metadata" checked class="cat_read_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">List metadata</span>
 </label>
 </div>
 </div>
@@ -296,7 +386,7 @@ Read (7)
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
 <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:600;color:#8898b4;text-transform:uppercase;letter-spacing:0.05em">
 <input type="checkbox" id="cat_write_toggle" checked style="accent-color:#3b82f6" onchange="toggleCategory('cat_write', this)">
-Write (15)
+Write (14)
 </label>
 </div>
 <div id="cat_write" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
@@ -353,12 +443,8 @@ Write (15)
 <span style="color:#e8edf5">Add metadata</span>
 </label>
 <label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
-<input type="checkbox" name="tools" value="update_project" checked class="cat_write_item" style="accent-color:#3b82f6">
-<span style="color:#e8edf5">Update project</span>
-</label>
-<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#1a2236;border:1px solid #1f2b40;border-radius:6px;cursor:pointer;font-size:0.75rem">
-<input type="checkbox" name="tools" value="update_folder" checked class="cat_write_item" style="accent-color:#3b82f6">
-<span style="color:#e8edf5">Update folder</span>
+<input type="checkbox" name="tools" value="set_folder_permissions" checked class="cat_write_item" style="accent-color:#3b82f6">
+<span style="color:#e8edf5">Set permissions</span>
 </label>
 </div>
 </div>
@@ -409,69 +495,29 @@ function toggleAllTools(checkbox) {{
 </form>
 </div></body></html>""")
 
-@app.api_route("/mcp", methods=["GET", "POST"])
-@app.api_route("/mcp/", methods=["GET", "POST"], include_in_schema=False)
-async def mcp_handler(request: Request):
-    if request.method == "GET":
-        return Response(status_code=204)
-    body = await request.json()
-    msg_id = body.get("id", 1)
-    method = body.get("method", "")
-    params = body.get("params", {})
 
-    # Auth: decode the JWT here (query ?token= or Authorization: Bearer) and
-    # set the LIBRARY's context vars so datatagger_mcp calls authenticate.
-    _token = request.query_params.get("token", "")
-    if not _token:
-        _auth = request.headers.get("authorization", "")
-        if _auth.startswith("Bearer "):
-            _token = _auth[7:]
-    if _token:
-        _payload = decode_token(_token)
-        if _payload:
-            _lib_session_key_var.set(_payload["k"])
-            _lib_session_base_url_var.set(_payload["u"])
-            _enabled = _payload.get("t")
-        else:
-            return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
-                "error": {"code": -32001, "message": "Invalid or expired token"}},
-                status_code=401)
-    else:
-        _enabled = None
-    if method == "initialize":
-        return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "datatagger-mcp", "version": "0.1.0"},
-        }})
-    elif method == "notifications/initialized":
-        return JSONResponse(None, status_code=202)
-    elif method == "tools/list":
-        tools = await mcp_server.list_tools()
-        enabled = _enabled
-        result = [{"name": t.name, "description": t.description or "",
-                    "inputSchema": t.inputSchema or {"type": "object", "properties": {}}}
-                  for t in tools
-                  if enabled is None or t.name in enabled]
-        return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": result}})
-    elif method == "tools/call":
-        enabled = _enabled
-        if enabled is not None and params["name"] not in enabled:
-            tool_name = params["name"]
-            return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
-                "error": {"code": -32601, "message": "Tool " + repr(tool_name) + " is not enabled for this token"}})
-        try:
-            raw = await mcp_server.call_tool(params["name"], params.get("arguments", {}))
-        except Exception as e:
-            return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
-                "error": {"code": -32603, "message": str(e)}})
-        content = []
-        for c in raw:
-            if hasattr(c, "text"):
-                content.append({"type": "text", "text": c.text})
-            else:
-                content.append({"type": "text", "text": str(c)})
-        return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {"content": content}})
-    else:
-        return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
-            "error": {"code": -32601, "message": f"Method not found: {method}"}})
+# The MCP endpoint is served by the SDK's own Streamable-HTTP app: it speaks the
+# 2026-07-28 revision (stateless — no Mcp-Session-Id, every request carries its
+# own _meta, Mcp-Method/Mcp-Name headers) and keeps serving older clients that
+# still open an initialize handshake. stateless_http=True is what makes any
+# replica able to answer any request.
+_mcp_http_app = mcp_server.streamable_http_app(
+    streamable_http_path="/mcp",
+    stateless_http=True,
+    transport_security=transport_security_settings(),
+    host="127.0.0.1",
+)
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    # FastAPI does not run the lifespan of a mounted Starlette app, so the MCP
+    # session manager is started here — without it the mounted app raises
+    # "Task group is not initialized".
+    async with mcp_server.session_manager.run():
+        yield
+
+
+app.router.lifespan_context = _lifespan
+
+# Mounted last: the routes above (/register) win, everything else goes to MCP.
+app.mount("/", _mcp_http_app)

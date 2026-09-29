@@ -1,4 +1,4 @@
-mcp[cli]>=1.2.0
+mcp[cli]>=2.2.0,<3
 httpx>=0.28.0
 uvicorn>=0.30.0
 fastapi>=0.110.0
