@@ -95,7 +95,10 @@ proespm.researchmcp.duckdns.org {
 
 	handle_path /el* {
 		uri strip_prefix /el
-		reverse_proxy elabmcp-proxy:8081 {
+# The standalone Python server (tum-research-data-hub/elabmcp) replaced
+# the R-based proxy on 2026-09-30. elabmcp-proxy stays in the compose
+# file for a rollback; its container is stopped.
+reverse_proxy elabmcp:8081 {
 			flush_interval -1
 		}
 	}
