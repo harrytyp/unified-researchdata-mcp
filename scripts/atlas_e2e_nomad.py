@@ -18,7 +18,7 @@ import secrets
 import subprocess
 import sys
 
-BASE = "https://econverse.e-conversion.de"
+BASE = "https://atlas.e-conversion.de"
 # "connected": the account is one the deployment holds a NOMAD key for;
 # "unconnected": everybody else has to register their own.
 EXPECT = os.environ.get("E2E_EXPECT", "connected")

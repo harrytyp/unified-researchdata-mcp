@@ -141,16 +141,16 @@ set $nomad_app app:8000;
 # wuerde http://... erzeugen - der Browser soll auf https bleiben.
 absolute_redirect off;
 
-# e-converse ersetzt den Everse-Chatbot und laeuft seit 2026-09-24 direkt auf
-# https://econverse.e-conversion.de/ (e-converse/caddy/econverse.caddy); die
-# alten Pfade bleiben fuer Lesezeichen und die NOMAD-GUI-Karte als Weiterleitung.
+# Der Atlas-Chat liegt seit 2026-09-30 auf https://atlas.e-conversion.de/
+# (caddy/econverse.caddy im atlas-Checkout); die alten Pfade bleiben fuer
+# Lesezeichen und die Karten der GUIs als Weiterleitung.
 location = /nomad-oasis/everse {
-    return 301 https://econverse.e-conversion.de/;
+    return 301 https://atlas.e-conversion.de/;
 }
 location /nomad-oasis/everse/ {
-    return 301 https://econverse.e-conversion.de/;
+    return 301 https://atlas.e-conversion.de/;
 }
 location /nomad-oasis/api/everse/ {
-    return 301 https://econverse.e-conversion.de/;
+    return 301 https://atlas.e-conversion.de/;
 }
 

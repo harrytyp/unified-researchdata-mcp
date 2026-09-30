@@ -19,7 +19,7 @@ Host three MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datata
 
 | Service | Type | Access | Source |
 |---------|------|--------|--------|
-| **Atlas** (e-converse) | Chat assistant over the cluster's sources, including NOMAD | `econverse.e-conversion.de` — the application's own sign-in | deployment [e-conversion/atlas](https://gitlab.lrz.de/e-conversion/atlas), software [cluster-research-assist](https://github.com/e-conversion/cluster-research-assist) |
+| **Atlas** (e-converse) | Chat assistant over the cluster's sources, including NOMAD | `atlas.e-conversion.de` — the application's own sign-in | deployment [e-conversion/atlas](https://gitlab.lrz.de/e-conversion/atlas), software [cluster-research-assist](https://github.com/e-conversion/cluster-research-assist) |
 | **elab App** | elabFTW companion GUI | `elab-app.researchmcp.duckdns.org` | [ffelsen/elab_app](https://github.com/ffelsen/elab_app) |
 | **Proespm** | Scientific data reports | `proespm.researchmcp.duckdns.org` | [matkrin/proespm-py3](https://github.com/matkrin/proespm-py3) |
 
@@ -50,7 +50,7 @@ Host three MCP servers — **[datatagger-mcp](https://github.com/harrytyp/datata
 
 ## Atlas (e-converse)
 
-The cluster's chat assistant, served at <https://econverse.e-conversion.de>. It
+The cluster's chat assistant, served at <https://atlas.e-conversion.de>. It
 answers over the sources a user connects: elabFTW, DataTagger and NOMAD, each
 through its MCP server.
 
@@ -59,7 +59,7 @@ The application is public and carries no cluster-specific code
 Everything that makes it *this* deployment — configuration, branding, the
 library bundle — lives in the private
 [atlas](https://gitlab.lrz.de/e-conversion/atlas) repository, which also owns the
-Caddy host block for `econverse.e-conversion.de`. This stack does not copy that
+Caddy host block for `atlas.e-conversion.de`. This stack does not copy that
 block; it imports it (see [Caddy Configuration](#caddy-configuration)).
 
 ---
