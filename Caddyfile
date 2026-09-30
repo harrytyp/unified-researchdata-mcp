@@ -16,7 +16,7 @@ elabftw.researchmcp.duckdns.org {
 
 # Legacy-Alias: der alte Kurzname zeigt auf den kanonischen Chatbot-Host.
 econversion.researchmcp.duckdns.org {
-	redir https://econverse.e-conversion.de/ permanent
+	redir https://atlas.e-conversion.de/ permanent
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -57,8 +57,8 @@ proespm.researchmcp.duckdns.org {
 
 # Alles, was jeder everse-Host bedienen soll: die statische Landing-Page unter
 # /, die MCP-Proxies unter /el, /dt und /nm und NOMAD - damit auch die SSO-Session -
-# unter /nomad-oasis/*. Als Snippet, weil econverse.e-conversion.de dasselbe
-# anbietet und nur zusätzlich / in den Chatbot schickt.
+# unter /nomad-oasis/*. Der Chat-Host (atlas.e-conversion.de) hat einen eigenen
+# Block im atlas-Checkout und schickt / direkt in den Chatbot.
 (everse_stack) {
 	# Kurze Wege zu den TGA-Seiten. Die App liegt hinter /nomad-oasis, weil sie
 	# dort die NOMAD-Session erbt (Cookie mit Path=/nomad-oasis); diese Adressen
