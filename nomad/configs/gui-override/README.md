@@ -54,9 +54,11 @@ aus der gemounteten (gepatchten) Datei neu erzeugt.
   Karte „TGA Measurement Requests" vorhanden, kein JS-Fehler, Link ok.
 - GUI-Startseite inhaltlich identisch bis auf die neue Karte (kein weiterer Eingriff).
 
-## Everse-Karte (DIT-19, 2026-09-15)
+## Atlas-Karte (DIT-19, 2026-09-15; Host umgestellt 2026-09-30)
 
-- Zweite Karte, gleiches Muster: Teal-Gradient, Titel **Everse Chatbot**,
-  Link /nomad-oasis/api/everse/ (relativ, same-origin)
+- Zweite Karte, gleiches Muster: Teal-Gradient, Titel **Atlas Chat**,
+  Link https://atlas.e-conversion.de/ (absolut; der Chat laeuft auf einem eigenen Host)
 - Skript: `patch_gui4_everse.py` (liest das TGA-gepatchte Bundle, kein Original noetig)
-- Reihenfolge auf der Seite: TGA-Karte, Everse-Karte, dann InfoCards.
+- Reihenfolge auf der Seite: TGA-Karte, Atlas-Karte, dann InfoCards.
+- Die geaenderte Karte wird erst nach einem Neustart von `nomad_oasis_app` ausgeliefert:
+  NOMAD erzeugt `/app/run/gui_configured/` beim App-Start aus den Statics.

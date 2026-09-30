@@ -1,4 +1,4 @@
-# Everse-Karte in das (bereits TGA-gepatchte) Bundle einfuegen.
+# Atlas-Karte in das (bereits TGA-gepatchte) Bundle einfuegen.
 # Liest GUI_JS, schreibt GUI_JS_OUT. Keine Backslash-Escapes, Emoji als chr().
 import os
 P = os.environ["GUI_JS"]
@@ -9,7 +9,7 @@ assert data.count(marker) == 1, "Marker count: %d" % data.count(marker)
 EMOJI = chr(0x1F4AC)
 card_parts = [
     'Object(ve.jsx)(Xs.a,{item:!0,xs:12,children:Object(ve.jsx)("a",{',
-    'href:"/nomad-oasis/api/everse/",',
+    'href:"https://atlas.e-conversion.de/",',
     'style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,',
     'flexWrap:"wrap",background:"linear-gradient(135deg,#0d9488,#115e59)",color:"#fff",',
     'borderRadius:12,padding:"16px 20px",margin:"2px 0 10px",',
@@ -19,7 +19,7 @@ card_parts = [
     'children:"' + EMOJI + '"}),',
     'Object(ve.jsxs)("span",{children:[',
     'Object(ve.jsx)("span",{style:{display:"block",fontWeight:600,fontSize:"1.16rem",',
-    'letterSpacing:"-.01em"},children:"Everse Chatbot"}),',
+    'letterSpacing:"-.01em"},children:"Atlas Chat"}),',
     'Object(ve.jsx)("span",{style:{display:"block",opacity:.92,fontSize:".92rem",marginTop:2},',
     'children:"Ask the e-conversion knowledge base: models, papers, methods. '
     'Opens logged in with your NOMAD account."})]})]}),',
@@ -28,6 +28,6 @@ card_parts = [
     'children:"Open the chat"})]})}),',
 ]
 card = "".join(card_parts).encode("utf-8")
-assert b"Everse Chatbot" not in data, "Everse-Karte schon vorhanden"
+assert b"Atlas Chat" not in data, "Atlas-Karte schon vorhanden"
 open(OUT, "wb").write(data.replace(marker, card + marker))
 print("patched:", len(data) + len(card), "orig:", len(data), "card:", len(card))
