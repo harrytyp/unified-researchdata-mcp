@@ -1,9 +1,20 @@
+# Submodules
+
+# Public repository (tum-research-data-hub). HTTPS works without credentials,
+# so the build host can fetch it with nothing but git.
 [submodule "datatagger-mcp"]
 	path = datatagger-mcp
 	url = https://github.com/tum-research-data-hub/datatagger-mcp.git
+
+# Private repository (Marvin's R package). HTTPS would ask for a username, so
+# this one needs an SSH deploy key on any host that has to fetch it. It only
+# exists for the R-based elabmcp-proxy; it goes away with it.
 [submodule "elabR"]
 	path = elabR
-	url = https://github.com/MarvinLuepke/elabR.git
+	url = git@github.com:MarvinLuepke/elabR.git
+
+# Public repository (e-conversion). The NOMAD MCP server is its own repository;
+# this submodule is a checkout of it.
 [submodule "nomad-mcp"]
 	path = nomad-mcp
 	url = https://github.com/e-conversion/nomad-oasis-mcp.git
