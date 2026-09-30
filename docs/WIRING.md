@@ -37,12 +37,12 @@ Rules that keep it working:
 | A1 | Submodule URLs to HTTPS where the repository is public | done (`85b9dd2`) |
 | A2 | `elabR` back to SSH: it is private, HTTPS asks for a username | done here |
 | A3 | DataTagger submodule points at the org repository, pin unchanged (`f30b664`, byte-identical to what ran before) | done (`85b9dd2`) |
-| A4 | Add submodule `elabmcp` → `https://github.com/tum-research-data-hub/elabmcp.git` | open, see "Next step" |
-| A5 | Replace the `elabmcp-proxy` service with a build from `./elabmcp` and the environment names in the table below | open, same step |
-| A6 | Delete `elabmcp-proxy/` and the `elabR` submodule once `/el` is served by the new server | open |
+| A4 | Add submodule `elabmcp` → `https://github.com/tum-research-data-hub/elabmcp.git` | done (`8d2e6fb`, pinned `b72285bb`) |
+| A5 | Serve `/el` from `./elabmcp` (environment names in the table below) | done (`edb2079`); the R service is stopped but still defined |
+| A6 | Delete `elabmcp-proxy/` and the `elabR` submodule, drop the temporary `127.0.0.1:8082` port | open, after a rollback week |
 | A7 | Delete `datatagger-proxy/` once the DataTagger repository serves `/dt` itself (it now carries `Dockerfile`, `Caddyfile`, `jwt_token.py`) | open, decision |
 | A8 | Optional: `image: <name>:${TAG:-local}` per service so a rollback starts the previous image instead of rebuilding | open |
-| A9 | Host checkout: `git remote set-url origin https://github.com/harrytyp/unified-researchdata-mcp.git` | open |
+| A9 | Host checkout fetches over HTTPS | done: the `nomad` remote is HTTPS and is what deploys use; `origin` (SSH) is left alone |
 
 ### B. `tum-research-data-hub/datatagger-mcp` (GitHub)
 
@@ -114,16 +114,30 @@ Rollback: `git checkout <previous commit>`, `git submodule update`, `docker
 compose build` and `up -d` again. With A8 it is `docker compose up -d` with the
 previous tag and no build.
 
-## Next step (not done yet)
+## Done on 2026-09-30 (the `/el` switch)
 
-Switch `/el` to the new server as a canary:
+Measured, in this order:
 
-1. `git submodule add https://github.com/tum-research-data-hub/elabmcp.git elabmcp` (A4).
-2. In `docker-compose.yml`, give `elabmcp-proxy` a second service block that
-   builds from `./elabmcp` and listens on a spare port, so both variants can run
-   side by side.
-3. Register a token against the new variant, compare read tools with the running
-   `/el` (the comparison script lives in the `elabmcp` repository under
-   `tests/diagnostics/`).
-4. Point Caddy's `/el` at the new container, keep the R container stopped for a
-   week, then delete A6.
+* both servers answered with the same 41 tools, the same tool names, and the same entities
+  (user 194 "ELN-User RDM", team 29, the same experiment categories); the old one printed R
+  text, the new one JSON
+* the canary ran on `127.0.0.1:8082` beside the R service, which kept serving `/el` untouched
+* after the Caddyfile change, `/el` answered from the new container; registration through
+  Caddy, `tools/list` (41), `get_connection_info`, `list_experiments` and a
+  `create_experiment` write with an API cleanup all passed (9/9)
+* the R container was then stopped; `/el`, `/dt` and `/nm` stayed at HTTP 200 and the write
+  check passed again (9/9). Container: 65 MiB of 512 MiB, 0.25 % CPU
+
+Two things learned on the way, worth remembering:
+
+* a single-file bind mount pins the inode: after `git checkout` replaced the `Caddyfile`, a
+  `caddy reload` inside the container still read the old file. `docker compose restart caddy`
+  fixes it; `up -d` does not, because the service definition did not change.
+* `git fetch` recurses into submodules by default and fails on the private `elabR` URL. Use
+  `git -c fetch.recurseSubmodules=no fetch <remote>` on this host.
+
+## Rollback
+
+`docker compose up -d elabmcp-proxy` and point the Caddyfile back at
+`reverse_proxy elabmcp-proxy:8081`. The old image and the `elabR` checkout are still on the
+host.
