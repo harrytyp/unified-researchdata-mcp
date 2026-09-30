@@ -136,6 +136,18 @@ Two things learned on the way, worth remembering:
 * `git fetch` recurses into submodules by default and fails on the private `elabR` URL. Use
   `git -c fetch.recurseSubmodules=no fetch <remote>` on this host.
 
+## Checking a deployment
+
+```bash
+python3 tests/diagnostics/../service_sweep.py   # from the elabmcp checkout: the whole host
+python  tests/diagnostics/deployed_e2e.py       # from the elabmcp checkout: one endpoint in depth
+```
+
+The sweep covers the web hosts, the three register pages and `/nm` (which needs the
+`initialize` handshake and a session id); `deployed_e2e.py` registers a write token against a real
+instance, lists the tools and does one write with cleanup. Last run on the test host: 15/15 and
+8/8.
+
 ## Rollback
 
 `docker compose up -d elabmcp-proxy` and point the Caddyfile back at
