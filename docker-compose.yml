@@ -57,6 +57,42 @@ services:
     mem_limit: 512m
     stop_grace_period: 15s
 
+  # ── elabFTW MCP, standalone Python server (tum-research-data-hub/elabmcp) ──
+  # Runs beside the R-based elabmcp-proxy while /el is being moved over. Caddy
+  # keeps pointing at elabmcp-proxy until the switch; the published port exists
+  # for the comparison run on the host and is dropped after the switch.
+  elabmcp:
+    build:
+      context: ./elabmcp
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8081"
+    ports:
+      - "127.0.0.1:8082:8081"   # temporary: verification on the host
+    environment:
+      - ELABFTW_MCP_URL_PREFIX=/el
+      - ELABFTW_MCP_PORT=8081
+      - ELABFTW_MCP_HOST=0.0.0.0
+      - ELABFTW_MCP_CONFIG=/app/config.yml
+      - ELABFTW_MCP_AUDIT_LOG=/app/logs/audit.jsonl
+      - MCP_JWT_SECRET=${MCP_JWT_SECRET}
+      - MCP_TOKEN_EXPIRY_DAYS=${MCP_TOKEN_EXPIRY_DAYS:-30}
+      - ELABFTW_MCP_RATE_LIMIT=${ELABFTW_MCP_RATE_LIMIT:-10}
+      # No AI key on purpose: the deployment has none today, so the AI tools
+      # answer with the placeholder wording. Set the key in .env to enable them.
+      - ELABFTW_MCP_AI_API_KEY=${ELABFTW_MCP_AI_API_KEY:-}
+      - ELABFTW_MCP_AI_BASE_URL=${ELABFTW_MCP_AI_BASE_URL:-}
+      - ELABFTW_MCP_AI_MODEL=${ELABFTW_MCP_AI_MODEL:-gpt-4o}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/status', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    stop_grace_period: 15s
+
   # ── elabFTW MCP (shared R worker, one process for all users) ──
   elabmcp-proxy:
     build:

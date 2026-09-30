@@ -18,3 +18,6 @@
 [submodule "nomad-mcp"]
 	path = nomad-mcp
 	url = https://github.com/e-conversion/nomad-oasis-mcp.git
+[submodule "elabmcp"]
+	path = elabmcp
+	url = https://github.com/tum-research-data-hub/elabmcp.git
