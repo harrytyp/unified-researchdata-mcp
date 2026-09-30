@@ -8,7 +8,7 @@ this repository. Bump the pin, then follow "Deploy" in `docs/WIRING.md`.
 | `datatagger-proxy` | in-tree `datatagger-proxy/` + submodule `datatagger-mcp` | `5eb9bd8` | `/dt` |
 | `nomad-mcp` | submodule `nomad-mcp` (`e-conversion/nomad-oasis-mcp`) | `de520ac` | `/nm` |
 | `elabmcp-proxy` | in-tree `elabmcp-proxy/` + submodule `elabR` (R worker). **Stopped** on 2026-09-30, kept for rollback | `12a2e39` | - |
-| `elabmcp` | submodule `elabmcp` (`tum-research-data-hub/elabmcp`) | `b72285bb` | `/el` |
+| `elabmcp` | submodule `elabmcp` (`tum-research-data-hub/elabmcp`) | `2879d277` | `/el` |
 | `elabftw` | image `elabftw/elabimg:6.0.2` | image tag | eLabFTW itself |
 | `elab-mysql` | image `mysql:8.4` | image tag | eLabFTW database |
 | `caddy` | image `caddy:2` + `Caddyfile` + `../atlas/caddy` | image tag | TLS and routing for all of the above |
