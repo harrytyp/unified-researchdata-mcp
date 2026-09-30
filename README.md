@@ -339,4 +339,11 @@ Registered submodules live in [`.gitmodules`](.gitmodules):
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE). The dependency repos ([elabR](https://github.com/MarvinLuepke/elabR), [datatagger-mcp](https://github.com/harrytyp/datatagger-mcp)) are governed by their respective licenses.
+This project is licensed under the [MIT License](LICENSE).
+
+Third-party content keeps its own license: the NOMAD plugins under `nomad/` are Apache-2.0
+(see `nomad/LICENSE`), and the submodules are governed by their own licenses:
+[elabmcp](https://github.com/tum-research-data-hub/elabmcp) (MIT),
+[datatagger-mcp](https://github.com/tum-research-data-hub/datatagger-mcp) (MIT),
+[nomad-oasis-mcp](https://github.com/e-conversion/nomad-oasis-mcp) (MIT),
+[elabR](https://github.com/MarvinLuepke/elabR) (MIT).
