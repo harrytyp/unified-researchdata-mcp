@@ -1,0 +1,9 @@
+{
+  "version": "1.2.0",
+  "url": "https://github.com/harrytyp/unified-researchdata-mcp/releases/download/v1.2.0/TGA_Operator.exe",
+  "sha256": "284783ade211cab9aadbb697ad887738bc8bc58660036fedae62b20e157eaa98",
+  "size": 35570914,
+  "notes": "Self-update with sha256 verification; update check in Settings.",
+  "mandatory": false,
+  "page": "https://github.com/harrytyp/unified-researchdata-mcp/releases/tag/v1.2.0"
+}
