@@ -110,9 +110,10 @@ after a result file is uploaded (403 without it — verified).
    **string** `_id` — an ObjectId id breaks `UploadProcData` validation
    ("Input should be a valid string"). Re-run the `updateMany` for new
    uploads, or make it part of the schema/processing setup.
-4. **Create the PAT** in the GUI (Settings → API Tokens) with the scopes
-   above (or extend an existing token in `db.personal_access_tokens` via
-   `$addToSet: { scopes: "uploads:process" }`).
+4. **Create the PAT** with the container recipe in the last section of this
+   document - there is neither a GUI page nor a `nomad admin token`
+   subcommand in 1.4.2. To widen an existing token instead:
+   `$addToSet: { scopes: "uploads:process" }` in `db.personal_access_tokens`.
 5. Store the PAT only in `nomad/.env` (gitignored) — never commit it.
 
 ## Pitfalls encountered
@@ -132,3 +133,85 @@ after a result file is uploaded (403 without it — verified).
 - API: `nomad/app/v1/routers/uploads.py` — `get_role_query`,
   `is_user_upload_writer`, `is_user_upload_viewer`
 - Group model: `nomad/mongo/groups.py` — `MongoUserGroup`
+
+## Creating a PAT: neither the GUI nor the CLI can do it (verified 2026-11-03)
+
+What is NOT available on this deployment:
+
+- `nomad admin` has no `token` subcommand (`nomad admin token --help` -> "No such
+  command"). Its only user command is `users import` (Keycloak import).
+- The GUI has no API-token page, so step 4 above is wrong for NOMAD 1.4.2 - do
+  not send anyone to "Settings -> API Tokens".
+- `POST /api/v1/auth/pats` exists, but it requires a real Keycloak session with
+  the `tokens:create` scope; a PAT cannot mint another PAT.
+
+What a PAT is: `nomad_pat_` + `secrets.token_urlsafe(32)` (53 chars), stored
+**only** as a sha256 hex digest in `personal_access_tokens`
+(`nomad/mongo/pat.py`, `nomad/auth/tokens.py:create_pat`). The raw value exists
+exactly once, in the return value of the creating call, so it has to be captured
+then - it can never be read back out of the database.
+
+### Recipe (run inside the app container)
+
+```python
+# /tmp/mint_pat.py, executed with /opt/venv/bin/python inside nomad_oasis_app
+from nomad.infrastructure import setup_mongo   # required: a bare process has no mongo connection
+setup_mongo()
+from nomad.auth.tokens import PATMetadata, create_pat
+
+res = create_pat(
+    user_id='<user_id>',
+    metadata=PATMetadata(name='tga-operator-<lab>', scopes=[
+        'uploads:read', 'uploads:write', 'uploads:process', 'entries:read']),
+    expires_in_days=365,
+)
+open('/tmp/pat.txt', 'w').write(res.raw_token)   # to a file, never to stdout
+```
+
+```bash
+docker cp /tmp/mint_pat.py nomad_oasis_app:/tmp/mint_pat.py
+docker exec nomad_oasis_app /opt/venv/bin/python /tmp/mint_pat.py
+docker exec nomad_oasis_app cat /tmp/pat.txt      # only to move it into the app config
+```
+
+`create_pat` enforces `config.auth.pat_max_lifetime` and
+`pat_max_active_per_user` and rejects `tokens:*` scopes, so prefer it over
+inserting a digest by hand. A manual insert is
+`db.personal_access_tokens.insertOne({user_id, name, token_digest: <sha256 hex>,
+scopes: [...], revoked: false, created_at: new Date()})` - no expiry unless
+`expired_at` is set, and no validation at all.
+
+### Making a PAT see the TGA uploads (tga-operators)
+
+Two independent things have to hold; the second is the one that fails in practice:
+
+1. **The upload carries the group** in `coauthor_groups`
+   (`tga-operators-6a7ae5e4cec5e87bf39df8a3`). Measured 2026-11-03: 29 of the 33
+   uploads that hold a `.tprc` had it, 4 did not, and 8 uploads of other users
+   never appear for a non-admin operator at all.
+2. **The PAT's user is a member** of that group:
+
+```javascript
+// mongosh nomad_oasis_v1
+const u = '<operator user_id>';
+db.user_group.updateOne({group_name: 'tga-operators'},
+  {$addToSet: {members: u, members_info: {user_id: u, role: 'member'}}});
+```
+
+Measured effect, same PAT, no app restart needed: visible uploads 18 -> 43, TGA
+uploads 8 -> 31 (of 37 known `.tprc` upload ids). Reads work end to end:
+`GET /uploads/{id}/rawdir/` lists `*.tprc`, `GET /uploads/{id}/raw/<name>`
+downloads it; `PUT /uploads/{id}/raw/<name>?file_name=<name>` with
+`Content-Type: application/octet-stream` and `POST /uploads/{id}/action/process`
+both answer 200. An admin PAT sees all 51 uploads; a group-less non-admin PAT
+sees its own 18.
+
+### Pitfalls found while testing
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| "You have not defined a default connection" | bare python process, no mongo init | call `nomad.infrastructure.setup_mongo()` first |
+| PAT answers 401 everywhere | value mangled by shell quoting, or the digest belongs to a revoked token | mint a new one; the raw value is unrecoverable |
+| `GET /uploads/{id}` -> "No matching upload found" | `db.entry.upload_id` can point at an already deleted upload; the API id is `db.upload._id` (22 chars) | resolve ids through the API, not through entries |
+| Group member sees no new uploads | the upload lacks `coauthor_groups` | attach the group (the share step in `processor.py`) |
+| worker log: "Could not share upload ... HTTP 400 `'NoneType' object has no attribute 'is_blocking'`" | `POST /uploads/{id}/edit` with `metadata.coauthor_groups` hits a NOMAD 1.4.2 bug when the upload has no current process | attach the group in mongosh, or retry the edit once the upload is processed |
