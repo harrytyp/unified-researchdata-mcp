@@ -16,6 +16,8 @@ import ui_board
 import ui_list
 import ui_detail
 from ui_common import selected, clear_selection, _
+import updater
+from version import APP_VERSION
 
 backend = Backend()
 
@@ -100,6 +102,22 @@ STRINGS = {
     'result_uploaded': {'en': 'Result uploaded + processing triggered',
                         'de': 'Ergebnis hochgeladen + Processing getriggert'},
     'up_failed': {'en': 'upload failed:', 'de': 'Upload fehlgeschlagen:'},
+    'update_avail': {'en': 'Update available', 'de': 'Update verfuegbar'},
+    'update_none': {'en': 'No update - this is the newest version',
+                    'de': 'Kein Update - das ist die neueste Version'},
+    'update_check': {'en': 'Check for updates at start',
+                     'de': 'Beim Start nach Updates suchen'},
+    'update_now': {'en': 'Check now', 'de': 'Jetzt pruefen'},
+    'update_install': {'en': 'Download and restart',
+                       'de': 'Laden und neu starten'},
+    'update_open': {'en': 'Release page', 'de': 'Release-Seite'},
+    'update_note': {'en': 'The app closes, replaces its file and starts again. '
+                          'Do this between two measurements.',
+                    'de': 'Die App schliesst, ersetzt ihre Datei und startet neu. '
+                          'Zwischen zwei Messungen ausfuehren.'},
+    'update_dev': {'en': 'Download works, installing only in the EXE',
+                   'de': 'Download ok, Installation nur in der EXE'},
+    'cancel': {'en': 'Cancel', 'de': 'Abbrechen'},
 }
 
 
@@ -392,6 +410,14 @@ def build_settings():
                 ui.input(_('poll_interval'), value=str(cfg.get('poll_interval', 15))) \
                     .classes('w-40').on_value_change(
                         lambda e: cfg.update(poll_interval=int(e.value or 15)))
+            with ui.card().classes('w-full gap-3 p-4'):
+                ui.label(_('update_avail')).classes('font-bold tga-title')
+                ui.switch(_('update_check'), value=cfg.get('update_on_start', True)) \
+                    .props('color=primary').bind_value_to(cfg, 'update_on_start')
+                with ui.row().classes('items-center gap-3'):
+                    ui.button(_('update_now'), on_click=lambda: check_updates(True)) \
+                        .props('outline icon=system_update')
+                    ui.label(f'v{APP_VERSION}').classes('text-xs font-mono')
             with ui.row().classes('gap-2'):
                 ui.button(_('save'), on_click=lambda: save_settings(
                     url_in, pat_in, imp_in, exp_in)).props('color=primary')
@@ -462,6 +488,87 @@ async def _auto_fit_detail():
         pass
 
 
+# ── Self-update ────────────────────────────────────────────────
+# The EXE updates itself: a feed in the deployment names version, sha256 and
+# the GitHub release asset; the swap script waits for this process to exit.
+# Nothing installs without a matching sha256, and nothing installs while the
+# operator has not confirmed.
+
+
+def _update_url():
+    return backend.config.get('update_url') or updater.DEFAULT_FEED
+
+
+def build_update_banner(info):
+    """Header badge for a newer release (built once per page)."""
+    box = refs.get('update_box')
+    if box is None:
+        return
+    box.clear()
+    with box:
+        btn = ui.button(_('update_avail'), on_click=lambda: open_update_dialog(info)) \
+            .props('color=amber unelevated dense icon=system_update')
+        ui.label(f"v{info.get('version', '?')}").classes('text-xs font-mono text-white')
+        if info.get('notes'):
+            btn.tooltip(info['notes'])
+
+
+async def check_updates(manual=False):
+    if not manual and not backend.config.get('update_on_start', True):
+        return
+    url = _update_url()
+    try:
+        info = await run.io_bound(lambda: updater.check(url))
+    except Exception as e:  # never let an update check break the board
+        info = None
+        if manual:
+            ui.notify(f'Update check failed: {e}', type='negative')
+    if not info:
+        if manual:
+            ui.notify(_('update_none'), type='info')
+        return
+    build_update_banner(info)
+    if manual:
+        ui.notify(f"{_('update_avail')} v{info['version']}", type='warning')
+
+
+def open_update_dialog(info):
+    async def install():
+        dlg.close()
+        ui.notify('Download…', type='info')
+        try:
+            path = await run.io_bound(lambda: updater.download(info))
+        except Exception as e:
+            ui.notify(f'Download failed: {e}', type='negative')
+            return
+        target = updater.frozen_exe()
+        if not target:
+            ui.notify(f"{_('update_dev')}: {path.name}", type='warning')
+            return
+        try:
+            await run.io_bound(lambda: updater.install(path, target))
+        except Exception as e:
+            ui.notify(f'Install failed: {e}', type='negative')
+            return
+        ui.notify('Restarting…', type='positive')
+        ui.timer(1.2, lambda: os._exit(0), once=True)
+
+    with ui.dialog() as dlg, ui.card().classes('w-[30rem] gap-3'):
+        ui.label(f"{_('update_avail')} v{info.get('version', '?')}") \
+            .classes('text-lg font-bold')
+        if info.get('notes'):
+            ui.label(info['notes']).classes('text-sm whitespace-pre-line')
+        ui.label(_('update_note')).classes('text-xs text-grey-7')
+        with ui.row().classes('w-full justify-end gap-2'):
+            if info.get('page'):
+                ui.button(_('update_open'),
+                          on_click=lambda: ui.navigate.to(info['page'], new_tab=True)) \
+                    .props('flat')
+            ui.button(_('cancel'), on_click=dlg.close).props('flat')
+            ui.button(_('update_install'), on_click=install).props('color=primary')
+    dlg.open()
+
+
 @ui.page('/')
 def index():
     from ui_common import set_i18n
@@ -477,6 +584,7 @@ def index():
             ui.icon('science').classes('text-primary')
             ui.label('TGA Operator').classes('text-lg font-bold text-white')
         with ui.row().classes('items-center gap-3'):
+            refs['update_box'] = ui.row().classes('items-center gap-2')
             refs['sync_box'] = ui.row().classes('items-center gap-2')
             ui.button('', on_click=do_refresh).props('icon=refresh flat round dense text-white')
             refs['btn_detail'] = ui.button('', on_click=lambda: toggle_detail()) \
@@ -508,6 +616,9 @@ def index():
         with ui.column().classes('w-80 min-w-80 border-l border-grey-3 min-h-0') as detail_col:
             refs['detail_col'] = detail_col
             refs['detail_container'] = ui.column().classes('w-full')
+    # Update check runs once, after the page is up (off the UI thread).
+    ui.timer(2.0, lambda: check_updates(False), once=True)
+
     # Apply the startup state: panel collapsed until a card is clicked.
     if not refs.get('detail_open', False):
         refs['detail_col'].set_visibility(False)

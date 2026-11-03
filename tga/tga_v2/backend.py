@@ -30,6 +30,8 @@ DEFAULT_CONFIG = {
     'dark_mode': False,
     'language': 'en',              # 'en' (default) or 'de'
     'debug_mode': False,           # True = demo data (FakeClient), no PAT needed
+    'update_url': 'https://researchdata.e-conversion.de/tga-operator/latest.json',
+    'update_on_start': True,       # check the release feed once per start
     'uploaded_results': {},        # export-filename -> {'target': '<uploaded-versioned-name>', 'ts': iso}
                                   # PERSISTENT log of what the watcher already uploaded — so a
                                   # restart (EXE started AFTER TRIOS finished) does NOT re-upload

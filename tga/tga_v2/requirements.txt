@@ -3,5 +3,8 @@
 nicegui>=3.15
 requests>=2.31
 watchdog>=4.0
+# The packaged EXE opens a native window; without pywebview it exits with
+# "Native mode is not supported in this configuration".
+pywebview>=5.0
 # Tests
 pytest>=8.0
